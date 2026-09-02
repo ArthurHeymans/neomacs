@@ -50,6 +50,11 @@ fn frame_visibility_toggle_via_make_frame_invisible_visible() {
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(8), |grid| {
         grid.iter().rev().take(4).any(|row| row.contains("t"))
     });
+    assert_pair_exact_display(
+        "frame_visibility_toggle_via_make_frame_invisible_visible",
+        &gnu,
+        &neo,
+    );
 }
 
 /// `set-frame-parameter 'visibility nil` should hide the frame,
@@ -91,6 +96,7 @@ fn frame_visibility_via_set_frame_parameter_nil() {
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(8), |grid| {
         grid.iter().rev().take(4).any(|row| row.contains("t"))
     });
+    assert_pair_exact_display("frame_visibility_via_set_frame_parameter_nil", &gnu, &neo);
 }
 
 /// `iconify-frame` should hide the frame.
@@ -106,6 +112,7 @@ fn frame_visibility_via_iconify_frame() {
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(8), |grid| {
         grid.iter().rev().take(4).any(|row| row.contains("nil"))
     });
+    assert_pair_exact_display("frame_visibility_via_iconify_frame", &gnu, &neo);
 }
 
 /// Create a child frame, verify it exists, hide it via
@@ -137,6 +144,7 @@ fn child_frame_visibility_lifecycle() {
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(10), |grid| {
         grid.iter().rev().take(4).any(|row| row.contains("nil"))
     });
+    assert_pair_exact_display("child_frame_visibility_lifecycle", &gnu, &neo);
 }
 
 /// Visibility parameter should be stored and retrievable via
@@ -180,6 +188,7 @@ fn frame_parameter_visibility_roundtrip() {
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(8), |grid| {
         grid.iter().rev().take(4).any(|row| row.contains("t"))
     });
+    assert_pair_exact_display("frame_parameter_visibility_roundtrip", &gnu, &neo);
 }
 
 /// Multiple visibility toggles in sequence should be consistent.
@@ -218,4 +227,5 @@ fn frame_visibility_multiple_toggles() {
             grid.iter().rev().take(4).any(|row| row.contains("t"))
         });
     }
+    assert_pair_exact_display("frame_visibility_multiple_toggles", &gnu, &neo);
 }

@@ -46,11 +46,10 @@ fn file_name_shadow_overlay_does_not_leak_into_occur_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "file_name_shadow_overlay_does_not_leak_into_occur_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -88,7 +87,7 @@ fn occur_via_ms_o_lists_matching_lines() {
     neo.read_until(Duration::from_secs(12), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("occur_via_ms_o_lists_matching_lines", &gnu, &neo, 2);
+    assert_pair_exact_display("occur_via_ms_o_lists_matching_lines", &gnu, &neo);
 }
 
 #[test]
@@ -130,7 +129,7 @@ fn occur_prompt_ctrl_h_preserves_regexp_text() {
         );
     }
 
-    assert_pair_nearly_matches("occur_prompt_ctrl_h_preserves_regexp_text", &gnu, &neo, 2);
+    assert_pair_exact_display("occur_prompt_ctrl_h_preserves_regexp_text", &gnu, &neo);
 }
 
 #[test]
@@ -177,11 +176,10 @@ fn occur_prompt_del_deletes_previous_regexp_character() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "occur_prompt_del_deletes_previous_regexp_character",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -225,12 +223,7 @@ fn occur_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "occur_empty_prompt_multiple_del_keeps_prompt",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("occur_empty_prompt_multiple_del_keeps_prompt", &gnu, &neo);
 }
 
 #[test]
@@ -260,7 +253,7 @@ fn isearch_forward_via_cs() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("isearch_forward_via_cs", &gnu, &neo, 2);
+    assert_pair_exact_display("isearch_forward_via_cs", &gnu, &neo);
 }
 
 #[test]
@@ -296,11 +289,10 @@ fn isearch_repeat_forward_via_cs_cs_moves_to_next_match() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "isearch_repeat_forward_via_cs_cs_moves_to_next_match",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -341,11 +333,10 @@ fn isearch_delete_char_recovers_from_failed_search() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "isearch_delete_char_recovers_from_failed_search",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -393,7 +384,7 @@ fn isearch_ctrl_h_enters_isearch_help() {
         );
     }
 
-    assert_pair_nearly_matches("isearch_ctrl_h_enters_isearch_help", &gnu, &neo, 2);
+    assert_pair_exact_display("isearch_ctrl_h_enters_isearch_help", &gnu, &neo);
 }
 
 #[test]
@@ -430,7 +421,7 @@ fn isearch_backward_via_cr() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("isearch_backward_via_cr", &gnu, &neo, 2);
+    assert_pair_exact_display("isearch_backward_via_cr", &gnu, &neo);
 }
 
 #[test]
@@ -465,11 +456,10 @@ fn isearch_forward_word_via_ms_w_matches_words_across_whitespace() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "isearch_forward_word_via_ms_w_matches_words_across_whitespace",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -505,11 +495,10 @@ fn isearch_forward_symbol_via_ms_underscore_respects_symbol_boundaries() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "isearch_forward_symbol_via_ms_underscore_respects_symbol_boundaries",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -545,11 +534,10 @@ fn isearch_forward_regexp_via_cmeta_s_matches_pattern() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "isearch_forward_regexp_via_cmeta_s_matches_pattern",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -585,11 +573,10 @@ fn isearch_backward_regexp_via_cmeta_r_matches_previous_pattern() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "isearch_backward_regexp_via_cmeta_r_matches_previous_pattern",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -651,7 +638,7 @@ fn occur_next_error_via_mg_n_visits_match() {
         dump_pair_grids("occur_next_error_via_mg_n_visits_match", &gnu, &neo);
     }
 
-    assert_pair_nearly_matches("occur_next_error_via_mg_n_visits_match", &gnu, &neo, 3);
+    assert_pair_exact_display("occur_next_error_via_mg_n_visits_match", &gnu, &neo);
 }
 
 #[test]
@@ -720,11 +707,10 @@ fn occur_next_and_previous_error_via_cx_backtick_mg_p() {
     neo.read_until(Duration::from_secs(8), edited_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "occur_next_and_previous_error_via_cx_backtick_mg_p",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -765,6 +751,7 @@ fn isearch_forward() {
     );
 
     send_both(&mut gnu, &mut neo, "C-g");
+    assert_pair_exact_display("isearch_forward", &gnu, &neo);
 }
 
 #[test]
@@ -810,6 +797,11 @@ fn isearch_yank_word_via_cs_cw_appends_word_at_point_to_search() {
 
     send_both(&mut gnu, &mut neo, "C-g");
     read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+    assert_pair_exact_display(
+        "isearch_yank_word_via_cs_cw_appends_word_at_point_to_search",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -835,6 +827,11 @@ fn isearch_forward_for_word_then_repeat_via_cs_confirm() {
             "{label}: isearch should find alpha"
         );
     }
+    assert_pair_exact_display(
+        "isearch_forward_for_word_then_repeat_via_cs_confirm",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -861,4 +858,5 @@ fn highlight_regexp_via_mx_marks_matches() {
             "{label}: buffer should still show apple after highlight-regexp"
         );
     }
+    assert_pair_exact_display("highlight_regexp_via_mx_marks_matches", &gnu, &neo);
 }

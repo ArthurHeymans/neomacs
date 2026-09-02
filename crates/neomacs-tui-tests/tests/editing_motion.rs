@@ -25,25 +25,20 @@ fn region_kill_yank_and_undo_round_trip() {
     gnu.read_until(Duration::from_secs(6), killed);
     neo.read_until(Duration::from_secs(8), killed);
     read_both(&mut gnu, &mut neo, Duration::from_millis(500));
-    assert_pair_nearly_matches("region_kill_yank_and_undo_round_trip/killed", &gnu, &neo, 2);
+    assert_pair_exact_display("region_kill_yank_and_undo_round_trip/killed", &gnu, &neo);
 
     send_both(&mut gnu, &mut neo, "C-y");
     let yanked = |grid: &[String]| grid.iter().any(|row| row.contains("one two three"));
     gnu.read_until(Duration::from_secs(6), yanked);
     neo.read_until(Duration::from_secs(8), yanked);
     read_both(&mut gnu, &mut neo, Duration::from_millis(500));
-    assert_pair_nearly_matches("region_kill_yank_and_undo_round_trip/yanked", &gnu, &neo, 2);
+    assert_pair_exact_display("region_kill_yank_and_undo_round_trip/yanked", &gnu, &neo);
 
     send_both(&mut gnu, &mut neo, "C-/");
     gnu.read_until(Duration::from_secs(6), killed);
     neo.read_until(Duration::from_secs(8), killed);
     read_both(&mut gnu, &mut neo, Duration::from_millis(500));
-    assert_pair_nearly_matches(
-        "region_kill_yank_and_undo_round_trip/undo-yank",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("region_kill_yank_and_undo_round_trip/undo-yank", &gnu, &neo);
 
     send_both(&mut gnu, &mut neo, "C-y");
     gnu.read_until(Duration::from_secs(6), yanked);
@@ -81,11 +76,10 @@ fn dabbrev_expand_via_mslash_expands_previous_word() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "dabbrev_expand_via_mslash_expands_previous_word",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -116,7 +110,7 @@ fn kill_region_and_yank_via_cw_cy() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("kill_region_and_yank_via_cw_cy", &gnu, &neo, 2);
+    assert_pair_exact_display("kill_region_and_yank_via_cw_cy", &gnu, &neo);
 }
 
 #[test]
@@ -143,11 +137,10 @@ fn next_line_add_newlines_inserts_newline_at_eob_like_gnu() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "next_line_add_newlines_inserts_newline_at_eob_like_gnu",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "next_line_add_newlines_inserts_newline_at_eob_like_gnu",
@@ -186,7 +179,7 @@ fn undo_edit_via_cx_u() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("undo_edit_via_cx_u", &gnu, &neo, 2);
+    assert_pair_exact_display("undo_edit_via_cx_u", &gnu, &neo);
 }
 
 #[test]
@@ -227,11 +220,10 @@ fn repeated_cx_u_continues_undo_chain_across_edit_boundaries() {
     gnu.read_until(Duration::from_secs(6), first_undo);
     neo.read_until(Duration::from_secs(8), first_undo);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "repeated_cx_u_continues_undo_chain_across_edit_boundaries/first",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "C-x u");
@@ -244,11 +236,10 @@ fn repeated_cx_u_continues_undo_chain_across_edit_boundaries() {
     gnu.read_until(Duration::from_secs(6), second_undo);
     neo.read_until(Duration::from_secs(8), second_undo);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "repeated_cx_u_continues_undo_chain_across_edit_boundaries/second",
         &gnu,
         &neo,
-        2,
     );
 
     save_current_file_and_assert_contents(
@@ -297,11 +288,10 @@ fn cx_u_with_active_region_undoes_only_region_change() {
     gnu.read_until(Duration::from_secs(6), region_undo);
     neo.read_until(Duration::from_secs(8), region_undo);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "cx_u_with_active_region_undoes_only_region_change",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "C-g");
@@ -357,11 +347,10 @@ fn non_undo_command_after_cx_u_breaks_consecutive_undo_chain() {
     gnu.read_until(Duration::from_secs(6), second_edit);
     neo.read_until(Duration::from_secs(8), second_edit);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "non_undo_command_after_cx_u_breaks_consecutive_undo_chain",
         &gnu,
         &neo,
-        2,
     );
 
     save_current_file_and_assert_contents(
@@ -430,7 +419,7 @@ fn assert_repeated_undo_in_scratch_buffer_matches_gnu(label: &str, undo_key: &st
     gnu.read_until(Duration::from_secs(6), first_undo);
     neo.read_until(Duration::from_secs(8), first_undo);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(&format!("{label}/first"), &gnu, &neo, 2);
+    assert_pair_exact_display(&format!("{label}/first"), &gnu, &neo);
 
     send_undo_key_both(&mut gnu, &mut neo, undo_key);
     let second_undo = |grid: &[String]| {
@@ -442,7 +431,7 @@ fn assert_repeated_undo_in_scratch_buffer_matches_gnu(label: &str, undo_key: &st
     gnu.read_until(Duration::from_secs(6), second_undo);
     neo.read_until(Duration::from_secs(8), second_undo);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(&format!("{label}/second"), &gnu, &neo, 2);
+    assert_pair_exact_display(&format!("{label}/second"), &gnu, &neo);
 
     eval_expression(
         &mut gnu,
@@ -509,7 +498,7 @@ fn scroll_page_down_and_up_via_cv_mv() {
     neo.read_until(Duration::from_secs(8), returned);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("scroll_page_down_and_up_via_cv_mv", &gnu, &neo, 2);
+    assert_pair_exact_display("scroll_page_down_and_up_via_cv_mv", &gnu, &neo);
 }
 
 #[test]
@@ -533,7 +522,7 @@ fn goto_buffer_end_and_beginning_via_mgt_mlt() {
     neo.read_until(Duration::from_secs(8), at_start);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("goto_buffer_end_and_beginning_via_mgt_mlt", &gnu, &neo, 2);
+    assert_pair_exact_display("goto_buffer_end_and_beginning_via_mgt_mlt", &gnu, &neo);
 }
 
 #[test]
@@ -568,7 +557,7 @@ fn move_beginning_and_end_of_line_via_ca_ce() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("move_beginning_and_end_of_line_via_ca_ce", &gnu, &neo, 2);
+    assert_pair_exact_display("move_beginning_and_end_of_line_via_ca_ce", &gnu, &neo);
 }
 
 #[test]
@@ -589,11 +578,10 @@ fn delete_char_and_delete_backward_char_via_cd_del() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_char_and_delete_backward_char_via_cd_del",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -630,7 +618,7 @@ fn next_and_previous_line_via_cn_cp() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("next_and_previous_line_via_cn_cp", &gnu, &neo, 2);
+    assert_pair_exact_display("next_and_previous_line_via_cn_cp", &gnu, &neo);
 }
 
 #[test]
@@ -676,11 +664,10 @@ fn next_line_from_fifth_scratch_character_preserves_column() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "next_line_from_fifth_scratch_character_preserves_column",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -729,11 +716,10 @@ fn repeated_next_line_restores_goal_column_after_short_line() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "repeated_next_line_restores_goal_column_after_short_line",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -782,11 +768,10 @@ fn repeated_previous_line_restores_goal_column_after_short_line() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "repeated_previous_line_restores_goal_column_after_short_line",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -852,11 +837,10 @@ fn set_goal_column_via_cx_cn_guides_vertical_motion() {
             grid.join("\n")
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "set_goal_column_via_cx_cn_guides_vertical_motion",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -883,7 +867,7 @@ fn forward_and_backward_char_via_cf_cb() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("forward_and_backward_char_via_cf_cb", &gnu, &neo, 2);
+    assert_pair_exact_display("forward_and_backward_char_via_cf_cb", &gnu, &neo);
 }
 
 #[test]
@@ -908,7 +892,7 @@ fn transpose_chars_via_ct() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("transpose_chars_via_ct", &gnu, &neo, 2);
+    assert_pair_exact_display("transpose_chars_via_ct", &gnu, &neo);
 }
 
 #[test]
@@ -943,7 +927,7 @@ fn forward_and_backward_word_via_mf_mb() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("forward_and_backward_word_via_mf_mb", &gnu, &neo, 2);
+    assert_pair_exact_display("forward_and_backward_word_via_mf_mb", &gnu, &neo);
 }
 
 #[test]
@@ -969,7 +953,7 @@ fn backward_kill_word_via_esc_del() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("backward_kill_word_via_esc_del", &gnu, &neo, 2);
+    assert_pair_exact_display("backward_kill_word_via_esc_del", &gnu, &neo);
 }
 
 #[test]
@@ -1001,6 +985,11 @@ fn alt_backspace_raw_escape_delete_kills_previous_word() {
         &mut neo,
         "alt-backspace.txt",
         "alpha beta \n",
+    );
+    assert_pair_exact_display(
+        "alt_backspace_raw_escape_delete_kills_previous_word",
+        &gnu,
+        &neo,
     );
 }
 
@@ -1036,7 +1025,7 @@ fn forward_and_backward_sentence_via_me_ma() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("forward_and_backward_sentence_via_me_ma", &gnu, &neo, 2);
+    assert_pair_exact_display("forward_and_backward_sentence_via_me_ma", &gnu, &neo);
 }
 
 #[test]
@@ -1072,7 +1061,7 @@ fn forward_and_backward_sexp_via_cmeta_f_b() {
     neo.read_until(Duration::from_secs(8), backward_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("forward_and_backward_sexp_via_cmeta_f_b", &gnu, &neo, 2);
+    assert_pair_exact_display("forward_and_backward_sexp_via_cmeta_f_b", &gnu, &neo);
 }
 
 #[test]
@@ -1098,11 +1087,10 @@ fn kill_sexp_via_cmeta_k_kills_following_expression() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "kill_sexp_via_cmeta_k_kills_following_expression",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1127,11 +1115,10 @@ fn transpose_sexps_via_cmeta_t_swaps_adjacent_expressions() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "transpose_sexps_via_cmeta_t_swaps_adjacent_expressions",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "transpose_sexps_via_cmeta_t_swaps_adjacent_expressions",
@@ -1180,12 +1167,7 @@ fn down_list_and_backward_up_list_via_cmeta_d_u() {
     neo.read_until(Duration::from_secs(8), up_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
-        "down_list_and_backward_up_list_via_cmeta_d_u",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("down_list_and_backward_up_list_via_cmeta_d_u", &gnu, &neo);
 }
 
 #[test]
@@ -1221,7 +1203,7 @@ fn forward_and_backward_list_via_cmeta_n_p() {
     neo.read_until(Duration::from_secs(8), backward_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("forward_and_backward_list_via_cmeta_n_p", &gnu, &neo, 2);
+    assert_pair_exact_display("forward_and_backward_list_via_cmeta_n_p", &gnu, &neo);
 }
 
 #[test]
@@ -1247,7 +1229,7 @@ fn insert_parentheses_via_m_open_paren() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("insert_parentheses_via_m_open_paren", &gnu, &neo, 2);
+    assert_pair_exact_display("insert_parentheses_via_m_open_paren", &gnu, &neo);
 }
 
 #[test]
@@ -1273,12 +1255,7 @@ fn move_past_close_and_reindent_via_m_close_paren() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
-        "move_past_close_and_reindent_via_m_close_paren",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("move_past_close_and_reindent_via_m_close_paren", &gnu, &neo);
 }
 
 #[test]
@@ -1315,7 +1292,7 @@ fn beginning_and_end_of_defun_via_cmeta_a_e() {
     neo.read_until(Duration::from_secs(8), end_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("beginning_and_end_of_defun_via_cmeta_a_e", &gnu, &neo, 2);
+    assert_pair_exact_display("beginning_and_end_of_defun_via_cmeta_a_e", &gnu, &neo);
 }
 
 #[test]
@@ -1344,7 +1321,7 @@ fn open_line_via_co() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("open_line_via_co", &gnu, &neo, 2);
+    assert_pair_exact_display("open_line_via_co", &gnu, &neo);
 }
 
 #[test]
@@ -1368,7 +1345,7 @@ fn split_line_via_cmeta_o_moves_tail_down() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("split_line_via_cmeta_o_moves_tail_down", &gnu, &neo, 2);
+    assert_pair_exact_display("split_line_via_cmeta_o_moves_tail_down", &gnu, &neo);
     save_current_file_and_assert_contents(
         "split_line_via_cmeta_o_moves_tail_down",
         &mut gnu,
@@ -1397,11 +1374,10 @@ fn tab_to_tab_stop_via_mi_inserts_to_next_tab_column() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "tab_to_tab_stop_via_mi_inserts_to_next_tab_column",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "tab_to_tab_stop_via_mi_inserts_to_next_tab_column",
@@ -1439,7 +1415,7 @@ fn newline_via_cm() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("newline_via_cm", &gnu, &neo, 2);
+    assert_pair_exact_display("newline_via_cm", &gnu, &neo);
 }
 
 #[test]
@@ -1469,11 +1445,10 @@ fn newline_and_indent_via_cj_trims_trailing_space_and_indents() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "newline_and_indent_via_cj_trims_trailing_space_and_indents",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1497,7 +1472,7 @@ fn kill_sentence_via_mk() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("kill_sentence_via_mk", &gnu, &neo, 2);
+    assert_pair_exact_display("kill_sentence_via_mk", &gnu, &neo);
 }
 
 #[test]
@@ -1526,7 +1501,7 @@ fn kill_ring_save_region_then_yank_via_mw_cy() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("kill_ring_save_region_then_yank_via_mw_cy", &gnu, &neo, 2);
+    assert_pair_exact_display("kill_ring_save_region_then_yank_via_mw_cy", &gnu, &neo);
 }
 
 #[test]
@@ -1554,7 +1529,7 @@ fn kill_word_via_md() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("kill_word_via_md", &gnu, &neo, 2);
+    assert_pair_exact_display("kill_word_via_md", &gnu, &neo);
 }
 
 #[test]
@@ -1582,7 +1557,7 @@ fn kill_line_twice_then_yank_via_ck_ck_cy() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("kill_line_twice_then_yank_via_ck_ck_cy", &gnu, &neo, 2);
+    assert_pair_exact_display("kill_line_twice_then_yank_via_ck_ck_cy", &gnu, &neo);
 }
 
 #[test]
@@ -1615,7 +1590,7 @@ fn yank_pop_after_yank_via_my() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("yank_pop_after_yank_via_my", &gnu, &neo, 2);
+    assert_pair_exact_display("yank_pop_after_yank_via_my", &gnu, &neo);
 }
 
 #[test]
@@ -1654,11 +1629,10 @@ fn keyboard_macro_record_and_replay_via_cx_parens_cx_e() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "keyboard_macro_record_and_replay_via_cx_parens_cx_e",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1706,11 +1680,10 @@ fn keyboard_macro_repeats_via_trailing_e_after_cx_e() {
     neo.read_until(Duration::from_secs(8), inserted);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "keyboard_macro_repeats_via_trailing_e_after_cx_e",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1737,7 +1710,7 @@ fn transpose_words_via_mt() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("transpose_words_via_mt", &gnu, &neo, 2);
+    assert_pair_exact_display("transpose_words_via_mt", &gnu, &neo);
 }
 
 #[test]
@@ -1764,7 +1737,7 @@ fn transpose_lines_via_cx_ct() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("transpose_lines_via_cx_ct", &gnu, &neo, 2);
+    assert_pair_exact_display("transpose_lines_via_cx_ct", &gnu, &neo);
 }
 
 #[test]
@@ -1790,7 +1763,7 @@ fn just_one_space_via_mspc() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("just_one_space_via_mspc", &gnu, &neo, 2);
+    assert_pair_exact_display("just_one_space_via_mspc", &gnu, &neo);
 }
 
 #[test]
@@ -1831,11 +1804,10 @@ fn cycle_spacing_via_repeated_mspc_collapses_deletes_and_restores() {
     neo.read_until(Duration::from_secs(8), restored);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "cycle_spacing_via_repeated_mspc_collapses_deletes_and_restores",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1862,7 +1834,7 @@ fn delete_horizontal_space_via_mbackslash() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("delete_horizontal_space_via_mbackslash", &gnu, &neo, 2);
+    assert_pair_exact_display("delete_horizontal_space_via_mbackslash", &gnu, &neo);
 }
 
 #[test]
@@ -1886,11 +1858,10 @@ fn delete_blank_lines_after_current_line_via_cx_co() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_blank_lines_after_current_line_via_cx_co",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1926,11 +1897,10 @@ fn append_next_kill_via_cmeta_w_combines_following_region_kill() {
     neo.read_until(Duration::from_secs(8), yanked);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "append_next_kill_via_cmeta_w_combines_following_region_kill",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1957,7 +1927,7 @@ fn delete_indentation_via_mcaret() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("delete_indentation_via_mcaret", &gnu, &neo, 2);
+    assert_pair_exact_display("delete_indentation_via_mcaret", &gnu, &neo);
 }
 
 #[test]
@@ -1982,7 +1952,7 @@ fn back_to_indentation_then_insert_via_mm() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("back_to_indentation_then_insert_via_mm", &gnu, &neo, 2);
+    assert_pair_exact_display("back_to_indentation_then_insert_via_mm", &gnu, &neo);
 }
 
 #[test]
@@ -2006,7 +1976,7 @@ fn zap_to_char_via_mz_spc() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("zap_to_char_via_mz_spc", &gnu, &neo, 2);
+    assert_pair_exact_display("zap_to_char_via_mz_spc", &gnu, &neo);
 }
 
 #[test]
@@ -2029,7 +1999,7 @@ fn forward_paragraph_via_m_close_brace() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("forward_paragraph_via_m_close_brace", &gnu, &neo, 2);
+    assert_pair_exact_display("forward_paragraph_via_m_close_brace", &gnu, &neo);
 }
 
 #[test]
@@ -2054,7 +2024,7 @@ fn backward_paragraph_via_m_open_brace() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("backward_paragraph_via_m_open_brace", &gnu, &neo, 2);
+    assert_pair_exact_display("backward_paragraph_via_m_open_brace", &gnu, &neo);
 }
 
 #[test]
@@ -2104,7 +2074,7 @@ fn downcase_region_once_via_disabled_cx_cl() {
     settle_session(&mut gnu);
     settle_session(&mut neo);
 
-    assert_pair_nearly_matches("downcase_region_once_via_disabled_cx_cl", &gnu, &neo, 2);
+    assert_pair_exact_display("downcase_region_once_via_disabled_cx_cl", &gnu, &neo);
 }
 
 #[test]
@@ -2154,7 +2124,7 @@ fn upcase_region_once_via_disabled_cx_cu() {
     settle_session(&mut gnu);
     settle_session(&mut neo);
 
-    assert_pair_nearly_matches("upcase_region_once_via_disabled_cx_cu", &gnu, &neo, 2);
+    assert_pair_exact_display("upcase_region_once_via_disabled_cx_cu", &gnu, &neo);
 }
 
 #[test]
@@ -2174,7 +2144,7 @@ fn upcase_word_via_mu() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("upcase_word_via_mu", &gnu, &neo, 2);
+    assert_pair_exact_display("upcase_word_via_mu", &gnu, &neo);
 }
 
 #[test]
@@ -2194,7 +2164,7 @@ fn downcase_word_via_ml() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("downcase_word_via_ml", &gnu, &neo, 2);
+    assert_pair_exact_display("downcase_word_via_ml", &gnu, &neo);
 }
 
 #[test]
@@ -2214,7 +2184,7 @@ fn capitalize_word_via_mc() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("capitalize_word_via_mc", &gnu, &neo, 2);
+    assert_pair_exact_display("capitalize_word_via_mc", &gnu, &neo);
 }
 
 #[test]
@@ -2243,7 +2213,7 @@ fn exchange_point_and_mark_via_cx_cx() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("exchange_point_and_mark_via_cx_cx", &gnu, &neo, 2);
+    assert_pair_exact_display("exchange_point_and_mark_via_cx_cx", &gnu, &neo);
 }
 
 #[test]
@@ -2282,12 +2252,7 @@ fn mark_paragraph_then_kill_and_yank_via_mh_cw_cy() {
     neo.read_until(Duration::from_secs(8), restored);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
-        "mark_paragraph_then_kill_and_yank_via_mh_cw_cy",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("mark_paragraph_then_kill_and_yank_via_mh_cw_cy", &gnu, &neo);
 }
 
 #[test]
@@ -2310,7 +2275,7 @@ fn goto_line_via_mg_g() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("goto_line_via_mg_g", &gnu, &neo, 2);
+    assert_pair_exact_display("goto_line_via_mg_g", &gnu, &neo);
 }
 
 #[test]
@@ -2336,11 +2301,10 @@ fn repeat_complex_command_via_cx_esc_esc_edits_and_replays_goto_line() {
     gnu.read_until(Duration::from_secs(6), goto_prompt);
     neo.read_until(Duration::from_secs(8), goto_prompt);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "repeat_complex_command_via_cx_esc_esc_edits_and_replays_goto_line/goto-prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -2350,11 +2314,10 @@ fn repeat_complex_command_via_cx_esc_esc_edits_and_replays_goto_line() {
     gnu.read_until(Duration::from_secs(6), goto_typed);
     neo.read_until(Duration::from_secs(8), goto_typed);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "repeat_complex_command_via_cx_esc_esc_edits_and_replays_goto_line/goto-typed",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "RET");
@@ -2362,11 +2325,10 @@ fn repeat_complex_command_via_cx_esc_esc_edits_and_replays_goto_line() {
     gnu.read_until(Duration::from_secs(6), first_target);
     neo.read_until(Duration::from_secs(8), first_target);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "repeat_complex_command_via_cx_esc_esc_edits_and_replays_goto_line/first-target",
         &gnu,
         &neo,
-        3,
     );
 
     send_both(&mut gnu, &mut neo, "C-x ESC ESC");
@@ -2378,11 +2340,10 @@ fn repeat_complex_command_via_cx_esc_esc_edits_and_replays_goto_line() {
     gnu.read_until(Duration::from_secs(6), redo_prompt);
     neo.read_until(Duration::from_secs(8), redo_prompt);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "repeat_complex_command_via_cx_esc_esc_edits_and_replays_goto_line/redo-prompt",
         &gnu,
         &neo,
-        3,
     );
 
     send_both(&mut gnu, &mut neo, "C-b DEL 3 5");
@@ -2394,11 +2355,10 @@ fn repeat_complex_command_via_cx_esc_esc_edits_and_replays_goto_line() {
     gnu.read_until(Duration::from_secs(6), redo_edited);
     neo.read_until(Duration::from_secs(8), redo_edited);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "repeat_complex_command_via_cx_esc_esc_edits_and_replays_goto_line/redo-edited",
         &gnu,
         &neo,
-        3,
     );
 
     send_both(&mut gnu, &mut neo, "RET");
@@ -2406,11 +2366,10 @@ fn repeat_complex_command_via_cx_esc_esc_edits_and_replays_goto_line() {
     gnu.read_until(Duration::from_secs(6), second_target);
     neo.read_until(Duration::from_secs(8), second_target);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "repeat_complex_command_via_cx_esc_esc_edits_and_replays_goto_line/second-target",
         &gnu,
         &neo,
-        4,
     );
 
     send_both_raw(&mut gnu, &mut neo, b"X");
@@ -2419,11 +2378,10 @@ fn repeat_complex_command_via_cx_esc_esc_edits_and_replays_goto_line() {
     neo.read_until(Duration::from_secs(8), inserted);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "repeat_complex_command_via_cx_esc_esc_edits_and_replays_goto_line/final-insert",
         &gnu,
         &neo,
-        4,
     );
 }
 
@@ -2447,11 +2405,10 @@ fn repeat_last_command_via_cx_z_z_replays_previous_motion() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "repeat_last_command_via_cx_z_z_replays_previous_motion",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2469,7 +2426,7 @@ fn goto_char_via_mg_c() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("goto_char_via_mg_c", &gnu, &neo, 2);
+    assert_pair_exact_display("goto_char_via_mg_c", &gnu, &neo);
 }
 
 #[test]
@@ -2508,11 +2465,10 @@ fn goto_char_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "goto_char_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2535,11 +2491,10 @@ fn beginning_and_end_of_buffer_via_mless_mgreater() {
     gnu.read_until(Duration::from_secs(6), at_end);
     neo.read_until(Duration::from_secs(8), at_end);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "beginning_and_end_of_buffer_via_mless_mgreater/end",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "M-<");
@@ -2551,12 +2506,7 @@ fn beginning_and_end_of_buffer_via_mless_mgreater() {
     neo.read_until(Duration::from_secs(8), at_beginning);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
-        "beginning_and_end_of_buffer_via_mless_mgreater",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("beginning_and_end_of_buffer_via_mless_mgreater", &gnu, &neo);
 }
 
 #[test]
@@ -2577,7 +2527,7 @@ fn count_words_region_via_mequals() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("count_words_region_via_mequals", &gnu, &neo, 2);
+    assert_pair_exact_display("count_words_region_via_mequals", &gnu, &neo);
 }
 
 #[test]
@@ -2601,11 +2551,10 @@ fn count_words_buffer_via_mx_reports_buffer_totals() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "count_words_buffer_via_mx_reports_buffer_totals",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2627,12 +2576,7 @@ fn count_lines_page_via_cx_l_reports_current_page() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
-        "count_lines_page_via_cx_l_reports_current_page",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("count_lines_page_via_cx_l_reports_current_page", &gnu, &neo);
 }
 
 #[test]
@@ -2654,7 +2598,7 @@ fn what_line_via_mx_reports_current_line() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("what_line_via_mx_reports_current_line", &gnu, &neo, 2);
+    assert_pair_exact_display("what_line_via_mx_reports_current_line", &gnu, &neo);
 }
 
 #[test]
@@ -2678,7 +2622,7 @@ fn what_cursor_position_via_cx_equals() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("what_cursor_position_via_cx_equals", &gnu, &neo, 2);
+    assert_pair_exact_display("what_cursor_position_via_cx_equals", &gnu, &neo);
 }
 
 #[test]
@@ -2706,7 +2650,7 @@ fn quoted_insert_newline_via_cq_cj() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("quoted_insert_newline_via_cq_cj", &gnu, &neo, 2);
+    assert_pair_exact_display("quoted_insert_newline_via_cq_cj", &gnu, &neo);
 }
 
 #[test]
@@ -2735,7 +2679,7 @@ fn undo_edit_via_cslash() {
     neo.read_until(Duration::from_secs(8), undone);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("undo_edit_via_cslash", &gnu, &neo, 2);
+    assert_pair_exact_display("undo_edit_via_cslash", &gnu, &neo);
 }
 
 #[test]
@@ -2769,11 +2713,10 @@ fn undo_redo_via_cmeta_underscore_restores_undone_edit() {
     neo.read_until(Duration::from_secs(8), inserted);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "undo_redo_via_cmeta_underscore_restores_undone_edit",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2799,7 +2742,7 @@ fn comment_region_via_msemicolon() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("comment_region_via_msemicolon", &gnu, &neo, 2);
+    assert_pair_exact_display("comment_region_via_msemicolon", &gnu, &neo);
 }
 
 #[test]
@@ -2824,11 +2767,10 @@ fn comment_line_via_mx_comments_current_line_and_moves_to_next() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "comment_line_via_mx_comments_current_line_and_moves_to_next",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2865,11 +2807,10 @@ fn comment_line_via_cx_csemicolon_toggles_current_line() {
     neo.read_until(Duration::from_secs(8), uncommented);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "comment_line_via_cx_csemicolon_toggles_current_line",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2900,7 +2841,7 @@ fn goto_line_via_mg_g_jumps_to_line_number() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("goto_line_via_mg_g", &gnu, &neo, 2);
+    assert_pair_exact_display("goto_line_via_mg_g", &gnu, &neo);
 }
 
 #[test]
@@ -2941,6 +2882,11 @@ fn keyboard_macro_record_line_kill_and_replay_via_cx_paren() {
     let neo_not_two = !neog.iter().any(|r| r.contains("line two"));
     assert!(gnu_ok && gnu_not_two, "GNU should have killed line two");
     assert!(neo_ok && neo_not_two, "NEO should have killed line two");
+    assert_pair_exact_display(
+        "keyboard_macro_record_line_kill_and_replay_via_cx_paren",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -2970,4 +2916,5 @@ fn universal_argument_move_down_via_cu_5_cn() {
             "{label}: C-u 5 C-n should move to line 6"
         );
     }
+    assert_pair_exact_display("universal_argument_move_down_via_cu_5_cn", &gnu, &neo);
 }

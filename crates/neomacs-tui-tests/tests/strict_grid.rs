@@ -1,12 +1,9 @@
-//! Prototype: strict, contract-level grid comparison of Neomacs vs GNU Emacs.
-//!
-//! Unlike the fuzzy/text-only helpers, this compares the *exact* character grid
-//! plus face *identity* (a palette-independent colour-class partition — see
-//! `compare_grids_strict`), over the text area, with chrome rows masked and an
-//! explicit allow-list for known parity gaps.
+//! End-to-end exact-display comparisons of Neomacs vs GNU Emacs.
 
+mod support;
 use neomacs_tui_tests::*;
 use std::time::Duration;
+use support::*;
 
 /// A fresh `-Q` buffer with deterministic typed text must render an *identical*
 /// character grid in the text area (logical layout), and the same trivial
@@ -34,18 +31,7 @@ fn strict_text_area_matches_gnu_for_typed_buffer() {
         s.read(Duration::from_millis(800));
     }
 
-    // Mask the bottom two rows (mode-line + echo area): they legitimately
-    // diverge (version string, buffer/position indicators) and are not part of
-    // the logical-display contract for this fixture.
-    let opts = StrictGridOptions {
-        masked_rows: ((ROWS - 2)..ROWS).collect(),
-        row_range: Some(0..(ROWS - 2)),
-        compare_faces: true,
-        // Calibrated below from the first real run, if needed.
-        allow: Vec::new(),
-    };
-
-    assert_grids_strict("typed buffer text area", gnu.screen(), neo.screen(), &opts);
+    assert_pair_exact_display("typed buffer", &gnu, &neo);
 }
 
 /// A small, deterministic Emacs-Lisp file exercising diverse font-lock faces:
@@ -85,74 +71,5 @@ fn strict_font_locked_elisp_matches_gnu() {
     gnu.read(Duration::from_secs(2));
     neo.read(Duration::from_secs(2));
 
-    let masked: Vec<u16> = ((ROWS - 2)..ROWS).collect();
-    let range = Some(0..(ROWS - 2));
-
-    // Diagnostic pass with NO allow-list, so the full parity backlog is visible
-    // in the test output (with the actual fg/bg at each divergent cell).
-    let raw = compare_grids_strict(
-        gnu.screen(),
-        neo.screen(),
-        &StrictGridOptions {
-            masked_rows: masked.clone(),
-            row_range: range.clone(),
-            compare_faces: true,
-            allow: Vec::new(),
-        },
-    );
-    let n_char = raw
-        .iter()
-        .filter(|d| d.kind == StrictDiffKind::Char)
-        .count();
-    eprintln!(
-        "font-locked elisp: {n_char} char diffs, {} face-class diffs",
-        raw.len() - n_char
-    );
-    for d in &raw {
-        let face = |s: &vt100::Screen| {
-            s.cell(d.row, d.col)
-                .map(|c| format!("{:?}/{:?}", c.fgcolor(), c.bgcolor()))
-        };
-        eprintln!(
-            "  ({:>2},{:>3}) {:?}: GNU {:?} NEO {:?}",
-            d.row,
-            d.col,
-            d.kind,
-            face(gnu.screen()),
-            face(neo.screen())
-        );
-    }
-    // The logical-layout contract: the file must render char-for-char like GNU.
-    assert_eq!(
-        n_char, 0,
-        "font-locked elisp text area must match GNU character-for-character"
-    );
-
-    // Known font-lock parity gaps on this fixture: GNU and Neomacs assign a
-    // different face class to the trailing-whitespace cell past end-of-line on
-    // two lines. Tracked explicitly (the shrinking parity backlog) rather than
-    // fuzzed away — a NEW divergence (a real font-lock regression) fails below.
-    let allow = vec![
-        ExpectedDivergence {
-            row: 1,
-            col: 66,
-            reason: "trailing-whitespace face class differs from GNU (require line)",
-        },
-        ExpectedDivergence {
-            row: 12,
-            col: 23,
-            reason: "trailing-whitespace face class differs from GNU (ends-here comment)",
-        },
-    ];
-    assert_grids_strict(
-        "font-locked elisp text area",
-        gnu.screen(),
-        neo.screen(),
-        &StrictGridOptions {
-            masked_rows: masked,
-            row_range: range,
-            compare_faces: true,
-            allow,
-        },
-    );
+    assert_pair_exact_display("font-locked elisp", &gnu, &neo);
 }

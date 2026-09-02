@@ -58,4 +58,5 @@ fn doom_space_line_prefix_centers_buffer_text() {
         neo_position, gnu_position,
         "Neomacs should honor Doom's display-spec prefix in its public TTY grid"
     );
+    assert_pair_exact_display("doom_space_line_prefix_centers_buffer_text", &gnu, &neo);
 }

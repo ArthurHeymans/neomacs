@@ -45,6 +45,11 @@ fn return_after_self_insert_moves_cursor_to_next_terminal_row() {
          Neomacs={neo_after_return:?}\nNeomacs screen:\n{}",
         neo.text_grid().join("\n")
     );
+    assert_pair_exact_display(
+        "return_after_self_insert_moves_cursor_to_next_terminal_row",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -65,6 +70,7 @@ fn control_x_prefix_echo_has_no_trailing_dash() {
         gnu_echo.ends_with('-'),
         "Neomacs prefix echo should match GNU trailing-dash state"
     );
+    assert_pair_exact_display("control_x_prefix_echo_has_no_trailing_dash", &gnu, &neo);
 }
 
 #[test]
@@ -107,6 +113,7 @@ fn terminal_resize_updates_frame_geometry() {
         "Neomacs should report resized frame geometry {expected}\n{}",
         neo_grid.join("\n")
     );
+    assert_pair_exact_display("terminal_resize_updates_frame_geometry", &gnu, &neo);
 }
 
 #[test]
@@ -170,12 +177,7 @@ fn live_resize_reflow_content_and_adapt_modeline() {
         "NEO mode-line should show filename"
     );
 
-    assert_pair_nearly_matches(
-        "live_resize_reflow_content_and_adapt_modeline",
-        &gnu,
-        &neo,
-        4,
-    );
+    assert_pair_exact_display("live_resize_reflow_content_and_adapt_modeline", &gnu, &neo);
 }
 
 #[test]
@@ -196,11 +198,10 @@ fn execute_extended_command_tab_completion_via_mx_completes_unique_command() {
     gnu.read_until(Duration::from_secs(6), mx_prompt);
     neo.read_until(Duration::from_secs(8), mx_prompt);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "execute_extended_command_tab_completion_via_mx_completes_unique_command/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -211,11 +212,10 @@ fn execute_extended_command_tab_completion_via_mx_completes_unique_command() {
     gnu.read_until(Duration::from_secs(6), completed);
     neo.read_until(Duration::from_secs(8), completed);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "execute_extended_command_tab_completion_via_mx_completes_unique_command/completed",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "RET");
@@ -230,11 +230,10 @@ fn execute_extended_command_tab_completion_via_mx_completes_unique_command() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "execute_extended_command_tab_completion_via_mx_completes_unique_command",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -260,7 +259,7 @@ fn keyboard_quit_from_mx_via_cg() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("keyboard_quit_from_mx_via_cg", &gnu, &neo, 2);
+    assert_pair_exact_display("keyboard_quit_from_mx_via_cg", &gnu, &neo);
 }
 
 #[test]
@@ -279,22 +278,20 @@ fn execute_extended_command_history_via_mx_mp_recalls_previous_command() {
     gnu.read_until(Duration::from_secs(8), calendar_ready);
     neo.read_until(Duration::from_secs(10), calendar_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "execute_extended_command_history_via_mx_mp_recalls_previous_command/first-calendar",
         &gnu,
         &neo,
-        4,
     );
 
     send_both_raw(&mut gnu, &mut neo, b"q");
     gnu.read_until(Duration::from_secs(6), scratch_ready);
     neo.read_until(Duration::from_secs(8), scratch_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "execute_extended_command_history_via_mx_mp_recalls_previous_command/quit",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "M-x");
@@ -302,11 +299,10 @@ fn execute_extended_command_history_via_mx_mp_recalls_previous_command() {
     gnu.read_until(Duration::from_secs(6), mx_prompt);
     neo.read_until(Duration::from_secs(8), mx_prompt);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "execute_extended_command_history_via_mx_mp_recalls_previous_command/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "M-p");
@@ -317,22 +313,20 @@ fn execute_extended_command_history_via_mx_mp_recalls_previous_command() {
     gnu.read_until(Duration::from_secs(6), recalled);
     neo.read_until(Duration::from_secs(8), recalled);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "execute_extended_command_history_via_mx_mp_recalls_previous_command/recalled",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "RET");
     gnu.read_until(Duration::from_secs(8), calendar_ready);
     neo.read_until(Duration::from_secs(10), calendar_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "execute_extended_command_history_via_mx_mp_recalls_previous_command/second-calendar",
         &gnu,
         &neo,
-        4,
     );
 }
 
@@ -358,12 +352,7 @@ fn keyboard_escape_quit_from_mx_via_esc_esc_esc() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
-        "keyboard_escape_quit_from_mx_via_esc_esc_esc",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("keyboard_escape_quit_from_mx_via_esc_esc_esc", &gnu, &neo);
 }
 
 #[test]
@@ -376,7 +365,7 @@ fn universal_argument_insert_via_cu_8_a() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("universal_argument_insert_via_cu_8_a", &gnu, &neo, 2);
+    assert_pair_exact_display("universal_argument_insert_via_cu_8_a", &gnu, &neo);
 }
 
 #[test]
@@ -402,29 +391,17 @@ fn negative_argument_reverses_forward_word_via_mminus_mf() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "negative_argument_reverses_forward_word_via_mminus_mf",
         &gnu,
         &neo,
-        2,
     );
 }
 
 #[test]
 fn boot_screen_layout() {
     let (gnu, neo) = boot_pair("");
-    let gl = gnu.text_grid();
-    let nl = neo.text_grid();
-    let diffs = meaningful_diffs(diff_text_grids(&gl, &nl));
-    if !diffs.is_empty() {
-        eprintln!("boot_screen_layout: {} rows differ", diffs.len());
-        print_row_diffs(&diffs);
-    }
-    assert!(
-        diffs.len() <= 2,
-        "Boot screens differ in {} rows (expected <= 2 for menu bar / echo area)",
-        diffs.len()
-    );
+    assert_pair_exact_display("boot_screen_layout", &gnu, &neo);
 }
 
 #[test]
@@ -476,6 +453,11 @@ fn boot_blank_cells_use_terminal_default_background() {
         "Blank body background differs from GNU Emacs:\n{}",
         mismatches.join("\n")
     );
+    assert_pair_exact_display(
+        "boot_blank_cells_use_terminal_default_background",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -498,6 +480,7 @@ fn mx_prompt() {
         neo_last.contains("M-x"),
         "NEO last row should contain 'M-x': {neo_last:?}"
     );
+    assert_pair_exact_display("mx_prompt", &gnu, &neo);
 
     // Cancel
     send_both(&mut gnu, &mut neo, "C-g");
@@ -536,6 +519,7 @@ fn universal_argument() {
     }
     assert!(gnu_has_8a, "GNU buffer should have 8 a's somewhere");
     assert!(neo_has_8a, "NEO buffer should have 8 a's somewhere");
+    assert_pair_exact_display("universal_argument", &gnu, &neo);
 }
 
 #[test]
@@ -566,6 +550,7 @@ fn echo_area_message() {
         neo_has_info || !neo_echo.trim().is_empty(),
         "NEO echo area should show cursor info after C-x ="
     );
+    assert_pair_exact_display("echo_area_message", &gnu, &neo);
 }
 
 // ── Session lifecycle tests ──────────────────────────────────
@@ -611,11 +596,10 @@ fn save_buffers_kill_terminal_prompts_for_modified_file_buffer_via_cx_cc() {
     // Cancel the quit with C-g to keep session alive for comparison
     send_both(&mut gnu, &mut neo, "C-g");
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "save_buffers_kill_terminal_prompts_for_modified_file_buffer_via_cx_cc",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -653,11 +637,10 @@ fn disabled_command_shows_prompt_and_accepts_with_space() {
     send_both(&mut gnu, &mut neo, "SPC");
     read_both(&mut gnu, &mut neo, Duration::from_secs(2));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "disabled_command_shows_prompt_and_accepts_with_space",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -666,20 +649,31 @@ fn m_x_help_shows_help_menu() {
     let (mut gnu, mut neo) = boot_pair("");
 
     invoke_mx_command(&mut gnu, &mut neo, "help");
-    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+    let help_screen_ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("*Metahelp*"))
+            && grid
+                .iter()
+                .any(|row| row.contains("Commands, Keys and Functions"))
+    };
+    wait_for_both(
+        &mut gnu,
+        &mut neo,
+        Duration::from_secs(12),
+        help_screen_ready,
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
 
     // Both should show a help buffer/menu
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
         assert!(
-            grid.iter()
-                .any(|row| { row.contains("Help") || row.contains("help") }),
+            help_screen_ready(&grid),
             "{label}: M-x help should show help information\n{}",
             grid.join("\n")
         );
     }
 
-    assert_pair_nearly_matches("m_x_help_shows_help_menu", &gnu, &neo, 3);
+    assert_pair_exact_display("m_x_help_shows_help_menu", &gnu, &neo);
 }
 
 // ── Face remapping tests ────────────────────────────────────
@@ -718,11 +712,10 @@ fn face_remapping_alist_with_filtered_window_system_not_match_on_tty() {
     }
 
     // Screen comparison with reasonable tolerance
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "face_remapping_alist_with_filtered_window_system_not_match_on_tty",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -756,12 +749,7 @@ fn overlay_with_face_property_displays_correctly() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "overlay_with_face_property_displays_correctly",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("overlay_with_face_property_displays_correctly", &gnu, &neo);
 }
 
 #[test]
@@ -782,6 +770,11 @@ fn eval_expression_addition_via_mcolon_shows_result() {
     let neo_has = neo.text_grid().iter().any(|r| r.contains("3"));
     assert!(gnu_has, "GNU should display result 3 after M-: (+ 1 2)");
     assert!(neo_has, "NEO should display result 3 after M-: (+ 1 2)");
+    assert_pair_exact_display(
+        "eval_expression_addition_via_mcolon_shows_result",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -813,6 +806,11 @@ fn tty_erase_char_reports_the_terminals_stty_erase_like_gnu() {
             grid.join("\n")
         );
     }
+    assert_pair_exact_display(
+        "tty_erase_char_reports_the_terminals_stty_erase_like_gnu",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -868,12 +866,10 @@ fn backspace_on_a_ctrl_h_erase_terminal_deletes_like_gnu() {
             grid.join("\n")
         );
     }
-
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "backspace_on_a_ctrl_h_erase_terminal_deletes_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -899,6 +895,11 @@ fn what_cursor_position_via_cx_equals_shows_char_info() {
             "{label} C-x = should show Char: A (#x41) info"
         );
     }
+    assert_pair_exact_display(
+        "what_cursor_position_via_cx_equals_shows_char_info",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -920,6 +921,11 @@ fn universal_argument_self_insert_via_cu_8_star_inserts_eight_asterisks() {
             "{label}: C-u 8 * should insert 8 asterisks"
         );
     }
+    assert_pair_exact_display(
+        "universal_argument_self_insert_via_cu_8_star_inserts_eight_asterisks",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -939,6 +945,11 @@ fn read_only_mode_toggle_via_cx_cq_shows_percent_sign_in_mode_line() {
             "{label}: C-x C-q should show read-only indicator"
         );
     }
+    assert_pair_exact_display(
+        "read_only_mode_toggle_via_cx_cq_shows_percent_sign_in_mode_line",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -955,6 +966,7 @@ fn pwd_via_mx_shows_current_directory() {
             "{label}: M-x pwd should show current directory"
         );
     }
+    assert_pair_exact_display("pwd_via_mx_shows_current_directory", &gnu, &neo);
 }
 
 #[test]
@@ -971,6 +983,11 @@ fn line_number_mode_toggle_via_mx_shows_l_in_mode_line() {
             "{label}: enabling line-number-mode should show 'L' in mode line"
         );
     }
+    assert_pair_exact_display(
+        "line_number_mode_toggle_via_mx_shows_l_in_mode_line",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -996,6 +1013,7 @@ fn what_line_via_mx_shows_current_line_number() {
             "{label}: what-line on line 2 should report Line 2"
         );
     }
+    assert_pair_exact_display("what_line_via_mx_shows_current_line_number", &gnu, &neo);
 }
 
 #[test]
@@ -1018,29 +1036,35 @@ fn mx_history_recall_via_mp_shows_previous_command() {
             "{label}: M-p in M-x should recall pwd"
         );
     }
+    assert_pair_exact_display(
+        "mx_history_recall_via_mp_shows_previous_command",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
 fn display_time_via_mx_shows_clock_in_mode_line() {
     let (mut gnu, mut neo) = boot_pair("");
+    // Wall-clock minutes and host load averages can legitimately change
+    // between the two processes.  Keep the display-time integration under
+    // test while making its rendered value a deterministic paired fixture.
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        r#"(setq display-time-string-forms '(" TUI-CLOCK"))"#,
+    );
     invoke_mx_command(&mut gnu, &mut neo, "display-time-mode");
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
     for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
         let grid = session.text_grid();
-        let _has_time = grid.iter().any(|r| {
-            r.contains(":")
-                && (r.contains("AM")
-                    || r.contains("PM")
-                    || r.chars().filter(|&c| c == ':').count() >= 1)
-        });
-        // Time might not appear immediately, just check no error
         assert!(
-            grid.iter()
-                .any(|r| r.contains("scratch") || r.contains("*scratch*")),
-            "{label}: display-time-mode should not break the mode line"
+            grid.iter().any(|row| row.contains("TUI-CLOCK")),
+            "{label}: display-time-mode should install its deterministic mode-line entry"
         );
     }
+    assert_pair_exact_display("display_time_via_mx_shows_clock_in_mode_line", &gnu, &neo);
 }
 
 #[test]
@@ -1066,6 +1090,11 @@ fn beginning_of_buffer_via_mlessthan_goes_to_start() {
             "{label}: M-< should go to beginning of buffer"
         );
     }
+    assert_pair_exact_display(
+        "beginning_of_buffer_via_mlessthan_goes_to_start",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -1087,6 +1116,11 @@ fn universal_argument_cu_3_cf_moves_forward_three_chars() {
             "{label}: C-u 3 C-f should move 3 chars right"
         );
     }
+    assert_pair_exact_display(
+        "universal_argument_cu_3_cf_moves_forward_three_chars",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -1107,6 +1141,11 @@ fn negative_argument_via_mminus_reverses_direction() {
             "{label}: M-- C-b should move forward (inserting X at end)"
         );
     }
+    assert_pair_exact_display(
+        "negative_argument_via_mminus_reverses_direction",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -1123,6 +1162,11 @@ fn column_number_mode_toggle_via_mx_shows_column_in_mode_line() {
             "{label}: column-number-mode should show column in mode line"
         );
     }
+    assert_pair_exact_display(
+        "column_number_mode_toggle_via_mx_shows_column_in_mode_line",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -1141,4 +1185,9 @@ fn execute_extended_command_tab_completion_via_mx_tab_shows_completions() {
             "{label}: TAB completion in M-x should show find-file"
         );
     }
+    assert_pair_exact_display(
+        "execute_extended_command_tab_completion_via_mx_tab_shows_completions",
+        &gnu,
+        &neo,
+    );
 }

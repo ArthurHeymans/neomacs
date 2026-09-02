@@ -9,7 +9,10 @@ mod support;
 use neomacs_tui_tests::TuiSession;
 use std::fs;
 use std::time::{Duration, Instant};
-use support::{boot_pair, eval_expression, read_both, send_both, wait_for_both, write_home_file};
+use support::{
+    assert_pair_exact_display, boot_pair, eval_expression, read_both, send_both, wait_for_both,
+    write_home_file,
+};
 
 const ORACLE_FILE: &str = "window-end-oracle.el";
 const RESULT_FILE: &str = "window-end-oracle.out";
@@ -310,5 +313,10 @@ fn window_end_update_matches_gnu_across_display_boundaries() {
         "window-end diverged from GNU in {} case(s):\n\n{}",
         divergences.len(),
         divergences.join("\n\n")
+    );
+    assert_pair_exact_display(
+        "window_end_update_matches_gnu_across_display_boundaries",
+        &gnu,
+        &neo,
     );
 }

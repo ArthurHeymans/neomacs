@@ -55,11 +55,10 @@ fn f10_opens_tty_menu_bar_file_menu_and_cg_closes_it() {
         closed(&neo.text_grid()),
         "Neomacs should close the F10 menu on C-g"
     );
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "f10_opens_tty_menu_bar_file_menu_and_cg_closes_it",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -126,5 +125,10 @@ fn f10_can_navigate_to_help_menu_and_open_about_emacs() {
     assert!(
         about_ready(&neo.text_grid()),
         "Neomacs should open About Emacs from the TTY menu"
+    );
+    assert_pair_exact_display(
+        "f10_can_navigate_to_help_menu_and_open_about_emacs",
+        &gnu,
+        &neo,
     );
 }

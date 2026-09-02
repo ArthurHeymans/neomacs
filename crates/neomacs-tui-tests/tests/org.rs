@@ -87,6 +87,11 @@ fn org_block_background_extends_over_blank_source_rows() {
 
     assert_org_block_blank_line_extends_block_background(&gnu);
     assert_org_block_blank_line_extends_block_background(&neo);
+    assert_pair_exact_display(
+        "org_block_background_extends_over_blank_source_rows",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -107,6 +112,7 @@ fn org_todo_via_cc_ct_cycles_heading_keyword() {
     });
 
     save_current_file_and_assert_contents("org-todo", &mut gnu, &mut neo, name, expected);
+    assert_pair_exact_display("org_todo_via_cc_ct_cycles_heading_keyword", &gnu, &neo);
 }
 
 #[test]
@@ -125,6 +131,7 @@ fn org_meta_return_inserts_same_level_heading() {
     });
 
     save_current_file_and_assert_contents("org-meta-return", &mut gnu, &mut neo, name, expected);
+    assert_pair_exact_display("org_meta_return_inserts_same_level_heading", &gnu, &neo);
 }
 
 #[test]
@@ -156,6 +163,7 @@ fn org_tab_local_cycle_folds_and_reveals_subtree() {
             && grid.iter().any(|row| row.contains("** Child"))
             && grid.iter().any(|row| row.contains("child body"))
     });
+    assert_pair_exact_display("org_tab_local_cycle_folds_and_reveals_subtree", &gnu, &neo);
 }
 
 #[test]
@@ -177,6 +185,7 @@ fn org_table_ctrl_c_ctrl_c_aligns_columns() {
     }
 
     save_current_file_and_assert_contents("org-table-align", &mut gnu, &mut neo, name, expected);
+    assert_pair_exact_display("org_table_ctrl_c_ctrl_c_aligns_columns", &gnu, &neo);
 }
 
 #[test]
@@ -218,6 +227,7 @@ fn org_table_tblfm_ctrl_c_ctrl_c_recalculates_sum() {
     }
 
     save_current_file_and_assert_contents("org-table-tblfm", &mut gnu, &mut neo, name, expected);
+    assert_pair_exact_display("org_table_tblfm_ctrl_c_ctrl_c_recalculates_sum", &gnu, &neo);
 }
 
 #[test]
@@ -279,5 +289,10 @@ print(\"hello world\")\n\
 \n\
 #+RESULTS:\n\
 : hello world\n",
+    );
+    assert_pair_exact_display(
+        "org_babel_python_source_block_inserts_output_results",
+        &gnu,
+        &neo,
     );
 }

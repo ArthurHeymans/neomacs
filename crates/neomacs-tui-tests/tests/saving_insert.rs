@@ -1,59 +1,11 @@
 //! TUI comparison tests: saving insert.
 
 mod support;
-use neomacs_tui_tests::*;
 use std::fs;
 use std::time::Duration;
 use support::*;
 
 // ── Local helpers ───────────────────────────────────────────
-
-fn normalize_hello_vc_row(row: &str) -> String {
-    if row.contains("Egyptian Hieroglyphs") {
-        return row.chars().filter(|ch| !ch.is_whitespace()).collect();
-    }
-
-    let Some(start) = row.find("Git-") else {
-        return row.to_string();
-    };
-    let Some(rest) = row.get(start..) else {
-        return row.to_string();
-    };
-    let end = rest
-        .find("  (")
-        .map(|offset| start + offset)
-        .unwrap_or(row.len());
-    let target_width = row.chars().count();
-    let mut normalized = String::with_capacity(row.len());
-    normalized.push_str(&row[..start]);
-    normalized.push_str("Git-REV1234");
-    normalized.push_str(&row[end..]);
-    let normalized: String = normalized.chars().take(target_width).collect();
-    // The mode line's trailing dash fill absorbs the VC segment's width, so a
-    // branch-name length difference between the two checkouts (each session
-    // opens its own repo's etc/HELLO) survives the token replacement as a
-    // fill-length difference. Collapse the trailing dash run to a fixed token
-    // so the comparison is branch-name-agnostic.
-    let trimmed = normalized.trim_end();
-    let without_fill = trimmed.trim_end_matches('-');
-    if trimmed.len() - without_fill.len() >= 3 {
-        return format!("{without_fill}---");
-    }
-    normalized
-}
-
-fn is_known_hello_scroll_diff(diff: &RowDiff) -> bool {
-    let rows = [&diff.gnu, &diff.neo];
-    rows.iter().any(|row| {
-        row.contains("Javanese")
-            || row.contains("Lepcha")
-            || row.contains("Malayalam")
-            || row.contains("Rejang")
-            || row.contains("Git-")
-            || row.contains("Git-main")
-            || row.contains("view-hello-file")
-    })
-}
 
 // ── Tests ──────────────────────────────────────────────────
 #[test]
@@ -144,7 +96,7 @@ fn write_file_after_edit_via_cx_cw() {
     gnu.read_until(Duration::from_secs(6), recentered);
     neo.read_until(Duration::from_secs(8), recentered);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches("write_file_after_edit_via_cx_cw", &gnu, &neo, 2);
+    assert_pair_exact_display("write_file_after_edit_via_cx_cw", &gnu, &neo);
 }
 
 #[test]
@@ -183,11 +135,10 @@ fn write_file_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "write_file_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -235,11 +186,10 @@ fn read_only_mode_via_cx_cq_blocks_then_allows_insertion() {
             grid.join("\n")
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "read_only_mode_via_cx_cq_blocks_then_allows_insertion",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -285,11 +235,10 @@ fn set_visited_file_name_via_mx_saves_current_buffer_under_new_name() {
     );
     assert_home_file_contents(&gnu, &neo, "set-visited-source.txt", "visited file body\n");
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "set_visited_file_name_via_mx_saves_current_buffer_under_new_name",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -358,11 +307,10 @@ fn rename_visited_file_via_mx_moves_file_and_updates_buffer() {
     neo.read_until(Duration::from_secs(8), renamed_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "rename_visited_file_via_mx_moves_file_and_updates_buffer",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -401,7 +349,7 @@ fn save_buffer_after_edit_via_cx_cs() {
         fs::read_to_string(neo.home_dir().join("save-usage.txt")).expect("read Neo saved file"),
         "alpha line\nomega line\n"
     );
-    assert_pair_nearly_matches("save_buffer_after_edit_via_cx_cs", &gnu, &neo, 2);
+    assert_pair_exact_display("save_buffer_after_edit_via_cx_cs", &gnu, &neo);
 }
 
 #[test]
@@ -430,11 +378,10 @@ fn save_unnamed_buffer_via_cx_cs_prompts_for_file() {
     gnu.read_until(Duration::from_secs(6), save_prompt);
     neo.read_until(Duration::from_secs(8), save_prompt);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "save_unnamed_buffer_via_cx_cs_prompts_for_file/after-cx-cs",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -447,11 +394,10 @@ fn save_unnamed_buffer_via_cx_cs_prompts_for_file() {
     gnu.read_until(Duration::from_secs(6), typed_path);
     neo.read_until(Duration::from_secs(8), typed_path);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "save_unnamed_buffer_via_cx_cs_prompts_for_file/before-ret",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "RET");
@@ -464,11 +410,10 @@ fn save_unnamed_buffer_via_cx_cs_prompts_for_file() {
     gnu.read_until(Duration::from_secs(6), ready);
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "save_unnamed_buffer_via_cx_cs_prompts_for_file/after-ret",
         &gnu,
         &neo,
-        2,
     );
 
     let expected = "unnamed save line\n";
@@ -491,12 +436,7 @@ fn save_unnamed_buffer_via_cx_cs_prompts_for_file() {
         fs::read_to_string(&neo_path).expect("read Neo unnamed saved file"),
         expected
     );
-    assert_pair_nearly_matches(
-        "save_unnamed_buffer_via_cx_cs_prompts_for_file",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("save_unnamed_buffer_via_cx_cs_prompts_for_file", &gnu, &neo);
 }
 
 #[test]
@@ -557,7 +497,7 @@ fn save_some_buffers_after_edit_via_cx_s() {
     }
     assert_eq!(gnu_saved, expected);
     assert_eq!(neo_saved, expected);
-    assert_pair_nearly_matches("save_some_buffers_after_edit_via_cx_s", &gnu, &neo, 2);
+    assert_pair_exact_display("save_some_buffers_after_edit_via_cx_s", &gnu, &neo);
 }
 
 #[test]
@@ -594,12 +534,7 @@ fn insert_file_via_cx_i_inserts_contents_at_point() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
-        "insert_file_via_cx_i_inserts_contents_at_point",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("insert_file_via_cx_i_inserts_contents_at_point", &gnu, &neo);
 }
 
 #[test]
@@ -638,11 +573,10 @@ fn insert_file_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "insert_file_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -683,11 +617,10 @@ fn insert_file_literally_via_mx_inserts_contents_at_point() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "insert_file_literally_via_mx_inserts_contents_at_point",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -713,11 +646,10 @@ fn insert_char_hex_via_cx8ret_inserts_named_character() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "insert_char_hex_via_cx8ret_inserts_named_character",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "insert_char_hex_via_cx8ret_inserts_named_character",
@@ -768,11 +700,10 @@ fn insert_char_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "insert_char_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -795,11 +726,10 @@ fn view_file_via_mx_opens_view_mode_and_q_quits() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "view_file_via_mx_opens_view_mode_and_q_quits/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -815,11 +745,10 @@ fn view_file_via_mx_opens_view_mode_and_q_quits() {
     gnu.read_until(Duration::from_secs(8), ready);
     neo.read_until(Duration::from_secs(12), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "view_file_via_mx_opens_view_mode_and_q_quits/view",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "q");
@@ -831,11 +760,10 @@ fn view_file_via_mx_opens_view_mode_and_q_quits() {
     neo.read_until(Duration::from_secs(8), scratch_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "view_file_via_mx_opens_view_mode_and_q_quits/quit",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -868,11 +796,10 @@ fn view_file_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "view_file_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -908,7 +835,7 @@ fn about_emacs_via_ch_ca_opens_about_buffer() {
             "{label} should show the About screen warranty link text"
         );
     }
-    assert_pair_nearly_matches("about_emacs_via_ch_ca_opens_about_buffer", &gnu, &neo, 5);
+    assert_pair_exact_display("about_emacs_via_ch_ca_opens_about_buffer", &gnu, &neo);
 }
 
 #[test]
@@ -957,11 +884,10 @@ fn append_to_file_via_mx_appends_region_to_existing_file() {
         fs::read_to_string(&neo_dest).expect("read Neo append destination"),
         expected
     );
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "append_to_file_via_mx_appends_region_to_existing_file",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1003,11 +929,10 @@ fn append_to_file_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "append_to_file_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1049,11 +974,10 @@ fn copy_to_buffer_via_mx_replaces_target_buffer_contents() {
     gnu.read_until(Duration::from_secs(6), ready);
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "copy_to_buffer_via_mx_replaces_target_buffer_contents",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1095,11 +1019,10 @@ fn copy_to_buffer_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "copy_to_buffer_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1171,11 +1094,10 @@ fn append_to_buffer_via_mx_inserts_region_at_target_point() {
     gnu.read_until(Duration::from_secs(6), ready);
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "append_to_buffer_via_mx_inserts_region_at_target_point",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1217,11 +1139,10 @@ fn append_to_buffer_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "append_to_buffer_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1294,11 +1215,10 @@ fn prepend_to_buffer_via_mx_inserts_region_before_target_text() {
     gnu.read_until(Duration::from_secs(6), ready);
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "prepend_to_buffer_via_mx_inserts_region_before_target_text",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1354,11 +1274,10 @@ fn insert_buffer_via_cx_x_i_inserts_named_buffer_contents() {
     gnu.read_until(Duration::from_secs(6), ready);
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "insert_buffer_via_cx_x_i_inserts_named_buffer_contents",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1413,7 +1332,7 @@ fn revert_buffer_via_mx_rereads_file_from_disk() {
     neo.read_until(Duration::from_secs(12), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("revert_buffer_via_mx_rereads_file_from_disk", &gnu, &neo, 2);
+    assert_pair_exact_display("revert_buffer_via_mx_rereads_file_from_disk", &gnu, &neo);
 }
 
 #[test]
@@ -1441,11 +1360,10 @@ fn not_modified_via_mtilde_prevents_next_save_from_writing_edit() {
     neo.read_until(Duration::from_secs(8), saved);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "not_modified_via_mtilde_prevents_next_save_from_writing_edit",
         &gnu,
         &neo,
-        2,
     );
     assert_home_file_contents(&gnu, &neo, "not-modified.txt", "original text\n");
 }
@@ -1512,6 +1430,7 @@ fn mx_view_hello_file() {
     let neo_has_name = nl.iter().any(|r| r.contains("HELLO"));
     assert!(gnu_has_name, "GNU should show HELLO in the mode line");
     assert!(neo_has_name, "NEO should show HELLO in the mode line");
+    assert_pair_exact_display("mx_view_hello_file", &gnu, &neo);
 }
 
 #[test]
@@ -1540,21 +1459,10 @@ fn mx_view_hello_file_page_scroll_repaints_cleanly() {
     neo.read_until(Duration::from_secs(8), paged_down);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    let down_diffs: Vec<_> = meaningful_diffs(diff_text_grids(&gnu.text_grid(), &neo.text_grid()))
-        .into_iter()
-        .filter(|diff| !is_known_hello_scroll_diff(diff))
-        .collect();
-    if !down_diffs.is_empty() {
-        eprintln!(
-            "mx_view_hello_file_page_scroll_repaints_cleanly/down: {} rows differ",
-            down_diffs.len()
-        );
-        print_row_diffs(&down_diffs);
-    }
-    assert!(
-        down_diffs.is_empty(),
-        "HELLO after C-v should not leave stale row text; {} rows differ",
-        down_diffs.len()
+    assert_pair_exact_display(
+        "mx_view_hello_file_page_scroll_repaints_cleanly/down",
+        &gnu,
+        &neo,
     );
 
     send_both(&mut gnu, &mut neo, "M-v");
@@ -1574,6 +1482,11 @@ fn mx_view_hello_file_page_scroll_repaints_cleanly() {
             row.trim_end()
         );
     }
+    assert_pair_exact_display(
+        "mx_view_hello_file_page_scroll_repaints_cleanly/up",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -1607,24 +1520,7 @@ fn mx_view_hello_file_strict_match() {
         nl.iter().any(|row| row.contains("Git-")),
         "NEO HELLO mode line should show VC status"
     );
-    let gl_normalized: Vec<String> = gl.iter().map(|row| normalize_hello_vc_row(row)).collect();
-    let nl_normalized: Vec<String> = nl.iter().map(|row| normalize_hello_vc_row(row)).collect();
-    let diffs = diff_text_grids(&gl_normalized, &nl_normalized);
-
-    if !diffs.is_empty() {
-        eprintln!(
-            "mx_view_hello_file_strict_match: {} of {} rows differ",
-            diffs.len(),
-            gl_normalized.len().min(nl_normalized.len())
-        );
-        print_row_diffs(&diffs);
-    }
-    assert_eq!(
-        diffs.len(),
-        0,
-        "NEO and GNU HELLO buffers should be byte-for-byte identical (differ in {} rows)",
-        diffs.len()
-    );
+    assert_pair_exact_display("mx_view_hello_file_strict_match", &gnu, &neo);
 }
 
 #[test]
@@ -1665,6 +1561,7 @@ fn save_file_visit_another_switch_back_round_trip() {
             "{label} file A should still have its content after round trip"
         );
     }
+    assert_pair_exact_display("save_file_visit_another_switch_back_round_trip", &gnu, &neo);
 }
 
 #[test]
@@ -1696,6 +1593,11 @@ fn copy_whole_buffer_and_yank_to_new_file_via_mw_cy() {
             "{label}: should yank source content into new file"
         );
     }
+    assert_pair_exact_display(
+        "copy_whole_buffer_and_yank_to_new_file_via_mw_cy",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -1726,4 +1628,5 @@ fn write_file_via_cx_cw_saves_buffer_to_new_name() {
         neo_dst.contains("write this file"),
         "NEO write-file should save to new name"
     );
+    assert_pair_exact_display("write_file_via_cx_cw_saves_buffer_to_new_name", &gnu, &neo);
 }

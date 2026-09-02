@@ -1,12 +1,5 @@
-//! Attribute-level face parity: same glyph, same paint.
-//!
-//! Every other comparison in this crate is text-only; `diff_screens`'s
-//! color channel had no callers, so the suite was structurally blind to
-//! face divergence -- exactly the class of TTY bug still on the backlog.
-//! These tests compare cell colors (via `color_diffs_in`, which only
-//! looks at cells whose characters already match) for the classic
-//! face-sensitive scenarios: font-lock, region, isearch, mode-line,
-//! and the minibuffer prompt.
+//! Attribute-level face parity scenarios guarded by whole-screen
+//! exact whole-display comparisons.
 //!
 //! Comparison discipline: both editors run with TERM=screen-256color
 //! and -Q, so any color mismatch on a char-identical cell is a real
@@ -15,45 +8,10 @@
 //! because face painting can land a frame later than the text.
 
 mod support;
-use neomacs_tui_tests::*;
-use std::time::{Duration, Instant};
+use neomacs_tui_tests::TuiTempDirectory;
+use std::fs;
+use std::time::Duration;
 use support::*;
-
-/// Retry until the color diffs in `rows`/`cols` drain to empty or the
-/// deadline passes; panic with a cell report if they never do.
-fn assert_color_parity(
-    label: &str,
-    gnu: &mut TuiSession,
-    neo: &mut TuiSession,
-    rows: std::ops::Range<u16>,
-    cols: std::ops::Range<u16>,
-) {
-    let deadline = Instant::now() + Duration::from_secs(10);
-    let mut diffs;
-    loop {
-        diffs = color_diffs_in(gnu.screen(), neo.screen(), rows.clone(), cols.clone());
-        if diffs.is_empty() {
-            return;
-        }
-        if Instant::now() >= deadline {
-            break;
-        }
-        read_both(gnu, neo, Duration::from_millis(300));
-    }
-    dump_pair_grids(label, gnu, neo);
-    panic!(
-        "{label}: {} char-identical cells differ in color:\n{}",
-        diffs.len(),
-        format_color_diffs(&diffs, 30),
-    );
-}
-
-/// Rows of the text area (everything above mode line and echo area).
-const TEXT_ROWS: std::ops::Range<u16> = 0..(ROWS - 2);
-/// The mode-line row under the default single-window layout.
-const MODE_LINE_ROW: u16 = ROWS - 2;
-/// The echo-area/minibuffer row.
-const ECHO_ROW: u16 = ROWS - 1;
 
 /// Font-lock over an Emacs Lisp buffer: keyword, function name, doc
 /// string, and comment faces are the highest-traffic faces there are.
@@ -78,7 +36,7 @@ fn font_lock_elisp_faces_match_gnu() {
     let fontified = |grid: &[String]| grid.iter().any(|row| row.contains("face-parity-probe"));
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(10), fontified);
 
-    assert_color_parity("elisp font-lock", &mut gnu, &mut neo, TEXT_ROWS, 0..COLS);
+    assert_pair_exact_display("elisp font-lock", &gnu, &neo);
 }
 
 /// The active region highlight after C-SPC + motion.
@@ -104,7 +62,7 @@ fn region_highlight_matches_gnu() {
     send_both(&mut gnu, &mut neo, "C-e");
     read_both(&mut gnu, &mut neo, Duration::from_millis(500));
 
-    assert_color_parity("region highlight", &mut gnu, &mut neo, TEXT_ROWS, 0..COLS);
+    assert_pair_exact_display("region highlight", &gnu, &neo);
 }
 
 /// Isearch: current-match face plus lazy highlight on other matches.
@@ -134,7 +92,7 @@ fn isearch_highlight_matches_gnu() {
     let searching = |grid: &[String]| grid.iter().any(|row| row.contains("I-search: needle"));
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(5), searching);
 
-    assert_color_parity("isearch highlight", &mut gnu, &mut neo, TEXT_ROWS, 0..COLS);
+    assert_pair_exact_display("isearch highlight", &gnu, &neo);
 }
 
 /// The mode line: on a TTY this is the highest-visibility face of all.
@@ -153,13 +111,7 @@ fn mode_line_face_matches_gnu() {
     let (mut gnu, mut neo) = boot_pair("");
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(30), scratch_ready);
 
-    assert_color_parity(
-        "mode line",
-        &mut gnu,
-        &mut neo,
-        MODE_LINE_ROW..MODE_LINE_ROW + 1,
-        0..COLS,
-    );
+    assert_pair_exact_display("mode line", &gnu, &neo);
 }
 
 /// The minibuffer prompt face during M-x.
@@ -176,13 +128,7 @@ fn minibuffer_prompt_face_matches_gnu() {
     let prompting = |grid: &[String]| grid.iter().any(|row| row.trim_start().starts_with("M-x"));
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(5), prompting);
 
-    assert_color_parity(
-        "minibuffer prompt",
-        &mut gnu,
-        &mut neo,
-        ECHO_ROW..ECHO_ROW + 1,
-        0..COLS,
-    );
+    assert_pair_exact_display("minibuffer prompt", &gnu, &neo);
 
     // Leave the minibuffer so teardown is uniform.
     send_both(&mut gnu, &mut neo, "C-g");
@@ -207,7 +153,7 @@ fn show_paren_highlight_matches_gnu() {
 
     // Sitting on the opening paren highlights its match on line 2.
     read_both(&mut gnu, &mut neo, Duration::from_millis(700));
-    assert_color_parity("show-paren", &mut gnu, &mut neo, TEXT_ROWS, 0..COLS);
+    assert_pair_exact_display("show-paren", &gnu, &neo);
 }
 
 /// hl-line-mode: the current-line background wash.
@@ -227,7 +173,7 @@ fn hl_line_highlight_matches_gnu() {
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(10), ready);
 
     read_both(&mut gnu, &mut neo, Duration::from_millis(500));
-    assert_color_parity("hl-line", &mut gnu, &mut neo, TEXT_ROWS, 0..COLS);
+    assert_pair_exact_display("hl-line", &gnu, &neo);
 }
 
 /// Font-lock in C mode: a different major mode exercises different
@@ -253,26 +199,26 @@ fn font_lock_c_faces_match_gnu() {
     let ready = |grid: &[String]| grid.iter().any(|row| row.contains("static int counter"));
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(15), ready);
 
-    assert_color_parity("c font-lock", &mut gnu, &mut neo, TEXT_ROWS, 0..COLS);
+    assert_pair_exact_display("c font-lock", &gnu, &neo);
 }
 
 /// Dired: directory-listing faces (dired-directory, dired-header,
-/// permissions). Both sessions build an identical tree in their own
-/// isolated home; path and timestamp cells differ as characters and are
-/// therefore excluded, so what remains is pure face paint.
+/// permissions). Both sessions open the same test-owned directory, making the
+/// absolute header path and filesystem metadata deterministic too.
 #[test]
 fn dired_faces_match_gnu() {
+    let directory = TuiTempDirectory::new("neomacs-face-dired-");
+    fs::create_dir(directory.join("sub")).expect("create dired fixture subdirectory");
+    fs::write(directory.join("alpha.txt"), "a\n").expect("write alpha fixture");
+    fs::write(directory.join("beta.el"), "b\n").expect("write beta fixture");
+
     let (mut gnu, mut neo) = boot_pair("");
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(30), scratch_ready);
 
-    eval_expression(
-        &mut gnu,
-        &mut neo,
-        "(progn (make-directory \"~/face-probe/sub\" t) \
-         (with-temp-file \"~/face-probe/alpha.txt\" (insert \"a\\n\")) \
-         (with-temp-file \"~/face-probe/beta.el\" (insert \"b\\n\")) \
-         (dired \"~/face-probe\") nil)",
-    );
+    send_both(&mut gnu, &mut neo, "C-x d");
+    let path = format!("{}/", directory.display());
+    send_both_raw(&mut gnu, &mut neo, path.as_bytes());
+    send_both(&mut gnu, &mut neo, "RET");
     let ready = |grid: &[String]| {
         grid.iter().any(|row| row.contains("alpha.txt"))
             && grid.iter().any(|row| row.contains("sub"))
@@ -280,7 +226,7 @@ fn dired_faces_match_gnu() {
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(10), ready);
 
     read_both(&mut gnu, &mut neo, Duration::from_millis(500));
-    assert_color_parity("dired", &mut gnu, &mut neo, TEXT_ROWS, 0..COLS);
+    assert_pair_exact_display("dired", &gnu, &neo);
 }
 
 /// Split windows: the inactive window's mode line uses mode-line-inactive,
@@ -310,13 +256,7 @@ fn inactive_mode_line_face_matches_gnu() {
     // Two mode lines now exist; compare every row -- the upper (now
     // inactive) mode line sits mid-screen, so scan the whole text area
     // plus the bottom mode-line row.
-    assert_color_parity(
-        "split mode lines",
-        &mut gnu,
-        &mut neo,
-        0..(ROWS - 1),
-        0..COLS,
-    );
+    assert_pair_exact_display("split mode lines", &gnu, &neo);
 }
 
 /// Prefix strings inherit the buffer-remapped default face, then merge their
@@ -359,11 +299,30 @@ fn line_and_wrap_prefix_named_face_remapping_match_gnu() {
         "Neomacs did not render the prefix probe"
     );
 
-    assert_color_parity(
-        "line/wrap-prefix named-face remap",
+    assert_pair_exact_display("line/wrap-prefix named-face remap", &gnu, &neo);
+}
+
+/// GNU `face_at_string_position' merges an overlay string's own text-property
+/// face after resolving its anchor base face.  Minibuffer diagnostics use this
+/// exact shape at EOB with `minibuffer-prompt'.
+#[test]
+fn eob_overlay_after_string_named_face_matches_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(30), scratch_ready);
+
+    eval_expression(
         &mut gnu,
         &mut neo,
-        TEXT_ROWS,
-        0..1,
+        "(progn (switch-to-buffer (get-buffer-create \"overlay-string-face\")) \
+         (erase-buffer) (insert \"anchor\") \
+         (overlay-put (make-overlay (point-max) (point-max)) 'after-string \
+                      (copy-sequence \
+                       (propertize \" [diagnostic]\" \
+                                   'read-only t 'face 'minibuffer-prompt))) \
+         (goto-char (point-min)) nil)",
     );
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains("anchor [diagnostic]"));
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(10), ready);
+
+    assert_pair_exact_display("EOB overlay after-string named face", &gnu, &neo);
 }

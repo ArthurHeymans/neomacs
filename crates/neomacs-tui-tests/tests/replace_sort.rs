@@ -51,11 +51,10 @@ fn query_replace_via_mx_accepts_all_matches_and_saves() {
     gnu.read_until(Duration::from_secs(6), replaced);
     neo.read_until(Duration::from_secs(8), replaced);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "query_replace_via_mx_accepts_all_matches_and_saves",
         &gnu,
         &neo,
-        2,
     );
 
     save_current_file_and_assert_contents(
@@ -119,7 +118,7 @@ fn query_replace_via_mpercent_bang() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("query_replace_via_mpercent_bang", &gnu, &neo, 2);
+    assert_pair_exact_display("query_replace_via_mpercent_bang", &gnu, &neo);
 }
 
 #[test]
@@ -158,11 +157,10 @@ fn query_replace_empty_from_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "query_replace_empty_from_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -233,11 +231,10 @@ fn query_replace_question_mark_shows_query_help_without_replacing() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "query_replace_question_mark_shows_query_help_without_replacing",
         &gnu,
         &neo,
-        4,
     );
 }
 
@@ -283,11 +280,10 @@ fn query_replace_keyboard_quit_leaves_buffer_unchanged() {
     neo.read_until(Duration::from_secs(8), unchanged);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "query_replace_keyboard_quit_leaves_buffer_unchanged",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "query_replace_keyboard_quit_leaves_buffer_unchanged",
@@ -345,11 +341,10 @@ fn replace_string_via_mx_replaces_from_point_to_end() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "replace_string_via_mx_replaces_from_point_to_end",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -389,11 +384,10 @@ fn replace_string_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "replace_string_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -443,11 +437,10 @@ fn replace_regexp_via_mx_replaces_numbers_from_point_to_end() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "replace_regexp_via_mx_replaces_numbers_from_point_to_end",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -487,11 +480,10 @@ fn replace_regexp_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "replace_regexp_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -527,7 +519,7 @@ fn align_regexp_via_mx_aligns_equals_in_region() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("align_regexp_via_mx_aligns_equals_in_region", &gnu, &neo, 2);
+    assert_pair_exact_display("align_regexp_via_mx_aligns_equals_in_region", &gnu, &neo);
     save_current_file_and_assert_contents(
         "align_regexp_via_mx_aligns_equals_in_region",
         &mut gnu,
@@ -576,11 +568,10 @@ fn align_regexp_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "align_regexp_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -619,7 +610,7 @@ fn sort_lines_region_via_mx_orders_lines() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("sort_lines_region_via_mx_orders_lines", &gnu, &neo, 2);
+    assert_pair_exact_display("sort_lines_region_via_mx_orders_lines", &gnu, &neo);
 }
 
 #[test]
@@ -654,7 +645,7 @@ fn sort_pages_region_via_mx_orders_pages() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("sort_pages_region_via_mx_orders_pages", &gnu, &neo, 2);
+    assert_pair_exact_display("sort_pages_region_via_mx_orders_pages", &gnu, &neo);
     save_current_file_and_assert_contents(
         "sort_pages_region_via_mx_orders_pages",
         &mut gnu,
@@ -718,11 +709,10 @@ fn sort_regexp_fields_via_mx_orders_lines_by_numeric_text_key() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "sort_regexp_fields_via_mx_orders_lines_by_numeric_text_key",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "sort_regexp_fields_via_mx_orders_lines_by_numeric_text_key",
@@ -765,7 +755,7 @@ fn reverse_region_via_mx_reverses_lines() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("reverse_region_via_mx_reverses_lines", &gnu, &neo, 2);
+    assert_pair_exact_display("reverse_region_via_mx_reverses_lines", &gnu, &neo);
     save_current_file_and_assert_contents(
         "reverse_region_via_mx_reverses_lines",
         &mut gnu,
@@ -807,11 +797,10 @@ fn sort_fields_second_field_via_prefix_orders_lines() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "sort_fields_second_field_via_prefix_orders_lines",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "sort_fields_second_field_via_prefix_orders_lines",
@@ -854,11 +843,10 @@ fn sort_numeric_fields_second_field_via_prefix_orders_lines() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "sort_numeric_fields_second_field_via_prefix_orders_lines",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "sort_numeric_fields_second_field_via_prefix_orders_lines",
@@ -901,11 +889,10 @@ fn sort_columns_via_mx_orders_lines_by_marked_columns() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "sort_columns_via_mx_orders_lines_by_marked_columns",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "sort_columns_via_mx_orders_lines_by_marked_columns",
@@ -948,12 +935,7 @@ fn sort_paragraphs_via_mx_orders_paragraph_blocks() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
-        "sort_paragraphs_via_mx_orders_paragraph_blocks",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("sort_paragraphs_via_mx_orders_paragraph_blocks", &gnu, &neo);
     save_current_file_and_assert_contents(
         "sort_paragraphs_via_mx_orders_paragraph_blocks",
         &mut gnu,
@@ -991,11 +973,10 @@ fn delete_duplicate_lines_via_mx_keeps_first_occurrences() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_duplicate_lines_via_mx_keeps_first_occurrences",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "delete_duplicate_lines_via_mx_keeps_first_occurrences",
@@ -1044,7 +1025,7 @@ fn flush_lines_via_mx_deletes_matching_lines() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("flush_lines_via_mx_deletes_matching_lines", &gnu, &neo, 2);
+    assert_pair_exact_display("flush_lines_via_mx_deletes_matching_lines", &gnu, &neo);
 }
 
 #[test]
@@ -1090,11 +1071,10 @@ fn delete_matching_lines_via_mx_alias_deletes_matching_lines() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_matching_lines_via_mx_alias_deletes_matching_lines",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1136,7 +1116,7 @@ fn keep_lines_via_mx_preserves_matching_lines() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("keep_lines_via_mx_preserves_matching_lines", &gnu, &neo, 2);
+    assert_pair_exact_display("keep_lines_via_mx_preserves_matching_lines", &gnu, &neo);
 }
 
 #[test]
@@ -1177,11 +1157,10 @@ fn delete_non_matching_lines_via_mx_alias_preserves_matching_lines() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_non_matching_lines_via_mx_alias_preserves_matching_lines",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1257,11 +1236,10 @@ fn kill_matching_lines_via_mx_deletes_and_accumulates_for_yank() {
     neo.read_until(Duration::from_secs(8), yanked);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "kill_matching_lines_via_mx_deletes_and_accumulates_for_yank",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1332,11 +1310,10 @@ fn copy_matching_lines_via_mx_accumulates_matches_for_yank() {
     neo.read_until(Duration::from_secs(8), yanked);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "copy_matching_lines_via_mx_accumulates_matches_for_yank",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1387,7 +1364,7 @@ fn how_many_via_mx_reports_regexp_match_count() {
             "{label} should report three regexp matches in the echo area"
         );
     }
-    assert_pair_nearly_matches("how_many_via_mx_reports_regexp_match_count", &gnu, &neo, 2);
+    assert_pair_exact_display("how_many_via_mx_reports_regexp_match_count", &gnu, &neo);
 }
 
 #[test]
@@ -1437,10 +1414,9 @@ fn count_matches_via_mx_alias_reports_regexp_match_count() {
             "{label} should report three regexp matches through count-matches"
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "count_matches_via_mx_alias_reports_regexp_match_count",
         &gnu,
         &neo,
-        2,
     );
 }

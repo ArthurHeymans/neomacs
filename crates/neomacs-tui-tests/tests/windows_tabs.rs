@@ -141,11 +141,10 @@ fn kill_buffer_and_window_via_cx4_0_restores_single_window() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "kill_buffer_and_window_via_cx4_0_restores_single_window",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -197,7 +196,7 @@ fn tab_bar_new_next_and_close_via_cx_t_prefix() {
     neo.read_until(Duration::from_secs(8), first_tab_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("tab_bar_new_next_and_close_via_cx_t_prefix", &gnu, &neo, 2);
+    assert_pair_exact_display("tab_bar_new_next_and_close_via_cx_t_prefix", &gnu, &neo);
 }
 
 #[test]
@@ -232,6 +231,11 @@ fn default_face_remap_renders_same_buffer_consistently_after_cx3_split() {
 
     assert_split_buffer_text_has_same_face(&gnu, "REMAPPED-SPLIT");
     assert_split_buffer_text_has_same_face(&neo, "REMAPPED-SPLIT");
+    assert_pair_exact_display(
+        "default_face_remap_renders_same_buffer_consistently_after_cx3_split",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -253,6 +257,11 @@ fn scratch_comment_face_renders_same_buffer_consistently_after_cx3_split() {
     assert_split_buffer_text_has_same_face(&neo, "This buffer is for text");
     assert_split_blank_body_backgrounds_match(&gnu);
     assert_split_blank_body_backgrounds_match(&neo);
+    assert_pair_exact_display(
+        "scratch_comment_face_renders_same_buffer_consistently_after_cx3_split",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -281,11 +290,10 @@ fn split_window_then_open_file_in_other_window_via_cx2_cxo_cx_cf() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "split_window_then_open_file_in_other_window_via_cx2_cxo_cx_cf",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -325,11 +333,10 @@ fn split_window_right_then_open_file_in_other_window_via_cx3_cxo_cx_cf() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "split_window_right_then_open_file_in_other_window_via_cx3_cxo_cx_cf",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -393,11 +400,10 @@ fn compare_windows_via_mx_advances_both_points_to_first_difference() {
             grid.join("\n")
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "compare_windows_via_mx_advances_both_points_to_first_difference",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -436,7 +442,7 @@ fn other_window_via_cxo() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("other_window_via_cxo", &gnu, &neo, 2);
+    assert_pair_exact_display("other_window_via_cxo", &gnu, &neo);
 }
 
 #[test]
@@ -512,11 +518,10 @@ fn other_window_numeric_prefix_skips_windows_in_cycle_order() {
             grid.join("\n")
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "other_window_numeric_prefix_skips_windows_in_cycle_order",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -541,11 +546,10 @@ fn delete_other_windows_after_find_file_other_window_via_cx1() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_other_windows_after_find_file_other_window_via_cx1",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -573,7 +577,7 @@ fn delete_selected_other_window_via_cx0() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("delete_selected_other_window_via_cx0", &gnu, &neo, 2);
+    assert_pair_exact_display("delete_selected_other_window_via_cx0", &gnu, &neo);
 }
 
 #[test]
@@ -653,11 +657,10 @@ fn enlarge_then_balance_windows_via_cx_caret_and_plus() {
             grid.join("\n")
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "enlarge_then_balance_windows_via_cx_caret_and_plus",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -721,11 +724,10 @@ fn window_configuration_to_register_and_jump_via_cx_r_w_j() {
     neo.read_until(Duration::from_secs(8), split_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "window_configuration_to_register_and_jump_via_cx_r_w_j",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -769,7 +771,7 @@ fn scroll_other_window_via_cmv() {
     neo.read_until(Duration::from_secs(8), scrolled);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("scroll_other_window_via_cmv", &gnu, &neo, 2);
+    assert_pair_exact_display("scroll_other_window_via_cmv", &gnu, &neo);
 }
 
 #[test]
@@ -778,18 +780,7 @@ fn split_window_below() {
     send_both(&mut gnu, &mut neo, "C-x 2");
     wait_for_split_window_below(&mut gnu, &mut neo);
 
-    let gl = gnu.text_grid();
-    let nl = neo.text_grid();
-    let diffs = meaningful_diffs(diff_text_grids(&gl, &nl));
-    if !diffs.is_empty() {
-        eprintln!("split_window_below: {} rows differ", diffs.len());
-        print_row_diffs(&diffs);
-    }
-    assert!(
-        diffs.len() <= 2,
-        "C-x 2 screens differ in {} rows",
-        diffs.len()
-    );
+    assert_pair_exact_display("split_window_below", &gnu, &neo);
 }
 
 #[test]
@@ -798,18 +789,7 @@ fn split_window_right() {
     send_both(&mut gnu, &mut neo, "C-x 3");
     read_both(&mut gnu, &mut neo, Duration::from_secs(2));
 
-    let gl = gnu.text_grid();
-    let nl = neo.text_grid();
-    let diffs = meaningful_diffs(diff_text_grids(&gl, &nl));
-    if !diffs.is_empty() {
-        eprintln!("split_window_right: {} rows differ", diffs.len());
-        print_row_diffs(&diffs);
-    }
-    assert!(
-        diffs.len() <= 2,
-        "C-x 3 screens differ in {} rows",
-        diffs.len()
-    );
+    assert_pair_exact_display("split_window_right", &gnu, &neo);
 }
 
 #[test]
@@ -820,19 +800,7 @@ fn other_window_after_split() {
     send_both(&mut gnu, &mut neo, "C-x o");
     wait_for_other_window_after_split(&mut gnu, &mut neo);
 
-    let gl = gnu.text_grid();
-    let nl = neo.text_grid();
-    let diffs = meaningful_diffs(diff_text_grids(&gl, &nl));
-    if !diffs.is_empty() {
-        eprintln!("other_window_after_split: {} rows differ", diffs.len());
-        print_row_diffs(&diffs);
-    }
-    // Allow some tolerance for cursor position display
-    assert!(
-        diffs.len() <= 3,
-        "C-x 2, C-x o screens differ in {} rows",
-        diffs.len()
-    );
+    assert_pair_exact_display("other_window_after_split", &gnu, &neo);
 }
 
 // ── Frame management tests ──────────────────────────────────
@@ -867,7 +835,7 @@ fn make_frame_and_delete_frame_via_cx5() {
         );
     }
 
-    assert_pair_nearly_matches("make_frame_and_delete_frame_via_cx5", &gnu, &neo, 2);
+    assert_pair_exact_display("make_frame_and_delete_frame_via_cx5", &gnu, &neo);
 }
 
 #[test]
@@ -902,11 +870,10 @@ fn window_point_independence_after_split_and_cursor_moves() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "window_point_independence_after_split_and_cursor_moves",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -939,6 +906,11 @@ fn split_window_and_switch_via_cx_o_shows_other_buffer() {
             "{label}: after C-x 2 C-x o, should show file content"
         );
     }
+    assert_pair_exact_display(
+        "split_window_and_switch_via_cx_o_shows_other_buffer",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -964,6 +936,11 @@ fn delete_other_windows_via_cx_1_leaves_single_window() {
             "{label}: C-x 2 C-x 1 should leave single window with content"
         );
     }
+    assert_pair_exact_display(
+        "delete_other_windows_via_cx_1_leaves_single_window",
+        &gnu,
+        &neo,
+    );
 }
 
 // ── Per-window tab-line (global-tab-line-mode) ──────────────────────────
@@ -1054,4 +1031,9 @@ fn global_tab_line_shows_each_window_its_own_buffer() {
     send_both(&mut gnu, &mut neo, "C-x o");
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
     assert_per_window_tab_lines("focus-lower", &gnu, &neo);
+    assert_pair_exact_display(
+        "global_tab_line_shows_each_window_its_own_buffer",
+        &gnu,
+        &neo,
+    );
 }

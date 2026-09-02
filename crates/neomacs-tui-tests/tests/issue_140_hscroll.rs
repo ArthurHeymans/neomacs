@@ -128,6 +128,11 @@ fn issue_140_manual_scroll_left_sticks_then_unsuspends() {
         nh2, gh2,
         "[A] after point moves, neomacs auto-hscroll un-suspends and matches GNU"
     );
+    assert_pair_exact_display(
+        "issue_140_manual_scroll_left_sticks_then_unsuspends",
+        &gnu,
+        &neo,
+    );
 }
 
 // ── FOLLOW-UP B: line-number gutter offset ────────────────────────────────
@@ -162,6 +167,7 @@ fn issue_140_ce_with_line_numbers_matches_gnu() {
         nh, gh,
         "[B] neomacs window-hscroll with the line-number gutter must equal GNU's"
     );
+    assert_pair_exact_display("issue_140_ce_with_line_numbers_matches_gnu", &gnu, &neo);
 }
 
 #[test]

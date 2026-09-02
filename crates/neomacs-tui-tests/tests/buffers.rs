@@ -29,11 +29,10 @@ fn switch_buffer_via_cx_b_visits_existing_file_buffer() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "switch_buffer_via_cx_b_visits_existing_file_buffer/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -50,11 +49,10 @@ fn switch_buffer_via_cx_b_visits_existing_file_buffer() {
     neo.read_until(Duration::from_secs(8), alpha_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "switch_buffer_via_cx_b_visits_existing_file_buffer",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -94,11 +92,10 @@ fn switch_buffer_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "switch_buffer_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -114,11 +111,10 @@ fn rename_buffer_via_cx_x_r_updates_current_buffer_name() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "rename_buffer_via_cx_x_r_updates_current_buffer_name/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -129,11 +125,10 @@ fn rename_buffer_via_cx_x_r_updates_current_buffer_name() {
     gnu.read_until(Duration::from_secs(6), renamed_ready);
     neo.read_until(Duration::from_secs(8), renamed_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "rename_buffer_via_cx_x_r_updates_current_buffer_name/renamed",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "C-x C-b");
@@ -144,11 +139,10 @@ fn rename_buffer_via_cx_x_r_updates_current_buffer_name() {
     gnu.read_until(Duration::from_secs(6), list_ready);
     neo.read_until(Duration::from_secs(8), list_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "rename_buffer_via_cx_x_r_updates_current_buffer_name/list-buffers",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -185,11 +179,10 @@ fn rename_buffer_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "rename_buffer_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -213,7 +206,7 @@ fn list_buffers_after_find_file() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("list_buffers_after_find_file", &gnu, &neo, 2);
+    assert_pair_exact_display("list_buffers_after_find_file", &gnu, &neo);
 }
 
 #[test]
@@ -262,11 +255,10 @@ fn buffer_menu_search_and_select_file_buffer_via_ret() {
     neo.read_until(Duration::from_secs(8), selected);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "buffer_menu_search_and_select_file_buffer_via_ret",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -291,12 +283,7 @@ fn clone_indirect_buffer_other_window_via_cx4_c() {
     neo.read_until(Duration::from_secs(12), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
-        "clone_indirect_buffer_other_window_via_cx4_c",
-        &gnu,
-        &neo,
-        3,
-    );
+    assert_pair_exact_display("clone_indirect_buffer_other_window_via_cx4_c", &gnu, &neo);
 }
 
 #[test]
@@ -323,11 +310,10 @@ fn ibuffer_via_mx_lists_file_buffer_and_q_quits() {
     if !ready(&gnu.text_grid()) || !ready(&neo.text_grid()) {
         dump_pair_grids("ibuffer_via_mx_lists_file_buffer_and_q_quits", &gnu, &neo);
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "ibuffer_via_mx_lists_file_buffer_and_q_quits/list",
         &gnu,
         &neo,
-        5,
     );
 
     send_both(&mut gnu, &mut neo, "q");
@@ -340,11 +326,10 @@ fn ibuffer_via_mx_lists_file_buffer_and_q_quits() {
     neo.read_until(Duration::from_secs(8), quit_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "ibuffer_via_mx_lists_file_buffer_and_q_quits/quit",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -375,7 +360,7 @@ fn switch_to_messages_buffer_via_cx_b() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("switch_to_messages_buffer_via_cx_b", &gnu, &neo, 2);
+    assert_pair_exact_display("switch_to_messages_buffer_via_cx_b", &gnu, &neo);
 }
 
 #[test]
@@ -407,11 +392,10 @@ fn view_echo_area_messages_via_ch_e_shows_messages_buffer_tail() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "view_echo_area_messages_via_ch_e_shows_messages_buffer_tail",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -456,11 +440,10 @@ fn switch_to_file_buffer_via_cx_b_restores_existing_buffer() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "switch_to_file_buffer_via_cx_b_restores_existing_buffer",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -506,11 +489,10 @@ fn switch_to_buffer_empty_input_uses_default_previous_buffer() {
     neo.read_until(Duration::from_secs(8), alpha_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "switch_to_buffer_empty_input_uses_default_previous_buffer",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -542,11 +524,10 @@ fn switch_to_buffer_tab_completion_via_cx_b_completes_existing_buffer() {
     gnu.read_until(Duration::from_secs(6), switch_prompt);
     neo.read_until(Duration::from_secs(8), switch_prompt);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "switch_to_buffer_tab_completion_via_cx_b_completes_existing_buffer/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -560,11 +541,10 @@ fn switch_to_buffer_tab_completion_via_cx_b_completes_existing_buffer() {
     gnu.read_until(Duration::from_secs(6), completed);
     neo.read_until(Duration::from_secs(8), completed);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "switch_to_buffer_tab_completion_via_cx_b_completes_existing_buffer/completed",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "RET");
@@ -578,11 +558,10 @@ fn switch_to_buffer_tab_completion_via_cx_b_completes_existing_buffer() {
     gnu.read_until(Duration::from_secs(6), ready);
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "switch_to_buffer_tab_completion_via_cx_b_completes_existing_buffer",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -615,11 +594,10 @@ fn previous_and_next_buffer_via_mx_cycle_recent_file_buffers() {
     neo.read_until(Duration::from_secs(8), alpha_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "previous_and_next_buffer_via_mx_cycle_recent_file_buffers/previous",
         &gnu,
         &neo,
-        3,
     );
 
     invoke_mx_command(&mut gnu, &mut neo, "next-buffer");
@@ -632,11 +610,10 @@ fn previous_and_next_buffer_via_mx_cycle_recent_file_buffers() {
     neo.read_until(Duration::from_secs(8), beta_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "previous_and_next_buffer_via_mx_cycle_recent_file_buffers/next",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -679,11 +656,10 @@ fn bury_and_unbury_buffer_via_mx_moves_current_buffer_to_end() {
             grid.join("\n")
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "bury_and_unbury_buffer_via_mx_moves_current_buffer_to_end/buried",
         &gnu,
         &neo,
-        3,
     );
 
     invoke_mx_command(&mut gnu, &mut neo, "unbury-buffer");
@@ -706,11 +682,10 @@ fn bury_and_unbury_buffer_via_mx_moves_current_buffer_to_end() {
             grid.join("\n")
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "bury_and_unbury_buffer_via_mx_moves_current_buffer_to_end",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -798,11 +773,10 @@ fn clone_buffer_via_mx_creates_independent_scratch_copy() {
             grid.join("\n")
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "clone_buffer_via_mx_creates_independent_scratch_copy",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -835,11 +809,10 @@ fn switch_to_buffer_other_window_via_cx4_b_displays_messages() {
             grid.join("\n")
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "switch_to_buffer_other_window_via_cx4_b_displays_messages/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -858,11 +831,10 @@ fn switch_to_buffer_other_window_via_cx4_b_displays_messages() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "switch_to_buffer_other_window_via_cx4_b_displays_messages",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -889,7 +861,7 @@ fn kill_buffer_after_find_file_via_cx_k() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("kill_buffer_after_find_file_via_cx_k", &gnu, &neo, 2);
+    assert_pair_exact_display("kill_buffer_after_find_file_via_cx_k", &gnu, &neo);
 }
 
 // ── Frame-specific buffer-list / buried-buffer-list tests ────────────────
@@ -934,11 +906,10 @@ fn frame_parameter_buffer_list_returns_buffers_in_order() {
     neo.read_until(Duration::from_secs(10), has_frm_buf_b);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "frame_parameter_buffer_list_returns_buffers_in_order",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -992,11 +963,10 @@ fn frame_parameter_buried_buffer_list_after_bury_buffer() {
     neo.read_until(Duration::from_secs(10), has_buried);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "frame_parameter_buried_buffer_list_after_bury_buffer",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -1039,11 +1009,10 @@ fn multiple_bury_then_unbury_restores_in_lifo_order() {
     gnu.read_until(Duration::from_secs(6), bbb_ready);
     neo.read_until(Duration::from_secs(8), bbb_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "multiple_bury_then_unbury_restores_in_lifo_order/buried-ccc",
         &gnu,
         &neo,
-        3,
     );
 
     // Bury multi-bbb.txt → should switch to multi-aaa.txt.
@@ -1059,11 +1028,10 @@ fn multiple_bury_then_unbury_restores_in_lifo_order() {
     gnu.read_until(Duration::from_secs(6), aaa_ready);
     neo.read_until(Duration::from_secs(8), aaa_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "multiple_bury_then_unbury_restores_in_lifo_order/buried-bbb",
         &gnu,
         &neo,
-        3,
     );
 
     // Unbury → should restore multi-bbb.txt (most recently buried = LIFO).
@@ -1078,11 +1046,10 @@ fn multiple_bury_then_unbury_restores_in_lifo_order() {
     gnu.read_until(Duration::from_secs(6), unbury_bbb);
     neo.read_until(Duration::from_secs(8), unbury_bbb);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "multiple_bury_then_unbury_restores_in_lifo_order/unburied-bbb",
         &gnu,
         &neo,
-        3,
     );
 
     // Unbury again → should restore multi-ccc.txt.
@@ -1097,11 +1064,10 @@ fn multiple_bury_then_unbury_restores_in_lifo_order() {
     gnu.read_until(Duration::from_secs(6), unbury_ccc);
     neo.read_until(Duration::from_secs(8), unbury_ccc);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "multiple_bury_then_unbury_restores_in_lifo_order/unburied-ccc",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -1168,11 +1134,10 @@ fn kill_buffer_removes_from_frame_buried_buffer_list() {
     neo.read_until(Duration::from_secs(10), shows_zero);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "kill_buffer_removes_from_frame_buried_buffer_list",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -1200,4 +1165,9 @@ fn list_buffers_via_cx_cb_shows_scratch_and_messages_buffers() {
             "{label}: Buffer List should show *scratch*"
         );
     }
+    assert_pair_exact_display(
+        "list_buffers_via_cx_cb_shows_scratch_and_messages_buffers",
+        &gnu,
+        &neo,
+    );
 }

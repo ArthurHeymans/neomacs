@@ -88,4 +88,9 @@ fn standalone_escape_and_csi_up_reach_distinct_commands() {
             session.text_grid().join("\n")
         );
     }
+    assert_pair_exact_display(
+        "standalone_escape_and_csi_up_reach_distinct_commands",
+        &gnu,
+        &neo,
+    );
 }

@@ -21,33 +21,6 @@ fn boot_fido_vertical_pair() -> (TuiSession, TuiSession) {
     boot_pair(&extra_args)
 }
 
-fn assert_bottom_rows_nearly_match(
-    label: &str,
-    gnu: &TuiSession,
-    neo: &TuiSession,
-    first_row: usize,
-    allowed_rows: usize,
-) {
-    let gl = gnu.text_grid();
-    let nl = neo.text_grid();
-    let diffs = diff_text_grids(&gl[first_row..], &nl[first_row..])
-        .into_iter()
-        .map(|mut diff| {
-            diff.row += first_row;
-            diff
-        })
-        .collect::<Vec<_>>();
-    if !diffs.is_empty() {
-        eprintln!("{label}: {} bottom rows differ", diffs.len());
-        print_row_diffs(&diffs);
-    }
-    assert!(
-        diffs.len() <= allowed_rows,
-        "{label} bottom rows differ in {} rows",
-        diffs.len()
-    );
-}
-
 fn fido_bottom_start() -> usize {
     (ROWS as usize).saturating_sub(8)
 }
@@ -170,11 +143,10 @@ fn overwrite_mode_via_mx_replaces_character_at_point() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "overwrite_mode_via_mx_replaces_character_at_point",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -217,11 +189,10 @@ fn column_number_mode_via_mx_shows_line_and_column_in_mode_line() {
             grid.join("\n")
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "column_number_mode_via_mx_shows_line_and_column_in_mode_line",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -255,16 +226,10 @@ fn display_line_numbers_mode_shows_buffer_line_numbers() {
             session.text_grid().join("\n")
         );
     }
-    assert_grids_strict(
+    assert_pair_exact_display(
         "display_line_numbers_mode_shows_buffer_line_numbers",
-        gnu.screen(),
-        neo.screen(),
-        &StrictGridOptions {
-            masked_rows: ((ROWS - 2)..ROWS).collect(),
-            row_range: Some(0..(ROWS - 2)),
-            compare_faces: true,
-            allow: Vec::new(),
-        },
+        &gnu,
+        &neo,
     );
 }
 
@@ -300,16 +265,10 @@ fn global_display_line_numbers_mode_numbers_new_file_buffers() {
         "Neomacs must number a new file buffer after enabling the global mode:\n{}",
         neo.text_grid().join("\n")
     );
-    assert_grids_strict(
+    assert_pair_exact_display(
         "global_display_line_numbers_mode_numbers_new_file_buffers",
-        gnu.screen(),
-        neo.screen(),
-        &StrictGridOptions {
-            masked_rows: ((ROWS - 2)..ROWS).collect(),
-            row_range: Some(0..(ROWS - 2)),
-            compare_faces: true,
-            allow: Vec::new(),
-        },
+        &gnu,
+        &neo,
     );
 }
 
@@ -348,11 +307,10 @@ fn whitespace_mode_shows_ws_lighter_and_space_marks() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "whitespace_mode_shows_ws_lighter_and_space_marks",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -391,11 +349,10 @@ fn display_fill_column_indicator_mode_shows_indicator_character() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "display_fill_column_indicator_mode_shows_indicator_character",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -421,11 +378,10 @@ fn toggle_truncate_lines_reports_enabled_and_disabled() {
     gnu.read_until(Duration::from_secs(6), enabled);
     neo.read_until(Duration::from_secs(8), enabled);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "toggle_truncate_lines_reports_enabled_and_disabled/enabled",
         &gnu,
         &neo,
-        2,
     );
 
     invoke_mx_command(&mut gnu, &mut neo, "toggle-truncate-lines");
@@ -438,11 +394,10 @@ fn toggle_truncate_lines_reports_enabled_and_disabled() {
     gnu.read_until(Duration::from_secs(6), disabled);
     neo.read_until(Duration::from_secs(8), disabled);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "toggle_truncate_lines_reports_enabled_and_disabled/disabled",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -463,11 +418,10 @@ fn auto_revert_mode_toggles_file_buffer_lighter() {
     gnu.read_until(Duration::from_secs(6), enabled_ready);
     neo.read_until(Duration::from_secs(8), enabled_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "auto_revert_mode_toggles_file_buffer_lighter/enabled",
         &gnu,
         &neo,
-        2,
     );
 
     invoke_mx_command(&mut gnu, &mut neo, "auto-revert-mode");
@@ -475,11 +429,10 @@ fn auto_revert_mode_toggles_file_buffer_lighter() {
     gnu.read_until(Duration::from_secs(6), disabled_ready);
     neo.read_until(Duration::from_secs(8), disabled_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "auto_revert_mode_toggles_file_buffer_lighter/disabled",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -505,7 +458,7 @@ fn visual_line_mode_shows_wrap_lighter() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("visual_line_mode_shows_wrap_lighter", &gnu, &neo, 2);
+    assert_pair_exact_display("visual_line_mode_shows_wrap_lighter", &gnu, &neo);
 }
 
 #[test]
@@ -536,11 +489,10 @@ fn outline_minor_mode_hide_sublevels_and_show_all() {
     gnu.read_until(Duration::from_secs(6), hidden_ready);
     neo.read_until(Duration::from_secs(8), hidden_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "outline_minor_mode_hide_sublevels_and_show_all/hidden",
         &gnu,
         &neo,
-        2,
     );
 
     invoke_mx_command(&mut gnu, &mut neo, "outline-show-all");
@@ -552,11 +504,10 @@ fn outline_minor_mode_hide_sublevels_and_show_all() {
     gnu.read_until(Duration::from_secs(6), shown_ready);
     neo.read_until(Duration::from_secs(8), shown_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "outline_minor_mode_hide_sublevels_and_show_all/shown",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -586,7 +537,7 @@ fn abbrev_mode_expands_defined_global_abbrev() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("abbrev_mode_expands_defined_global_abbrev", &gnu, &neo, 2);
+    assert_pair_exact_display("abbrev_mode_expands_defined_global_abbrev", &gnu, &neo);
 }
 
 #[test]
@@ -636,12 +587,7 @@ fn define_global_abbrev_then_list_abbrevs_via_mx() {
             grid.join("\n")
         );
     }
-    assert_pair_nearly_matches(
-        "define_global_abbrev_then_list_abbrevs_via_mx",
-        &gnu,
-        &neo,
-        3,
-    );
+    assert_pair_exact_display("define_global_abbrev_then_list_abbrevs_via_mx", &gnu, &neo);
 }
 
 #[test]
@@ -666,7 +612,7 @@ fn subword_mode_moves_through_camel_case_parts() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("subword_mode_moves_through_camel_case_parts", &gnu, &neo, 2);
+    assert_pair_exact_display("subword_mode_moves_through_camel_case_parts", &gnu, &neo);
 }
 
 #[test]
@@ -709,11 +655,10 @@ fn auto_save_mode_toggles_buffer_auto_save_file_name() {
     neo.read_until(Duration::from_secs(8), on_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "auto_save_mode_toggles_buffer_auto_save_file_name",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -742,11 +687,10 @@ fn delete_selection_mode_replaces_active_region_with_typed_text() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_selection_mode_replaces_active_region_with_typed_text",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -766,12 +710,7 @@ fn electric_pair_mode_inserts_matching_delimiter() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
-        "electric_pair_mode_inserts_matching_delimiter",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("electric_pair_mode_inserts_matching_delimiter", &gnu, &neo);
 }
 
 #[test]
@@ -795,12 +734,10 @@ fn fido_vertical_mode_mx_find_f_matches_gnu_then_cg() {
             "{label} should expand the minibuffer into a vertical candidate list"
         );
     }
-    assert_bottom_rows_nearly_match(
+    assert_pair_exact_display(
         "fido_vertical_mode_mx_find_f_matches_gnu_then_cg/prompt-layout",
         &gnu,
         &neo,
-        fido_bottom_start(),
-        3,
     );
     assert_fido_prompt_matches_stable_behavior(
         "fido_vertical_mode_mx_find_f_matches_gnu_then_cg/prompt",
@@ -809,11 +746,10 @@ fn fido_vertical_mode_mx_find_f_matches_gnu_then_cg() {
     );
 
     abort_minibuffer_and_wait_for_scratch(&mut gnu, &mut neo);
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "fido_vertical_mode_mx_find_f_matches_gnu_then_cg/abort",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -863,11 +799,10 @@ fn fido_vertical_mode_enabled_interactively_mx_shows_initial_candidates() {
     }
 
     abort_minibuffer_and_wait_for_scratch(&mut gnu, &mut neo);
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "fido_vertical_mode_enabled_interactively_mx_shows_initial_candidates/abort",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -876,12 +811,10 @@ fn fido_vertical_mode_mx_find_f_abort_then_repeat_matches_gnu() {
     let (mut gnu, mut neo) = boot_fido_vertical_pair();
 
     wait_for_fido_mx_candidates(&mut gnu, &mut neo, "find-f");
-    assert_bottom_rows_nearly_match(
+    assert_pair_exact_display(
         "fido_vertical_mode_mx_find_f_abort_then_repeat_matches_gnu/first-prompt-layout",
         &gnu,
         &neo,
-        fido_bottom_start(),
-        3,
     );
     assert_fido_prompt_matches_stable_behavior(
         "fido_vertical_mode_mx_find_f_abort_then_repeat_matches_gnu/first-prompt",
@@ -889,20 +822,17 @@ fn fido_vertical_mode_mx_find_f_abort_then_repeat_matches_gnu() {
         &neo,
     );
     abort_minibuffer_and_wait_for_scratch(&mut gnu, &mut neo);
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "fido_vertical_mode_mx_find_f_abort_then_repeat_matches_gnu/first-abort",
         &gnu,
         &neo,
-        2,
     );
 
     wait_for_fido_mx_candidates(&mut gnu, &mut neo, "find-f");
-    assert_bottom_rows_nearly_match(
+    assert_pair_exact_display(
         "fido_vertical_mode_mx_find_f_abort_then_repeat_matches_gnu/second-prompt-layout",
         &gnu,
         &neo,
-        fido_bottom_start(),
-        3,
     );
     assert_fido_prompt_matches_stable_behavior(
         "fido_vertical_mode_mx_find_f_abort_then_repeat_matches_gnu/second-prompt",
@@ -910,11 +840,10 @@ fn fido_vertical_mode_mx_find_f_abort_then_repeat_matches_gnu() {
         &neo,
     );
     abort_minibuffer_and_wait_for_scratch(&mut gnu, &mut neo);
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "fido_vertical_mode_mx_find_f_abort_then_repeat_matches_gnu/second-abort",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -986,6 +915,7 @@ fn fido_vertical_mode_completions() {
         neo_nonempty_after <= 2,
         "Neomacs minibuffer should shrink after C-g (got {neo_nonempty_after} non-empty rows)"
     );
+    assert_pair_exact_display("fido_vertical_mode_completions", &gnu, &neo);
 }
 
 // ── Major mode switching tests ──────────────────────────────
@@ -1017,6 +947,11 @@ fn text_mode_and_fundamental_mode_switching_updates_modeline() {
             "{label}: mode-line should update after M-x fundamental-mode. Mode-line: {mode_line}"
         );
     }
+    assert_pair_exact_display(
+        "text_mode_and_fundamental_mode_switching_updates_modeline",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -1048,11 +983,10 @@ fn header_line_format_displays_custom_header_above_buffer() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "header_line_format_displays_custom_header_above_buffer",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -1077,7 +1011,7 @@ fn tab_line_format_displays_custom_tab_line() {
         );
     }
 
-    assert_pair_nearly_matches("tab_line_format_displays_custom_tab_line", &gnu, &neo, 3);
+    assert_pair_exact_display("tab_line_format_displays_custom_tab_line", &gnu, &neo);
 }
 
 #[test]
@@ -1102,6 +1036,7 @@ fn left_margin_width_preserves_buffer_content() {
             "{label}: buffer visible with left-margin-width 4"
         );
     }
+    assert_pair_exact_display("left_margin_width_preserves_buffer_content", &gnu, &neo);
 }
 
 #[test]
@@ -1140,4 +1075,9 @@ fn abbrev_expand_interactively_via_cx_apostrophe_after_typing() {
             "{label}: abbrev expand should replace omwexp with expansion"
         );
     }
+    assert_pair_exact_display(
+        "abbrev_expand_interactively_via_cx_apostrophe_after_typing",
+        &gnu,
+        &neo,
+    );
 }

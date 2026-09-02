@@ -15,11 +15,10 @@ fn shell_command_via_mbang_displays_short_output() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "shell_command_via_mbang_displays_short_output/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -32,12 +31,7 @@ fn shell_command_via_mbang_displays_short_output() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
-        "shell_command_via_mbang_displays_short_output",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("shell_command_via_mbang_displays_short_output", &gnu, &neo);
 }
 
 #[test]
@@ -69,11 +63,10 @@ fn shell_command_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "shell_command_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -93,11 +86,10 @@ fn shell_command_with_prefix_inserts_output_at_point_via_cu_mbang() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "shell_command_with_prefix_inserts_output_at_point_via_cu_mbang/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -113,11 +105,10 @@ fn shell_command_with_prefix_inserts_output_at_point_via_cu_mbang() {
     neo.read_until(Duration::from_secs(12), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "shell_command_with_prefix_inserts_output_at_point_via_cu_mbang",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -131,11 +122,10 @@ fn async_shell_command_via_mampersand_displays_output_buffer() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "async_shell_command_via_mampersand_displays_output_buffer/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -159,11 +149,10 @@ fn async_shell_command_via_mampersand_displays_output_buffer() {
             grid.join("\n")
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "async_shell_command_via_mampersand_displays_output_buffer",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -197,11 +186,10 @@ fn async_shell_command_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "async_shell_command_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -224,11 +212,10 @@ fn shell_command_on_region_with_prefix_replaces_region_via_mbar() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "shell_command_on_region_with_prefix_replaces_region_via_mbar/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -246,11 +233,10 @@ fn shell_command_on_region_with_prefix_replaces_region_via_mbar() {
     neo.read_until(Duration::from_secs(12), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "shell_command_on_region_with_prefix_replaces_region_via_mbar",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -285,11 +271,10 @@ fn shell_command_on_region_without_prefix_displays_output_buffer_via_mbar() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "shell_command_on_region_without_prefix_displays_output_buffer_via_mbar/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -312,22 +297,15 @@ fn shell_command_on_region_without_prefix_displays_output_buffer_via_mbar() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "shell_command_on_region_without_prefix_displays_output_buffer_via_mbar",
         &gnu,
         &neo,
-        3,
     );
 }
 
 #[test]
 fn shell_via_mx_runs_interactive_command_in_comint_buffer() {
-    let menu_order = [ExpectedTextDivergence {
-        row: TuiRow::absolute(0),
-        gnu: "File Edit Options Buffers Tools Complete In/Out Signals Help",
-        neomacs: "File Edit Options Buffers Tools Help Complete Signals In/Out",
-        reason: "Neomacs and GNU Emacs expose the comint menu groups in a different order",
-    }];
     let init = TuiTempFile::new(
         "neomacs-common-usage-shell-",
         "init.el",
@@ -357,11 +335,10 @@ fn shell_via_mx_runs_interactive_command_in_comint_buffer() {
             &neo,
         );
     }
-    assert_pair_matches_contract(
+    assert_pair_exact_display(
         "shell_via_mx_runs_interactive_command_in_comint_buffer/prompt",
         &gnu,
         &neo,
-        &TuiContract::KnownTextDivergences(&menu_order),
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -397,11 +374,10 @@ fn shell_via_mx_runs_interactive_command_in_comint_buffer() {
             "{label} should stay in the shell buffer"
         );
     }
-    assert_pair_matches_contract(
+    assert_pair_exact_display(
         "shell_via_mx_runs_interactive_command_in_comint_buffer",
         &gnu,
         &neo,
-        &TuiContract::KnownTextDivergences(&menu_order),
     );
 }
 
@@ -414,11 +390,10 @@ fn compile_via_mx_runs_command_in_compilation_buffer() {
     gnu.read_until(Duration::from_secs(8), prompt_ready);
     neo.read_until(Duration::from_secs(10), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "compile_via_mx_runs_command_in_compilation_buffer/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "C-a C-k");
@@ -456,11 +431,10 @@ fn compile_via_mx_runs_command_in_compilation_buffer() {
             "{label} should show compilation command output"
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "compile_via_mx_runs_command_in_compilation_buffer",
         &gnu,
         &neo,
-        5,
     );
 }
 
@@ -493,12 +467,7 @@ fn compile_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "compile_empty_prompt_multiple_del_keeps_prompt",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("compile_empty_prompt_multiple_del_keeps_prompt", &gnu, &neo);
 }
 
 #[test]
@@ -518,12 +487,7 @@ fn grep_via_mx_lists_matching_file_lines() {
     gnu.read_until(Duration::from_secs(8), prompt_ready);
     neo.read_until(Duration::from_secs(10), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
-        "grep_via_mx_lists_matching_file_lines/prompt",
-        &gnu,
-        &neo,
-        3,
-    );
+    assert_pair_exact_display("grep_via_mx_lists_matching_file_lines/prompt", &gnu, &neo);
 
     send_both(&mut gnu, &mut neo, "C-a C-k");
     for session in [&mut gnu, &mut neo] {
@@ -559,7 +523,7 @@ fn grep_via_mx_lists_matching_file_lines() {
             "{label} should show matching grep lines"
         );
     }
-    assert_pair_nearly_matches("grep_via_mx_lists_matching_file_lines", &gnu, &neo, 5);
+    assert_pair_exact_display("grep_via_mx_lists_matching_file_lines", &gnu, &neo);
 }
 
 #[test]
@@ -599,7 +563,7 @@ fn grep_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches("grep_empty_prompt_multiple_del_keeps_prompt", &gnu, &neo, 2);
+    assert_pair_exact_display("grep_empty_prompt_multiple_del_keeps_prompt", &gnu, &neo);
 }
 
 #[test]
@@ -648,11 +612,10 @@ fn diff_buffer_with_file_via_mx_shows_unsaved_changes() {
             "{label} should show added and context diff lines"
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "diff_buffer_with_file_via_mx_shows_unsaved_changes",
         &gnu,
         &neo,
-        10,
     );
 }
 
@@ -687,11 +650,10 @@ fn diff_buffer_with_file_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "diff_buffer_with_file_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -737,11 +699,10 @@ fn shell_command_on_region_via_mbar_with_cat_preserves_text() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "shell_command_on_region_via_mbar_with_cat_preserves_text",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -786,10 +747,9 @@ fn shell_command_on_region_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "shell_command_on_region_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }

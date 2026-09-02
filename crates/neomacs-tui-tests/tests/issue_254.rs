@@ -3,10 +3,12 @@
 
 mod support;
 
-use neomacs_tui_tests::{StrictGridOptions, assert_grids_strict};
 use std::time::Duration;
 
-use support::{boot_pair, dump_pair_grids, read_both, scratch_ready, send_both, wait_for_both};
+use support::{
+    assert_pair_exact_display, boot_pair, dump_pair_grids, read_both, scratch_ready, send_both,
+    wait_for_both,
+};
 
 #[test]
 fn keyboard_quit_dismisses_mx_completions_window() {
@@ -70,10 +72,5 @@ fn assert_keyboard_quit_dismisses_mx_completions_window(extra_args: &str, label:
         !neo_still_visible,
         "Neomacs must dismiss the M-x completions window on C-g"
     );
-    assert_grids_strict(
-        label,
-        gnu.screen(),
-        neo.screen(),
-        &StrictGridOptions::default(),
-    );
+    assert_pair_exact_display(label, &gnu, &neo);
 }

@@ -5,30 +5,6 @@ use neomacs_tui_tests::*;
 use std::{fs, time::Duration};
 use support::*;
 
-// ── Local helpers ───────────────────────────────────────────
-
-fn assert_top_rows_nearly_match(
-    label: &str,
-    gnu: &TuiSession,
-    neo: &TuiSession,
-    rows: usize,
-    allowed_rows: usize,
-) {
-    let gl = gnu.text_grid();
-    let nl = neo.text_grid();
-    let rows = rows.min(gl.len()).min(nl.len());
-    let diffs = meaningful_diffs(diff_text_grids(&gl[..rows], &nl[..rows]));
-    if !diffs.is_empty() {
-        eprintln!("{label}: {} top rows differ", diffs.len());
-        print_row_diffs(&diffs);
-    }
-    assert!(
-        diffs.len() <= allowed_rows,
-        "{label} top rows differ in {} rows",
-        diffs.len()
-    );
-}
-
 fn assert_describe_mode_help_content(label: &str, gnu: &TuiSession, neo: &TuiSession) {
     for (editor, session) in [("GNU", gnu), ("NEO", neo)] {
         let grid = session.text_grid();
@@ -88,7 +64,7 @@ fn describe_mode_on_scratch_via_ch_m() {
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
     assert_describe_mode_help_content("describe_mode_on_scratch_via_ch_m", &gnu, &neo);
-    assert_top_rows_nearly_match("describe_mode_on_scratch_via_ch_m", &gnu, &neo, 16, 2);
+    assert_pair_exact_display("describe_mode_on_scratch_via_ch_m", &gnu, &neo);
 }
 
 #[test]
@@ -106,7 +82,7 @@ fn describe_mode_outline_heading_via_ch_m() {
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
     assert_describe_mode_help_content("describe_mode_outline_heading_via_ch_m", &gnu, &neo);
-    assert_top_rows_nearly_match("describe_mode_outline_heading_via_ch_m", &gnu, &neo, 16, 2);
+    assert_pair_exact_display("describe_mode_outline_heading_via_ch_m", &gnu, &neo);
 }
 
 #[test]
@@ -127,7 +103,7 @@ fn quit_help_buffer_via_q() {
     neo.read_until(Duration::from_secs(8), scratch_only_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("quit_help_buffer_via_q", &gnu, &neo, 2);
+    assert_pair_exact_display("quit_help_buffer_via_q", &gnu, &neo);
 }
 
 #[test]
@@ -153,13 +129,7 @@ fn help_for_help_via_ch_ch_lists_help_options() {
         );
     }
 
-    assert_top_rows_nearly_match(
-        "help_for_help_via_ch_ch_lists_help_options",
-        &gnu,
-        &neo,
-        22,
-        4,
-    );
+    assert_pair_exact_display("help_for_help_via_ch_ch_lists_help_options", &gnu, &neo);
 }
 
 #[test]
@@ -191,6 +161,7 @@ fn describe_key_find_file_via_chk() {
             "{label} help buffer should mention C-x C-f"
         );
     }
+    assert_pair_exact_display("describe_key_find_file_via_chk", &gnu, &neo);
 }
 
 #[test]
@@ -222,12 +193,10 @@ fn help_with_tutorial_via_ch_t_opens_tutorial_buffer() {
             "{label} should show the tutorial contents"
         );
     }
-    assert_top_rows_nearly_match(
+    assert_pair_exact_display(
         "help_with_tutorial_via_ch_t_opens_tutorial_buffer",
         &gnu,
         &neo,
-        18,
-        3,
     );
 }
 
@@ -269,13 +238,7 @@ fn info_directory_via_ch_i_opens_info_buffer() {
             "{label} should show Emacs entries in the Info directory"
         );
     }
-    assert_top_rows_nearly_match(
-        "info_directory_via_ch_i_opens_info_buffer",
-        &gnu,
-        &neo,
-        18,
-        3,
-    );
+    assert_pair_exact_display("info_directory_via_ch_i_opens_info_buffer", &gnu, &neo);
 }
 
 #[test]
@@ -313,22 +276,20 @@ fn calendar_via_mx_opens_calendar_and_q_quits() {
             "{label} should show Gregorian calendar day headers"
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "calendar_via_mx_opens_calendar_and_q_quits/open",
         &gnu,
         &neo,
-        4,
     );
 
     send_both_raw(&mut gnu, &mut neo, b"q");
     gnu.read_until(Duration::from_secs(6), scratch_ready);
     neo.read_until(Duration::from_secs(8), scratch_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "calendar_via_mx_opens_calendar_and_q_quits/quit",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -345,11 +306,10 @@ fn view_hello_file_pages_down_and_up_via_cv_mv() {
     gnu.read_until(Duration::from_secs(8), hello_ready);
     neo.read_until(Duration::from_secs(12), hello_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "view_hello_file_pages_down_and_up_via_cv_mv/open",
         &gnu,
         &neo,
-        4,
     );
 
     send_both(&mut gnu, &mut neo, "C-v");
@@ -361,22 +321,20 @@ fn view_hello_file_pages_down_and_up_via_cv_mv() {
     gnu.read_until(Duration::from_secs(8), paged_down);
     neo.read_until(Duration::from_secs(12), paged_down);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "view_hello_file_pages_down_and_up_via_cv_mv/page-down",
         &gnu,
         &neo,
-        6,
     );
 
     send_both(&mut gnu, &mut neo, "M-v");
     gnu.read_until(Duration::from_secs(8), hello_ready);
     neo.read_until(Duration::from_secs(12), hello_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "view_hello_file_pages_down_and_up_via_cv_mv/page-up",
         &gnu,
         &neo,
-        4,
     );
 }
 
@@ -394,12 +352,19 @@ fn view_hello_file_via_ch_h_opens_hello_buffer() {
     neo.read_until(Duration::from_secs(12), hello_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("view_hello_file_via_ch_h_opens_hello_buffer", &gnu, &neo, 4);
+    assert_pair_exact_display("view_hello_file_via_ch_h_opens_hello_buffer", &gnu, &neo);
 }
 
 #[test]
 fn describe_copying_via_ch_cc_opens_copying_file() {
     let (mut gnu, mut neo) = boot_pair("");
+
+    // `describe-copying' visits each executable's own source-tree COPYING
+    // file. Those fixtures intentionally belong to different Git checkouts,
+    // so their branch labels are environmental data rather than editor
+    // behavior. Suppress VC for this workflow at the source; the rest of the
+    // suite retains its explicit VC/modeline coverage.
+    support::eval_expression(&mut gnu, &mut neo, "(setq vc-handled-backends nil)");
 
     send_help_sequence(&mut gnu, &mut neo, "C-c");
     let copying_ready = |grid: &[String]| {
@@ -424,17 +389,16 @@ fn describe_copying_via_ch_cc_opens_copying_file() {
             "{label} should show GPL text from the COPYING file"
         );
     }
-    assert_pair_nearly_matches(
-        "describe_copying_via_ch_cc_opens_copying_file",
-        &gnu,
-        &neo,
-        4,
-    );
+    assert_pair_exact_display("describe_copying_via_ch_cc_opens_copying_file", &gnu, &neo);
 }
 
 #[test]
 fn describe_no_warranty_via_ch_cw_jumps_to_warranty_section() {
     let (mut gnu, mut neo) = boot_pair("");
+
+    // As above, keep the paired display independent of the two source
+    // checkouts' branch names without disabling VC in unrelated tests.
+    support::eval_expression(&mut gnu, &mut neo, "(setq vc-handled-backends nil)");
 
     send_help_sequence(&mut gnu, &mut neo, "C-w");
     let warranty_ready = |grid: &[String]| {
@@ -467,11 +431,10 @@ fn describe_no_warranty_via_ch_cw_jumps_to_warranty_section() {
             "{label} should show the warranty disclaimer body"
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "describe_no_warranty_via_ch_cw_jumps_to_warranty_section",
         &gnu,
         &neo,
-        4,
     );
 }
 
@@ -506,6 +469,7 @@ fn describe_bindings_via_ch_b() {
             grid.join("\n")
         );
     }
+    assert_pair_exact_display("describe_bindings_via_ch_b", &gnu, &neo);
 }
 
 #[test]
@@ -547,6 +511,7 @@ fn quit_describe_bindings_via_q() {
             "{label} should show the scratch buffer contents after q"
         );
     }
+    assert_pair_exact_display("quit_describe_bindings_via_q", &gnu, &neo);
 }
 
 #[test]
@@ -557,11 +522,10 @@ fn apropos_command_find_file_via_ch_a_lists_matches() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "apropos_command_find_file_via_ch_a_lists_matches/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -593,11 +557,10 @@ fn apropos_command_find_file_via_ch_a_lists_matches() {
             "{label} apropos-command should show find-file's default binding"
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "apropos_command_find_file_via_ch_a_lists_matches",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -637,6 +600,7 @@ fn describe_function_find_file_via_ch_f() {
             "{label} describe-function should mention C-x C-f"
         );
     }
+    assert_pair_exact_display("describe_function_find_file_via_ch_f", &gnu, &neo);
 }
 
 #[test]
@@ -647,12 +611,7 @@ fn describe_variable_fill_column_via_ch_v() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
-        "describe_variable_fill_column_via_ch_v/prompt",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("describe_variable_fill_column_via_ch_v/prompt", &gnu, &neo);
 
     for session in [&mut gnu, &mut neo] {
         session.send(b"fill-column");
@@ -685,7 +644,7 @@ fn describe_variable_fill_column_via_ch_v() {
             "{label} describe-variable should show fill-column's default value"
         );
     }
-    assert_top_rows_nearly_match("describe_variable_fill_column_via_ch_v", &gnu, &neo, 18, 3);
+    assert_pair_exact_display("describe_variable_fill_column_via_ch_v", &gnu, &neo);
 }
 
 #[test]
@@ -696,7 +655,7 @@ fn describe_symbol_fill_column_via_ch_o() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches("describe_symbol_fill_column_via_ch_o/prompt", &gnu, &neo, 2);
+    assert_pair_exact_display("describe_symbol_fill_column_via_ch_o/prompt", &gnu, &neo);
 
     for session in [&mut gnu, &mut neo] {
         session.send(b"fill-column");
@@ -719,7 +678,7 @@ fn describe_symbol_fill_column_via_ch_o() {
         dump_pair_grids("describe_symbol_fill_column_via_ch_o/not-ready", &gnu, &neo);
     }
 
-    assert_top_rows_nearly_match("describe_symbol_fill_column_via_ch_o", &gnu, &neo, 18, 3);
+    assert_pair_exact_display("describe_symbol_fill_column_via_ch_o", &gnu, &neo);
 }
 
 #[test]
@@ -744,13 +703,7 @@ fn describe_syntax_via_ch_s_shows_syntax_table() {
         );
     }
 
-    assert_top_rows_nearly_match(
-        "describe_syntax_via_ch_s_shows_syntax_table",
-        &gnu,
-        &neo,
-        18,
-        4,
-    );
+    assert_pair_exact_display("describe_syntax_via_ch_s_shows_syntax_table", &gnu, &neo);
 }
 
 #[test]
@@ -762,11 +715,10 @@ fn describe_face_default_via_mx_shows_face_attributes() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "describe_face_default_via_mx_shows_face_attributes/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -792,12 +744,10 @@ fn describe_face_default_via_mx_shows_face_attributes() {
         );
     }
 
-    assert_top_rows_nearly_match(
+    assert_pair_exact_display(
         "describe_face_default_via_mx_shows_face_attributes",
         &gnu,
         &neo,
-        20,
-        3,
     );
 }
 
@@ -826,6 +776,7 @@ fn describe_key_briefly_find_file_via_ch_c() {
             "{label} describe-key-briefly should mention find-file"
         );
     }
+    assert_pair_exact_display("describe_key_briefly_find_file_via_ch_c", &gnu, &neo);
 }
 
 #[test]
@@ -836,11 +787,10 @@ fn where_is_find_file_via_ch_w_reports_key_binding() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "where_is_find_file_via_ch_w_reports_key_binding/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -868,11 +818,10 @@ fn where_is_find_file_via_ch_w_reports_key_binding() {
             "{label} where-is should report the default find-file binding"
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "where_is_find_file_via_ch_w_reports_key_binding",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -904,12 +853,7 @@ fn where_is_prompt_ctrl_h_preserves_command_text() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "where_is_prompt_ctrl_h_preserves_command_text",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("where_is_prompt_ctrl_h_preserves_command_text", &gnu, &neo);
 }
 
 #[test]
@@ -945,11 +889,10 @@ fn where_is_prompt_del_deletes_previous_command_character() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "where_is_prompt_del_deletes_previous_command_character",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -981,11 +924,10 @@ fn where_is_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "where_is_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1014,11 +956,10 @@ fn view_lossage_via_ch_l_shows_recent_keys_and_commands() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "view_lossage_via_ch_l_shows_recent_keys_and_commands",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1071,6 +1012,11 @@ fn describe_char_on_ascii_character_matches_gnu_help_buffer() {
         gnu_help, neo_help,
         "describe-char help buffer for ASCII character should match GNU exactly"
     );
+    assert_pair_exact_display(
+        "describe_char_on_ascii_character_matches_gnu_help_buffer",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -1102,6 +1048,11 @@ fn describe_variable_fill_column_via_ch_v_shows_docstring() {
             "{label} C-h v fill-column should show variable info"
         );
     }
+    assert_pair_exact_display(
+        "describe_variable_fill_column_via_ch_v_shows_docstring",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -1133,6 +1084,11 @@ fn describe_function_forward_char_via_ch_f_shows_docstring() {
             "{label} C-h f forward-char should show function doc"
         );
     }
+    assert_pair_exact_display(
+        "describe_function_forward_char_via_ch_f_shows_docstring",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -1163,6 +1119,11 @@ fn describe_mode_via_ch_m_shows_lisp_interaction_bindings() {
             "{label} C-h m should show key bindings like eval-print-last-sexp"
         );
     }
+    assert_pair_exact_display(
+        "describe_mode_via_ch_m_shows_lisp_interaction_bindings",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -1194,4 +1155,9 @@ fn describe_key_cx_cf_via_ch_k_shows_find_file_doc() {
             "{label} C-h k C-x C-f should show find-file binding"
         );
     }
+    assert_pair_exact_display(
+        "describe_key_cx_cf_via_ch_k_shows_find_file_doc",
+        &gnu,
+        &neo,
+    );
 }

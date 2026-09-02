@@ -29,6 +29,11 @@ fn indent_for_tab_command_indents_current_elisp_line() {
         name,
         expected,
     );
+    assert_pair_exact_display(
+        "indent_for_tab_command_indents_current_elisp_line",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -45,6 +50,11 @@ fn comment_dwim_on_blank_elisp_line_inserts_indented_comment() {
     });
 
     save_current_file_and_assert_contents("comment-dwim", &mut gnu, &mut neo, name, expected);
+    assert_pair_exact_display(
+        "comment_dwim_on_blank_elisp_line_inserts_indented_comment",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -60,6 +70,11 @@ fn eval_defun_via_cmeta_x_defines_current_elisp_function() {
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(6), |grid| {
         grid.iter().any(|row| row.contains("value-from-eval-defun"))
     });
+    assert_pair_exact_display(
+        "eval_defun_via_cmeta_x_defines_current_elisp_function",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -86,6 +101,7 @@ fn imenu_via_mx_jumps_to_named_elisp_defun() {
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(6), |grid| {
         grid.iter().any(|row| row.contains("imenu-at-beta t"))
     });
+    assert_pair_exact_display("imenu_via_mx_jumps_to_named_elisp_defun", &gnu, &neo);
 }
 
 #[test]
@@ -110,6 +126,7 @@ fn indent_region_via_mx_indents_elisp_defun() {
         name,
         expected,
     );
+    assert_pair_exact_display("indent_region_via_mx_indents_elisp_defun", &gnu, &neo);
 }
 
 #[test]
@@ -136,4 +153,9 @@ fn forward_sexp_via_mx_moves_past_balanced_expression() {
             "{label}: forward-sexp should move past (foo bar)"
         );
     }
+    assert_pair_exact_display(
+        "forward_sexp_via_mx_moves_past_balanced_expression",
+        &gnu,
+        &neo,
+    );
 }

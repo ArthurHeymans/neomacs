@@ -45,11 +45,10 @@ fn copy_to_register_and_insert_register_via_cx_r_s_i() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "copy_to_register_and_insert_register_via_cx_r_s_i",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -73,7 +72,7 @@ fn kill_and_yank_rectangle_via_cx_r_k_y() {
     gnu.read_until(Duration::from_secs(6), killed);
     neo.read_until(Duration::from_secs(8), killed);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches("kill_and_yank_rectangle_via_cx_r_k_y/kill", &gnu, &neo, 2);
+    assert_pair_exact_display("kill_and_yank_rectangle_via_cx_r_k_y/kill", &gnu, &neo);
 
     send_both(&mut gnu, &mut neo, "C-x r y");
     let yanked = |grid: &[String]| {
@@ -85,7 +84,7 @@ fn kill_and_yank_rectangle_via_cx_r_k_y() {
     neo.read_until(Duration::from_secs(8), yanked);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("kill_and_yank_rectangle_via_cx_r_k_y/yank", &gnu, &neo, 2);
+    assert_pair_exact_display("kill_and_yank_rectangle_via_cx_r_k_y/yank", &gnu, &neo);
 }
 
 #[test]
@@ -112,12 +111,7 @@ fn copy_rectangle_as_kill_then_yank_via_cx_r_mw_y() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
-        "copy_rectangle_as_kill_then_yank_via_cx_r_mw_y",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("copy_rectangle_as_kill_then_yank_via_cx_r_mw_y", &gnu, &neo);
     save_current_file_and_assert_contents(
         "copy_rectangle_as_kill_then_yank_via_cx_r_mw_y",
         &mut gnu,
@@ -149,7 +143,7 @@ fn open_rectangle_via_cx_r_o_shifts_text_right() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("open_rectangle_via_cx_r_o_shifts_text_right", &gnu, &neo, 2);
+    assert_pair_exact_display("open_rectangle_via_cx_r_o_shifts_text_right", &gnu, &neo);
     save_current_file_and_assert_contents(
         "open_rectangle_via_cx_r_o_shifts_text_right",
         &mut gnu,
@@ -181,11 +175,10 @@ fn clear_rectangle_via_cx_r_c_blanks_selected_columns() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "clear_rectangle_via_cx_r_c_blanks_selected_columns",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "clear_rectangle_via_cx_r_c_blanks_selected_columns",
@@ -218,12 +211,7 @@ fn delete_rectangle_via_cx_r_d_shifts_suffix_left() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
-        "delete_rectangle_via_cx_r_d_shifts_suffix_left",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("delete_rectangle_via_cx_r_d_shifts_suffix_left", &gnu, &neo);
     save_current_file_and_assert_contents(
         "delete_rectangle_via_cx_r_d_shifts_suffix_left",
         &mut gnu,
@@ -256,11 +244,10 @@ fn delete_whitespace_rectangle_via_mx_closes_gaps_from_column() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_whitespace_rectangle_via_mx_closes_gaps_from_column",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "delete_whitespace_rectangle_via_mx_closes_gaps_from_column",
@@ -304,12 +291,7 @@ fn string_rectangle_via_cx_r_t_replaces_columns() {
     neo.read_until(Duration::from_secs(10), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
-        "string_rectangle_via_cx_r_t_replaces_columns",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("string_rectangle_via_cx_r_t_replaces_columns", &gnu, &neo);
 }
 
 #[test]
@@ -334,11 +316,10 @@ fn rectangle_number_lines_via_cx_r_n_numbers_selected_lines() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "rectangle_number_lines_via_cx_r_n_numbers_selected_lines",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "rectangle_number_lines_via_cx_r_n_numbers_selected_lines",
@@ -392,11 +373,10 @@ fn point_to_register_and_jump_to_register_via_cx_r_spc_j() {
     neo.read_until(Duration::from_secs(8), at_start);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "point_to_register_and_jump_to_register_via_cx_r_spc_j",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -431,7 +411,7 @@ fn view_register_via_mx_displays_saved_text() {
     neo.read_until(Duration::from_secs(12), output_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("view_register_via_mx_displays_saved_text", &gnu, &neo, 3);
+    assert_pair_exact_display("view_register_via_mx_displays_saved_text", &gnu, &neo);
 }
 
 #[test]
@@ -459,11 +439,10 @@ fn list_registers_via_mx_displays_nonempty_register() {
     neo.read_until(Duration::from_secs(12), output_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "list_registers_via_mx_displays_nonempty_register",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -510,11 +489,10 @@ fn number_to_register_and_increment_register_via_cx_r_n_plus() {
     neo.read_until(Duration::from_secs(12), output_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "number_to_register_and_increment_register_via_cx_r_n_plus",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -567,11 +545,10 @@ fn append_and_prepend_to_register_then_insert_via_mx() {
     neo.read_until(Duration::from_secs(12), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "append_and_prepend_to_register_then_insert_via_mx",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -652,7 +629,7 @@ fn bookmark_set_and_jump_via_cx_r_m_b() {
     neo.read_until(Duration::from_secs(10), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("bookmark_set_and_jump_via_cx_r_m_b", &gnu, &neo, 2);
+    assert_pair_exact_display("bookmark_set_and_jump_via_cx_r_m_b", &gnu, &neo);
 }
 
 #[test]
@@ -705,11 +682,10 @@ fn bookmark_list_via_cx_r_l_shows_saved_bookmark() {
             "{label} should list the newly created bookmark"
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "bookmark_list_via_cx_r_l_shows_saved_bookmark/open",
         &gnu,
         &neo,
-        4,
     );
 
     send_both_raw(&mut gnu, &mut neo, b"q");
@@ -720,11 +696,21 @@ fn bookmark_list_via_cx_r_l_shows_saved_bookmark() {
     gnu.read_until(Duration::from_secs(6), source_ready);
     neo.read_until(Duration::from_secs(8), source_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "bookmark_list_via_cx_r_l_shows_saved_bookmark/quit",
         &gnu,
         &neo,
-        2,
+    );
+
+    // GNU retains the frame's cached Bookmark menu for the quit redisplay.
+    // A broad redisplay trigger then rebuilds it from the restored text-mode
+    // buffer.  Keep both sides of that cache boundary exact.
+    send_both(&mut gnu, &mut neo, "C-l");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    assert_pair_exact_display(
+        "bookmark_list_via_cx_r_l_shows_saved_bookmark/redraw",
+        &gnu,
+        &neo,
     );
 }
 
@@ -800,11 +786,10 @@ fn bookmark_rename_and_delete_via_mx_updates_bookmark_list() {
     gnu.read_until(Duration::from_secs(8), renamed_list_ready);
     neo.read_until(Duration::from_secs(10), renamed_list_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "bookmark_rename_and_delete_via_mx_updates_bookmark_list/renamed",
         &gnu,
         &neo,
-        4,
     );
 
     send_both_raw(&mut gnu, &mut neo, b"q");
@@ -852,11 +837,10 @@ fn bookmark_rename_and_delete_via_mx_updates_bookmark_list() {
             grid.join("\n")
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "bookmark_rename_and_delete_via_mx_updates_bookmark_list/deleted",
         &gnu,
         &neo,
-        4,
     );
 }
 
@@ -906,11 +890,10 @@ fn recentf_mode_tracks_opened_files_and_lists_them_via_mx() {
         "Neomacs Recentf dialog should advertise q to cancel"
     );
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "recentf_mode_tracks_opened_files_and_lists_them_via_mx",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -957,4 +940,9 @@ fn bookmark_set_and_jump_via_cx_rm_remembers_file_position() {
             "{label} should be in the bookmarked file"
         );
     }
+    assert_pair_exact_display(
+        "bookmark_set_and_jump_via_cx_rm_remembers_file_position",
+        &gnu,
+        &neo,
+    );
 }

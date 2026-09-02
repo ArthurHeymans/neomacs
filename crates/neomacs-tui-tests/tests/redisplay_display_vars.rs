@@ -19,7 +19,7 @@
 
 mod support;
 
-use neomacs_tui_tests::{TuiContract, TuiSession, diff_text_grids};
+use neomacs_tui_tests::TuiSession;
 use std::time::Duration;
 use support::*;
 
@@ -63,12 +63,7 @@ fn setq_truncate_lines_repaints_without_extra_keystroke() {
 
     // Baseline: with truncate-lines nil, the long line wraps. Both should
     // already agree.
-    assert_pair_matches_contract(
-        "truncate-lines baseline",
-        &gnu,
-        &neo,
-        &TuiContract::ExactText,
-    );
+    assert_pair_exact_display("truncate-lines baseline", &gnu, &neo);
 
     // Toggle truncate-lines. M-: ... RET is the only input; the RET is the
     // final keystroke. After it, the long line must show truncated (a
@@ -79,15 +74,7 @@ fn setq_truncate_lines_repaints_without_extra_keystroke() {
     // No further keypress. Neomacs must already match GNU's truncated
     // layout. If the redisplay were dropped the grids would diverge
     // (neomacs still wrapping).
-    if meaningful_diffs(diff_text_grids(&gnu.text_grid(), &neo.text_grid())).len() > 1 {
-        dump_pair_grids("truncate-lines after setq", &gnu, &neo);
-    }
-    assert_pair_matches_contract(
-        "truncate-lines repaint without extra keystroke",
-        &gnu,
-        &neo,
-        &TuiContract::ExactText,
-    );
+    assert_pair_exact_display("truncate-lines repaint without extra keystroke", &gnu, &neo);
 }
 
 #[test]
@@ -95,7 +82,7 @@ fn setq_tab_width_repaints_without_extra_keystroke() {
     let (mut gnu, mut neo) = boot_pair("");
     seed_long_line(&mut gnu, &mut neo);
 
-    assert_pair_matches_contract("tab-width baseline", &gnu, &neo, &TuiContract::ExactText);
+    assert_pair_exact_display("tab-width baseline", &gnu, &neo);
 
     // Move point onto the tabbed line so it is the current line, then
     // change tab-width. The visible column of "TABBED-CELL" must shift to
@@ -103,15 +90,7 @@ fn setq_tab_width_repaints_without_extra_keystroke() {
     eval_expression(&mut gnu, &mut neo, "(setq tab-width 16)");
     settle_after_eval(&mut gnu, &mut neo);
 
-    if meaningful_diffs(diff_text_grids(&gnu.text_grid(), &neo.text_grid())).len() > 1 {
-        dump_pair_grids("tab-width after setq", &gnu, &neo);
-    }
-    assert_pair_matches_contract(
-        "tab-width repaint without extra keystroke",
-        &gnu,
-        &neo,
-        &TuiContract::ExactText,
-    );
+    assert_pair_exact_display("tab-width repaint without extra keystroke", &gnu, &neo);
 }
 
 #[test]
@@ -119,7 +98,7 @@ fn setq_header_line_format_repaints_without_extra_keystroke() {
     let (mut gnu, mut neo) = boot_pair("");
     seed_long_line(&mut gnu, &mut neo);
 
-    assert_pair_matches_contract("header-line baseline", &gnu, &neo, &TuiContract::ExactText);
+    assert_pair_exact_display("header-line baseline", &gnu, &neo);
 
     // Installing a header-line-format adds a whole new display row at the
     // top of the window. This is the most visually obvious display-var
@@ -152,10 +131,5 @@ fn setq_header_line_format_repaints_without_extra_keystroke() {
         "Neomacs should show the installed header line without an extra keystroke \
          (redisplay must not be dropped on a header-line-format change)"
     );
-    assert_pair_matches_contract(
-        "header-line repaint without extra keystroke",
-        &gnu,
-        &neo,
-        &TuiContract::ExactText,
-    );
+    assert_pair_exact_display("header-line repaint without extra keystroke", &gnu, &neo);
 }

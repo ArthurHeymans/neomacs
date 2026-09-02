@@ -8,7 +8,7 @@
 mod support;
 use neomacs_tui_tests::*;
 use std::time::Duration;
-use support::{boot_pair, eval_expression, read_both, send_both};
+use support::{assert_pair_exact_display, boot_pair, eval_expression, read_both, send_both};
 
 /// Elisp helper loaded via `-l` at boot. Defines `cf--make-child` for
 /// concise child-frame creation in tests.
@@ -87,6 +87,7 @@ fn tty_child_frames_feature_check() {
     if !neo_echo.contains('t') {
         eprintln!("NOTE: NeoMacs does not yet support tty-child-frames (got: {neo_echo:?})");
     }
+    assert_pair_exact_display("tty_child_frames_feature_check", &gnu, &neo);
 }
 
 #[test]
@@ -118,6 +119,7 @@ fn create_and_delete_child_frame() {
         gnu_after.iter().any(|r| r.contains("*scratch*")),
         "GNU should restore *scratch* after deleting child frame"
     );
+    assert_pair_exact_display("create_and_delete_child_frame", &gnu, &neo);
 }
 
 #[test]
@@ -142,6 +144,7 @@ fn child_frame_displays_buffer() {
     // Clean up.
     delete_all_child_frames(&mut gnu, &mut neo);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    assert_pair_exact_display("child_frame_displays_buffer", &gnu, &neo);
 }
 
 #[test]
@@ -179,6 +182,7 @@ fn child_frame_resize() {
     );
 
     delete_all_child_frames(&mut gnu, &mut neo);
+    assert_pair_exact_display("child_frame_resize", &gnu, &neo);
 }
 
 #[test]
@@ -203,6 +207,7 @@ fn display_buffer_in_child_frame() {
     assert_region_contains(&gnu, 2, 8, "Displayed in child frame");
 
     delete_all_child_frames(&mut gnu, &mut neo);
+    assert_pair_exact_display("display_buffer_in_child_frame", &gnu, &neo);
 }
 
 #[test]
@@ -233,6 +238,7 @@ fn minibuffer_child_frame() {
     );
 
     delete_all_child_frames(&mut gnu, &mut neo);
+    assert_pair_exact_display("minibuffer_child_frame", &gnu, &neo);
 }
 
 #[test]
@@ -256,6 +262,7 @@ fn child_frame_border_width() {
     );
 
     delete_all_child_frames(&mut gnu, &mut neo);
+    assert_pair_exact_display("child_frame_border_width", &gnu, &neo);
 }
 
 #[test]
@@ -291,6 +298,7 @@ fn delete_child_frame_restores_parent() {
         }
     }
     assert!(found, "GNU parent text should survive child frame deletion");
+    assert_pair_exact_display("delete_child_frame_restores_parent", &gnu, &neo);
 }
 
 #[test]
@@ -327,6 +335,11 @@ fn make_frame_invisible_hides_tty_child_frame_and_restores_parent_pixels() {
             session.name
         );
     }
+    assert_pair_exact_display(
+        "make_frame_invisible_hides_tty_child_frame_and_restores_parent_pixels",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -378,6 +391,7 @@ fn multiple_child_frames() {
         gnu_final.iter().any(|r| r.contains("*scratch*")),
         "GNU should restore *scratch* after deleting all child frames"
     );
+    assert_pair_exact_display("multiple_child_frames", &gnu, &neo);
 }
 
 // ── Position movement tests ──────────────────────────────────────────────
@@ -429,6 +443,7 @@ fn child_frame_move_right() {
     );
 
     delete_all_child_frames(&mut gnu, &mut neo);
+    assert_pair_exact_display("child_frame_move_right", &gnu, &neo);
 }
 
 #[test]
@@ -474,6 +489,7 @@ fn child_frame_move_down() {
     );
 
     delete_all_child_frames(&mut gnu, &mut neo);
+    assert_pair_exact_display("child_frame_move_down", &gnu, &neo);
 }
 
 #[test]
@@ -540,6 +556,7 @@ fn child_frame_move_multiple_steps() {
     );
 
     delete_all_child_frames(&mut gnu, &mut neo);
+    assert_pair_exact_display("child_frame_move_multiple_steps", &gnu, &neo);
 }
 
 #[test]
@@ -590,6 +607,7 @@ fn child_frame_move_after_resize() {
     );
 
     delete_all_child_frames(&mut gnu, &mut neo);
+    assert_pair_exact_display("child_frame_move_after_resize", &gnu, &neo);
 }
 
 #[test]
@@ -634,4 +652,5 @@ fn child_frame_position_consistency() {
     );
 
     delete_all_child_frames(&mut gnu, &mut neo);
+    assert_pair_exact_display("child_frame_position_consistency", &gnu, &neo);
 }

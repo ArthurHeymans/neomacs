@@ -16,11 +16,12 @@
 //! - [`emacs_key`] translates Emacs key descriptions (`"C-x"`, `"M-x"`,
 //!   `"RET"`) into the raw bytes a terminal would send.
 //!
-//! - [`diff_screens`] compares two `vt100::Screen` snapshots and returns
-//!   a list of [`CellDiff`] entries for every mismatched cell.
+//! - [`compare_displays`] compares the complete visible display through a
+//!   one exact contract: geometry, exact text, palette-independent full style
+//!   classes, wrapping, and cursor state.
 //!
-//! - [`diff_screens_text`] is a simpler text-only comparison that ignores
-//!   face attributes and normalises product names.
+//! - [`diff_screens`] remains available for tests that intentionally inspect
+//!   raw terminal cells or exact palette values.
 
 use std::ffi::OsString;
 use std::io::{Read, Write};
@@ -594,6 +595,11 @@ impl TuiSession {
     /// Return the isolated HOME directory used for this session.
     pub fn home_dir(&self) -> &std::path::Path {
         self.home.path()
+    }
+
+    /// Return the isolated temporary directory used for this session.
+    pub fn temp_dir(&self) -> &std::path::Path {
+        self._tmp.path()
     }
 }
 
@@ -1342,67 +1348,7 @@ pub fn diff_screens(gnu: &vt100::Screen, neo: &vt100::Screen) -> Vec<CellDiff> {
     diffs
 }
 
-/// A row-level text difference.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RowDiff {
-    pub row: usize,
-    pub gnu: String,
-    pub neo: String,
-}
-
-/// Compare two text grids, normalising known product-name differences.
-///
-/// Returns only rows where meaningful differences remain after
-/// replacing "GNU Emacs" ↔ "Neomacs" and stripping trailing whitespace.
-pub fn diff_text_grids(gnu: &[String], neo: &[String]) -> Vec<RowDiff> {
-    let mut diffs = Vec::new();
-    let norm = |s: &str| -> String {
-        s.replace("GNU Emacs", "EDITOR__")
-            .replace("*GNU Emacs*", "*EDITOR__*")
-            .replace("Neomacs", "EDITOR__")
-            .replace("*Neomacs*", "*EDITOR__*")
-            .trim_end()
-            .to_string()
-    };
-    for row in 0..gnu.len().max(neo.len()) {
-        let (gnu_row, neo_row) = (gnu.get(row), neo.get(row));
-        match (gnu_row, neo_row) {
-            (Some(g), Some(n)) if norm(g) == norm(n) => continue,
-            _ => diffs.push(RowDiff {
-                row,
-                gnu: gnu_row.map_or_else(String::new, |text| text.trim_end().to_string()),
-                neo: neo_row.map_or_else(String::new, |text| text.trim_end().to_string()),
-            }),
-        }
-    }
-    diffs
-}
-
-/// Check whether a row difference is just boot-screen informational text
-/// that we expect to differ (welcome message, copyright, etc.).
-pub fn is_boot_info_row(gnu_text: &str, neo_text: &str) -> bool {
-    let patterns = [
-        "information about GNU",
-        "Welcome to GNU",
-        "tutorial",
-        "Copyright",
-        "Free Software",
-        "warranty",
-        "C-h C-a",
-        "Appl",
-    ];
-    for p in &patterns {
-        if gnu_text.contains(p) || neo_text.contains(p) {
-            return true;
-        }
-    }
-    false
-}
-
-/// One exact terminal row selected by a TUI comparison contract.
-///
-/// Keeping the selector typed makes a known divergence name its location
-/// instead of granting an arbitrary whole-screen difference budget.
+/// One exact terminal row in a display comparison.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TuiRow(usize);
 
@@ -1410,540 +1356,567 @@ impl TuiRow {
     pub const fn absolute(row: usize) -> Self {
         Self(row)
     }
-
-    fn resolve(self, row_count: usize) -> Option<usize> {
-        (self.0 < row_count).then_some(self.0)
-    }
 }
 
-/// A tracked, row-specific text divergence from GNU Emacs.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExpectedTextDivergence {
-    pub row: TuiRow,
-    pub gnu: &'static str,
-    pub neomacs: &'static str,
-    pub reason: &'static str,
-}
-
-impl ExpectedTextDivergence {
-    fn matches(&self, difference: &RowDiff, row_count: usize) -> bool {
-        self.row.resolve(row_count) == Some(difference.row)
-            && self.gnu == difference.gnu
-            && self.neomacs == difference.neo
-    }
-}
-
-/// The text comparison policy for one TUI observation.
-#[derive(Debug, Clone, Copy)]
-pub enum TuiContract<'a> {
-    ExactText,
-    KnownTextDivergences(&'a [ExpectedTextDivergence]),
-}
-
-/// The complete result of applying a [`TuiContract`] to two text grids.
+/// Values that differ only because the two editors run in isolated fixtures.
 ///
-/// A report is satisfied only when there are neither unexpected differences
-/// nor stale expected divergences. This makes the known-divergence list shrink
-/// when behavior converges with GNU Emacs.
-#[derive(Debug, PartialEq, Eq)]
-pub struct TuiContractReport {
-    unexpected: Vec<RowDiff>,
-    stale: Vec<ExpectedTextDivergence>,
+/// An environment says which concrete path spellings denote the same
+/// test-owned resource.  The resulting comparison remains exact after those
+/// declared values are mapped to a shared canonical token.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PairedDisplayEnvironment {
+    paths: Vec<PairedPath>,
 }
 
-impl TuiContractReport {
-    pub fn is_satisfied(&self) -> bool {
-        self.unexpected.is_empty() && self.stale.is_empty()
-    }
-
-    pub fn unexpected_rows(&self) -> Vec<usize> {
-        self.unexpected.iter().map(|diff| diff.row).collect()
-    }
-
-    pub fn unexpected(&self) -> &[RowDiff] {
-        &self.unexpected
-    }
-
-    pub fn stale_expectations(&self) -> &[ExpectedTextDivergence] {
-        &self.stale
-    }
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PairedPath {
+    gnu: PathBuf,
+    neomacs: PathBuf,
 }
 
-/// Compare two TUI text grids under an explicit contract.
-pub fn compare_text_grids_with_contract(
-    gnu: &[String],
-    neo: &[String],
-    contract: &TuiContract<'_>,
-) -> TuiContractReport {
-    let differences = diff_text_grids(gnu, neo);
-    let expected = match contract {
-        TuiContract::ExactText => &[][..],
-        TuiContract::KnownTextDivergences(expected) => *expected,
-    };
-    let row_count = gnu.len().max(neo.len());
-    let mut matched = vec![false; expected.len()];
-    let mut unexpected = Vec::new();
+#[derive(Debug, Clone, Copy)]
+enum DisplayPeer {
+    Gnu,
+    Neomacs,
+}
 
-    for difference in differences {
-        let matching_expectation = expected
+impl PairedDisplayEnvironment {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Declare two concrete paths as the GNU and Neomacs spellings of one
+    /// logical test resource.
+    #[must_use]
+    pub fn with_path_pair(mut self, gnu: impl Into<PathBuf>, neomacs: impl Into<PathBuf>) -> Self {
+        self.paths.push(PairedPath {
+            gnu: gnu.into(),
+            neomacs: neomacs.into(),
+        });
+        self
+    }
+
+    /// Capture the path values which the harness necessarily isolates for a
+    /// paired editor session.
+    #[must_use]
+    pub fn from_sessions(gnu: &TuiSession, neomacs: &TuiSession) -> Self {
+        Self::new()
+            .with_path_pair(gnu.home_dir(), neomacs.home_dir())
+            .with_path_pair(gnu.temp_dir(), neomacs.temp_dir())
+    }
+
+    fn normalize(&self, peer: DisplayPeer, text: &str) -> String {
+        self.paths
             .iter()
             .enumerate()
-            .position(|(index, item)| !matched[index] && item.matches(&difference, row_count));
-        if let Some(index) = matching_expectation {
-            matched[index] = true;
-        } else {
-            unexpected.push(difference);
+            .fold(text.to_owned(), |normalized, (index, path)| {
+                let concrete = match peer {
+                    DisplayPeer::Gnu => &path.gnu,
+                    DisplayPeer::Neomacs => &path.neomacs,
+                };
+                normalized.replace(
+                    concrete.to_string_lossy().as_ref(),
+                    &format!("<PAIRED-PATH-{index}>"),
+                )
+            })
+    }
+}
+
+/// A terminal's visible geometry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DisplaySize {
+    pub rows: u16,
+    pub columns: u16,
+}
+
+impl From<(u16, u16)> for DisplaySize {
+    fn from((rows, columns): (u16, u16)) -> Self {
+        Self { rows, columns }
+    }
+}
+
+/// One terminal cell in row/column coordinates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DisplayCell {
+    pub row: u16,
+    pub column: u16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CursorVisibility {
+    Visible,
+    Hidden,
+}
+
+impl CursorVisibility {
+    fn from_hidden(hidden: bool) -> Self {
+        if hidden { Self::Hidden } else { Self::Visible }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum DisplayColor {
+    Default,
+    Indexed(u8),
+    Rgb(u8, u8, u8),
+}
+
+impl From<vt100::Color> for DisplayColor {
+    fn from(color: vt100::Color) -> Self {
+        match color {
+            vt100::Color::Default => Self::Default,
+            vt100::Color::Idx(index) => Self::Indexed(index),
+            vt100::Color::Rgb(red, green, blue) => Self::Rgb(red, green, blue),
         }
     }
-
-    let stale = expected
-        .iter()
-        .enumerate()
-        .filter(|(index, _)| !matched[*index])
-        .map(|(_, expectation)| expectation.clone())
-        .collect();
-
-    TuiContractReport { unexpected, stale }
 }
 
-// ── Strict contract-level grid comparison ────────────────────────────
-//
-// `diff_screens` above compares *raw* cells (char + exact terminal colour).
-// Raw-colour equality is the WRONG strictness for the Neomacs↔GNU contract:
-// the two editors map faces to terminal colours through different palettes/
-// themes, so identical raw SGR is not required (Neomacs is free to differ
-// "below the contract"). The contract is the *logical display*: the exact
-// character grid, and *which logical face* applies to each cell.
-//
-// `compare_grids_strict` therefore compares:
-//   1. the exact character at each cell (logical layout), and
-//   2. face *identity* as a palette-independent CLASS PARTITION — two cells
-//      share a class iff they share `(fg, bg)`, and the two grids must induce
-//      the *same partition* over the compared cells. GNU using red where
-//      Neomacs uses green is fine; GNU colouring two runs the same while
-//      Neomacs colours them differently is a divergence.
-// minus an explicit, shrinking allow-list of known parity gaps, with chrome /
-// non-deterministic rows masked.
-
-/// A cell allowed to diverge from GNU, with a human-readable reason. The
-/// allow-list is the *visible, shrinking* parity backlog: a green run means
-/// "no new divergence", not "no divergence".
-#[derive(Debug, Clone)]
-pub struct ExpectedDivergence {
-    pub row: u16,
-    pub col: u16,
-    pub reason: &'static str,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct DisplayAttributes {
+    foreground: DisplayColor,
+    background: DisplayColor,
+    bold: bool,
+    dim: bool,
+    italic: bool,
+    underline: bool,
+    inverse: bool,
 }
 
-/// Options for [`compare_grids_strict`] / [`assert_grids_strict`].
-pub struct StrictGridOptions {
-    /// Rows skipped entirely (chrome: mode-line, header-line, echo area, and
-    /// any non-deterministic region).
-    pub masked_rows: Vec<u16>,
-    /// Restrict comparison to this row window (e.g. the text area). `None`
-    /// compares every unmasked row.
-    pub row_range: Option<std::ops::Range<u16>>,
-    /// Compare face identity (the class partition) in addition to characters.
-    pub compare_faces: bool,
-    /// Cells permitted to differ.
-    pub allow: Vec<ExpectedDivergence>,
-}
-
-impl Default for StrictGridOptions {
-    fn default() -> Self {
+impl From<&vt100::Cell> for DisplayAttributes {
+    fn from(cell: &vt100::Cell) -> Self {
         Self {
-            masked_rows: Vec::new(),
-            row_range: None,
-            compare_faces: true,
-            allow: Vec::new(),
+            foreground: cell.fgcolor().into(),
+            background: cell.bgcolor().into(),
+            bold: cell.bold(),
+            dim: cell.dim(),
+            italic: cell.italic(),
+            underline: cell.underline(),
+            inverse: cell.inverse(),
         }
     }
 }
 
-/// What kind of strict (contract-level) divergence a cell exhibits.
-#[derive(Debug, PartialEq, Eq)]
-pub enum StrictDiffKind {
-    /// Different character — a logical-layout violation.
-    Char,
-    /// Different face *identity* — the cell's colour-class partition differs
-    /// from GNU's. Palette-independent: NOT a raw-colour comparison.
-    FaceClass,
+/// The attributes which can actually paint one terminal cell.
+///
+/// GNU clears to end of line after selecting only the background component of
+/// the active face (`tty_clear_end_of_line` calls `tty_background_highlight`).
+/// Terminal emulators nevertheless retain irrelevant foreground/weight state
+/// on those blank cells.  Keeping blank and glyph paint as distinct enum
+/// variants prevents terminal write history from masquerading as a rendered
+/// face difference while making every visibly meaningful blank style explicit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum VisibleCellStyle {
+    Glyph(DisplayAttributes),
+    Blank(VisibleBlankStyle),
 }
 
-/// One unexpected (non-allow-listed) divergence.
-#[derive(Debug)]
-pub struct StrictDiff {
-    pub row: u16,
-    pub col: u16,
-    pub kind: StrictDiffKind,
-    pub gnu_char: String,
-    pub neo_char: String,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum VisibleBlankStyle {
+    Background(DisplayColor),
+    Underlined {
+        foreground: DisplayColor,
+        background: DisplayColor,
+        bold: bool,
+        dim: bool,
+    },
+    Inverted(DisplayAttributes),
 }
 
-/// Compare two screens strictly on the contract axis (exact chars + face-class
-/// partition) over the unmasked text area, minus the allow-list. Returns the
-/// unexpected divergences (empty == strict match).
-pub fn compare_grids_strict(
-    gnu: &vt100::Screen,
-    neo: &vt100::Screen,
-    opts: &StrictGridOptions,
-) -> Vec<StrictDiff> {
-    let is_allowed = |r: u16, c: u16| opts.allow.iter().any(|a| a.row == r && a.col == c);
-    let in_range = |r: u16| {
-        opts.row_range
-            .as_ref()
-            .is_none_or(|range| range.contains(&r))
-    };
-
-    // Per-grid canonical face-class labels, assigned by first appearance in a
-    // fixed row-major traversal. Same traversal on both grids => labels agree
-    // iff the partitions agree (palette-independent).
-    let mut gnu_class: std::collections::HashMap<(String, String), usize> = Default::default();
-    let mut neo_class: std::collections::HashMap<(String, String), usize> = Default::default();
-    let mut diffs = Vec::new();
-
-    for row in 0..ROWS {
-        if opts.masked_rows.contains(&row) || !in_range(row) {
-            continue;
+impl From<&vt100::Cell> for VisibleCellStyle {
+    fn from(cell: &vt100::Cell) -> Self {
+        let attributes = DisplayAttributes::from(cell);
+        let blank = !cell.is_wide_continuation()
+            && cell.contents().chars().all(|character| character == ' ');
+        if !blank {
+            return Self::Glyph(attributes);
         }
-        for col in 0..COLS {
-            let (gc, nc) = match (gnu.cell(row, col), neo.cell(row, col)) {
-                (Some(g), Some(n)) => (g, n),
-                _ => continue,
-            };
-            if is_allowed(row, col) {
-                continue;
-            }
 
-            // Normalise blank-cell representation: GNU leaves trailing/blank
-            // cells *unwritten* (vt100 returns ""), while Neomacs writes explicit
-            // spaces. Both mean "blank", so treat "" and " " as equal — this is a
-            // terminal-output optimisation, not a logical-display difference.
-            let g_char = if gc.contents().is_empty() {
-                " "
-            } else {
-                gc.contents()
-            };
-            let n_char = if nc.contents().is_empty() {
-                " "
-            } else {
-                nc.contents()
-            };
-            if g_char != n_char {
-                diffs.push(StrictDiff {
-                    row,
-                    col,
-                    kind: StrictDiffKind::Char,
-                    gnu_char: g_char.to_string(),
-                    neo_char: n_char.to_string(),
+        let visible = if attributes.inverse {
+            // Inverse video makes the nominal foreground the painted
+            // background, so none of its attributes are safely discardable.
+            VisibleBlankStyle::Inverted(attributes)
+        } else if attributes.underline {
+            // Underline paints ink even beneath a space.  Italic cannot affect
+            // an empty cell, but foreground intensity can affect the line.
+            VisibleBlankStyle::Underlined {
+                foreground: attributes.foreground,
+                background: attributes.background,
+                bold: attributes.bold,
+                dim: attributes.dim,
+            }
+        } else {
+            VisibleBlankStyle::Background(attributes.background)
+        };
+        Self::Blank(visible)
+    }
+}
+
+/// One semantic difference between the GNU Emacs and Neomacs displays.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DisplayDifference {
+    Geometry {
+        gnu: DisplaySize,
+        neomacs: DisplaySize,
+    },
+    TextRow {
+        row: TuiRow,
+        gnu: String,
+        neomacs: String,
+    },
+    StyleClass {
+        cell: DisplayCell,
+        gnu_class: DisplayCell,
+        neomacs_class: DisplayCell,
+    },
+    RowWrap {
+        row: TuiRow,
+        gnu: bool,
+        neomacs: bool,
+    },
+    CursorPosition {
+        gnu: DisplayCell,
+        neomacs: DisplayCell,
+    },
+    CursorVisibility {
+        gnu: CursorVisibility,
+        neomacs: CursorVisibility,
+    },
+}
+
+/// The complete result of comparing two terminal displays.
+#[derive(Debug, PartialEq, Eq)]
+pub struct DisplayReport {
+    unexpected: Vec<DisplayDifference>,
+}
+
+impl DisplayReport {
+    pub fn is_satisfied(&self) -> bool {
+        self.unexpected.is_empty()
+    }
+
+    pub fn unexpected(&self) -> &[DisplayDifference] {
+        &self.unexpected
+    }
+}
+
+/// Compare the complete visible state of two virtual terminal screens.
+pub fn compare_displays(gnu: &vt100::Screen, neomacs: &vt100::Screen) -> DisplayReport {
+    compare_displays_with_environment(gnu, neomacs, None)
+}
+
+/// Compare two displays after canonicalizing only values declared by a
+/// paired fixture environment.
+pub fn compare_displays_in_environment(
+    gnu: &vt100::Screen,
+    neomacs: &vt100::Screen,
+    environment: &PairedDisplayEnvironment,
+) -> DisplayReport {
+    compare_displays_with_environment(gnu, neomacs, Some(environment))
+}
+
+/// Compare the displays of a paired editor session under their automatically
+/// captured isolated HOME and TMPDIR mappings.
+pub fn compare_session_displays(gnu: &TuiSession, neomacs: &TuiSession) -> DisplayReport {
+    let environment = PairedDisplayEnvironment::from_sessions(gnu, neomacs);
+    compare_displays_in_environment(gnu.screen(), neomacs.screen(), &environment)
+}
+
+fn compare_displays_with_environment(
+    gnu: &vt100::Screen,
+    neomacs: &vt100::Screen,
+    environment: Option<&PairedDisplayEnvironment>,
+) -> DisplayReport {
+    let gnu_size = DisplaySize::from(gnu.size());
+    let neomacs_size = DisplaySize::from(neomacs.size());
+    let mut unexpected = Vec::new();
+    if gnu_size != neomacs_size {
+        unexpected.push(DisplayDifference::Geometry {
+            gnu: gnu_size,
+            neomacs: neomacs_size,
+        });
+    }
+    for row in 0..gnu_size.rows.min(neomacs_size.rows) {
+        let gnu_text = visible_row_text(gnu, row, gnu_size.columns);
+        let neomacs_text = visible_row_text(neomacs, row, neomacs_size.columns);
+        let text_matches = environment.is_some_and(|environment| {
+            environment.normalize(DisplayPeer::Gnu, &gnu_text)
+                == environment.normalize(DisplayPeer::Neomacs, &neomacs_text)
+        }) || gnu_text == neomacs_text;
+        if !text_matches {
+            unexpected.push(DisplayDifference::TextRow {
+                row: TuiRow::absolute(row.into()),
+                gnu: gnu_text,
+                neomacs: neomacs_text,
+            });
+        }
+        let gnu_wrapped = gnu.row_wrapped(row);
+        let neomacs_wrapped = neomacs.row_wrapped(row);
+        if gnu_wrapped != neomacs_wrapped {
+            unexpected.push(DisplayDifference::RowWrap {
+                row: TuiRow::absolute(row.into()),
+                gnu: gnu_wrapped,
+                neomacs: neomacs_wrapped,
+            });
+        }
+    }
+    let mut gnu_style_origins = std::collections::HashMap::new();
+    let mut neomacs_style_origins = std::collections::HashMap::new();
+    for row in 0..gnu_size.rows.min(neomacs_size.rows) {
+        for column in 0..gnu_size.columns.min(neomacs_size.columns) {
+            let at = DisplayCell { row, column };
+            let gnu_cell = gnu.cell(row, column).expect("cell inside GNU geometry");
+            let neomacs_cell = neomacs
+                .cell(row, column)
+                .expect("cell inside Neomacs geometry");
+            let gnu_class = *gnu_style_origins
+                .entry(VisibleCellStyle::from(gnu_cell))
+                .or_insert(at);
+            let neomacs_class = *neomacs_style_origins
+                .entry(VisibleCellStyle::from(neomacs_cell))
+                .or_insert(at);
+            if gnu_class != neomacs_class {
+                unexpected.push(DisplayDifference::StyleClass {
+                    cell: at,
+                    gnu_class,
+                    neomacs_class,
                 });
             }
-
-            if opts.compare_faces {
-                // Label classes by first appearance, but ANCHOR the
-                // default/background class (Default fg + Default bg) to 0 in both
-                // grids. Otherwise a single diverging colour shifts every later
-                // label and makes blank runs cascade into thousands of false
-                // diffs. With the anchor, only the genuinely re-partitioned
-                // (coloured) cells are reported.
-                let label = |classes: &mut std::collections::HashMap<(String, String), usize>,
-                             fg: vt100::Color,
-                             bg: vt100::Color|
-                 -> usize {
-                    let key = (format!("{fg:?}"), format!("{bg:?}"));
-                    if key.0 == "Default" && key.1 == "Default" {
-                        return 0;
-                    }
-                    let next = classes.len() + 1;
-                    *classes.entry(key).or_insert(next)
-                };
-                let g_label = label(&mut gnu_class, gc.fgcolor(), gc.bgcolor());
-                let n_label = label(&mut neo_class, nc.fgcolor(), nc.bgcolor());
-                if g_label != n_label {
-                    diffs.push(StrictDiff {
-                        row,
-                        col,
-                        kind: StrictDiffKind::FaceClass,
-                        gnu_char: gc.contents().to_string(),
-                        neo_char: nc.contents().to_string(),
-                    });
-                }
-            }
         }
     }
-    diffs
+    let (gnu_cursor_row, gnu_cursor_column) = gnu.cursor_position();
+    let (neomacs_cursor_row, neomacs_cursor_column) = neomacs.cursor_position();
+    let gnu_cursor = DisplayCell {
+        row: gnu_cursor_row,
+        column: gnu_cursor_column,
+    };
+    let neomacs_cursor = DisplayCell {
+        row: neomacs_cursor_row,
+        column: neomacs_cursor_column,
+    };
+    if gnu_cursor != neomacs_cursor {
+        unexpected.push(DisplayDifference::CursorPosition {
+            gnu: gnu_cursor,
+            neomacs: neomacs_cursor,
+        });
+    }
+    let gnu_cursor_visibility = CursorVisibility::from_hidden(gnu.hide_cursor());
+    let neomacs_cursor_visibility = CursorVisibility::from_hidden(neomacs.hide_cursor());
+    if gnu_cursor_visibility != neomacs_cursor_visibility {
+        unexpected.push(DisplayDifference::CursorVisibility {
+            gnu: gnu_cursor_visibility,
+            neomacs: neomacs_cursor_visibility,
+        });
+    }
+    DisplayReport { unexpected }
 }
 
-/// Assert a strict (contract-level) grid match; panics with a readable dump of
-/// the first divergences otherwise.
-pub fn assert_grids_strict(
-    label: &str,
-    gnu: &vt100::Screen,
-    neo: &vt100::Screen,
-    opts: &StrictGridOptions,
-) {
-    let diffs = compare_grids_strict(gnu, neo, opts);
-    if diffs.is_empty() {
-        return;
-    }
-    use std::fmt::Write as _;
-    let n_char = diffs
-        .iter()
-        .filter(|d| d.kind == StrictDiffKind::Char)
-        .count();
-    let n_face = diffs.len() - n_char;
-    let mut msg = format!(
-        "{label}: {} unexpected strict divergence(s) vs GNU ({n_char} char, {n_face} face-class):\n",
-        diffs.len()
-    );
-    for d in diffs.iter().take(40) {
-        let _ = writeln!(
-            msg,
-            "  ({:>2},{:>3}) {:?}: GNU {:?} / NEO {:?}",
-            d.row, d.col, d.kind, d.gnu_char, d.neo_char
-        );
-    }
-    if diffs.len() > 40 {
-        let _ = writeln!(msg, "  … and {} more", diffs.len() - 40);
-    }
-    panic!("{msg}");
-}
-
-/// Pretty-print row diffs to stderr (useful in test assertions).
-pub fn print_row_diffs(diffs: &[RowDiff]) {
-    for d in diffs {
-        eprintln!("  row {:2}:", d.row);
-        eprintln!("    GNU: |{}|", d.gnu);
-        eprintln!("    NEO: |{}|", d.neo);
-    }
+/// Return the visible text of one row, independent of terminal write history.
+///
+/// `vt100::Screen::contents_between` preserves written trailing spaces while
+/// omitting never-written trailing cells.  Those states are observably
+/// different on the wire but display the same blank cells.  `ExactDisplay`
+/// compares the rendered display (and separately compares every cell's style
+/// class), so it canonicalizes only trailing ASCII blanks.  Tests that need
+/// exact write-state parity use [`RawTerminalSnapshot`] instead.
+fn visible_row_text(screen: &vt100::Screen, row: u16, columns: u16) -> String {
+    screen
+        .contents_between(row, 0, row, columns)
+        .trim_end_matches(' ')
+        .to_string()
 }
 
 #[cfg(test)]
-mod strict_grid_tests {
+mod exact_display_tests {
     use super::*;
 
-    /// Render SGR-coloured `bytes` onto a full-size screen, starting at home.
-    fn screen(bytes: &[u8]) -> vt100::Parser {
-        let mut p = vt100::Parser::new(ROWS, COLS, 0);
-        p.process(b"\x1b[H");
-        p.process(bytes);
-        p
+    fn screen(rows: u16, cols: u16, bytes: &[u8]) -> vt100::Parser {
+        let mut parser = vt100::Parser::new(rows, cols, 0);
+        parser.process(bytes);
+        parser
     }
 
     #[test]
-    fn face_class_is_palette_independent() {
-        // Same partition {col0,col1},{col2}; different palettes (red/blue vs green/yellow).
-        let gnu = screen(b"\x1b[31mAB\x1b[34mC\x1b[0m");
-        let neo = screen(b"\x1b[32mAB\x1b[33mC\x1b[0m");
-        let diffs = compare_grids_strict(gnu.screen(), neo.screen(), &StrictGridOptions::default());
-        assert!(
-            diffs.is_empty(),
-            "same partition with a different palette must match; got {diffs:?}"
-        );
+    fn exact_display_rejects_different_terminal_geometry() {
+        let gnu = screen(3, 8, b"same");
+        let neo = screen(4, 8, b"same");
+
+        let report = compare_displays(gnu.screen(), neo.screen());
+
+        assert!(report.unexpected().iter().any(|difference| matches!(
+            difference,
+            DisplayDifference::Geometry {
+                gnu: DisplaySize {
+                    rows: 3,
+                    columns: 8
+                },
+                neomacs: DisplaySize {
+                    rows: 4,
+                    columns: 8
+                }
+            }
+        )));
     }
 
     #[test]
-    fn face_class_catches_repartition_without_cascading() {
-        // GNU separates C (blue) from A,B (red); NEO colours all three the same.
-        let gnu = screen(b"\x1b[31mAB\x1b[34mC\x1b[0m");
-        let neo = screen(b"\x1b[32mABC\x1b[0m");
-        let diffs = compare_grids_strict(gnu.screen(), neo.screen(), &StrictGridOptions::default());
-        // Exactly the C cell diverges — the (anchored) default/blank cells do NOT cascade.
+    fn exact_display_rejects_a_different_text_row() {
+        let gnu = screen(2, 8, b"alpha");
+        let neo = screen(2, 8, b"alpHa");
+
+        let report = compare_displays(gnu.screen(), neo.screen());
+
         assert_eq!(
-            diffs.len(),
-            1,
-            "only the repartitioned cell should diverge; got {diffs:?}"
-        );
-        assert_eq!(diffs[0].kind, StrictDiffKind::FaceClass);
-        assert_eq!((diffs[0].row, diffs[0].col), (0, 2));
-    }
-
-    #[test]
-    fn char_diff_caught_and_allowlist_suppresses() {
-        let gnu = screen(b"hello");
-        let neo = screen(b"hellX"); // differ at col 4
-        let plain = compare_grids_strict(gnu.screen(), neo.screen(), &StrictGridOptions::default());
-        let chars: Vec<_> = plain
-            .iter()
-            .filter(|d| d.kind == StrictDiffKind::Char)
-            .collect();
-        assert_eq!(chars.len(), 1, "one char diff expected; got {plain:?}");
-        assert_eq!((chars[0].row, chars[0].col), (0, 4));
-
-        // Allow-listing that cell makes the comparison clean.
-        let opts = StrictGridOptions {
-            allow: vec![ExpectedDivergence {
-                row: 0,
-                col: 4,
-                reason: "intentional test divergence",
-            }],
-            ..Default::default()
-        };
-        assert!(compare_grids_strict(gnu.screen(), neo.screen(), &opts).is_empty());
-    }
-
-    #[test]
-    fn blank_cell_representation_is_normalised() {
-        // GNU leaves trailing cells unwritten (""); NEO writes explicit spaces.
-        let gnu = screen(b"AB"); // cols 2.. unwritten -> ""
-        let mut neo = vt100::Parser::new(ROWS, COLS, 0);
-        neo.process(b"\x1b[HAB");
-        neo.process(b"\x1b[1;3H   "); // overwrite cols 2..5 with spaces
-        let diffs = compare_grids_strict(gnu.screen(), neo.screen(), &StrictGridOptions::default());
-        assert!(
-            diffs.is_empty(),
-            "\"\" and \" \" blanks must compare equal; got {diffs:?}"
+            report.unexpected(),
+            &[DisplayDifference::TextRow {
+                row: TuiRow::absolute(0),
+                gnu: "alpha".to_string(),
+                neomacs: "alpHa".to_string(),
+            }]
         );
     }
-}
 
-#[cfg(test)]
-mod tui_contract_tests {
-    use super::*;
+    #[test]
+    fn paired_environment_normalizes_only_its_declared_session_paths() {
+        let gnu = screen(2, 80, b"Wrote /tmp/tui-home-gnu-ABC123/example.txt");
+        let neo = screen(2, 80, b"Wrote /tmp/tui-home-neo-XYZ789/example.txt");
+        let environment = PairedDisplayEnvironment::new()
+            .with_path_pair("/tmp/tui-home-gnu-ABC123", "/tmp/tui-home-neo-XYZ789");
 
-    fn grid(rows: &[&str]) -> Vec<String> {
-        rows.iter().map(|row| (*row).to_string()).collect()
+        let raw = compare_displays(gnu.screen(), neo.screen());
+        let normalized = compare_displays_in_environment(gnu.screen(), neo.screen(), &environment);
+
+        assert_eq!(raw.unexpected().len(), 1);
+        assert!(normalized.is_satisfied(), "{normalized:#?}");
     }
 
     #[test]
-    fn exact_text_contract_rejects_a_changed_row() {
-        let gnu = grid(&["same", "GNU value", "same"]);
-        let neo = grid(&["same", "Neomacs value changed", "same"]);
+    fn exact_display_treats_written_and_unwritten_blank_cells_as_same_display() {
+        let gnu = screen(1, 8, b"abc");
+        let neo = screen(1, 8, b"abc   \x1b[1;4H");
 
-        let report = compare_text_grids_with_contract(&gnu, &neo, &TuiContract::ExactText);
-
-        assert!(!report.is_satisfied());
-        assert_eq!(report.unexpected_rows(), vec![1]);
-        assert!(report.stale_expectations().is_empty());
-    }
-
-    #[test]
-    fn exact_text_contract_rejects_an_additional_blank_row() {
-        let gnu = grid(&["same"]);
-        let neo = grid(&["same", ""]);
-
-        let report = compare_text_grids_with_contract(&gnu, &neo, &TuiContract::ExactText);
-
-        assert!(!report.is_satisfied());
-        assert_eq!(report.unexpected_rows(), vec![1]);
-    }
-
-    #[test]
-    fn exact_text_contract_does_not_hide_boot_information_rows() {
-        let gnu = grid(&["Copyright regression"]);
-        let neo = grid(&["Copyright silently changed"]);
-
-        let report = compare_text_grids_with_contract(&gnu, &neo, &TuiContract::ExactText);
-
-        assert!(!report.is_satisfied());
-        assert_eq!(report.unexpected_rows(), vec![0]);
-    }
-
-    #[test]
-    fn known_text_divergence_matches_only_its_declared_row() {
-        let gnu = grid(&["same", "GNU value", "same"]);
-        let neo = grid(&["same", "Neomacs value changed", "same"]);
-        let expected = [ExpectedTextDivergence {
-            row: TuiRow::absolute(1),
-            gnu: "GNU value",
-            neomacs: "Neomacs value changed",
-            reason: "tracked renderer difference",
-        }];
-
-        let report = compare_text_grids_with_contract(
-            &gnu,
-            &neo,
-            &TuiContract::KnownTextDivergences(&expected),
-        );
+        let report = compare_displays(gnu.screen(), neo.screen());
 
         assert!(report.is_satisfied(), "{report:#?}");
     }
 
     #[test]
-    fn known_text_divergence_reports_wrong_row_and_stale_allowance() {
-        let gnu = grid(&["same", "GNU value", "same"]);
-        let neo = grid(&["same", "Neomacs value changed", "same"]);
-        let expected = [ExpectedTextDivergence {
-            row: TuiRow::absolute(2),
-            gnu: "GNU value",
-            neomacs: "Neomacs value changed",
-            reason: "tracked renderer difference",
-        }];
+    fn exact_display_includes_text_attributes_in_face_classes() {
+        let gnu = screen(1, 4, b"\x1b[31mA\x1b[1mB");
+        let neo = screen(1, 4, b"\x1b[32mAB");
 
-        let report = compare_text_grids_with_contract(
-            &gnu,
-            &neo,
-            &TuiContract::KnownTextDivergences(&expected),
-        );
+        let report = compare_displays(gnu.screen(), neo.screen());
 
-        assert!(!report.is_satisfied());
-        assert_eq!(report.unexpected_rows(), vec![1]);
-        assert_eq!(report.stale_expectations(), &[expected[0].clone()]);
-    }
-
-    #[test]
-    fn known_text_divergence_rejects_changed_contents_on_the_declared_row() {
-        let gnu = grid(&["same", "GNU value", "same"]);
-        let neo = grid(&["same", "a worse Neomacs value", "same"]);
-        let expected = [ExpectedTextDivergence {
-            row: TuiRow::absolute(1),
-            gnu: "GNU value",
-            neomacs: "Neomacs value changed",
-            reason: "tracked renderer difference",
-        }];
-
-        let report = compare_text_grids_with_contract(
-            &gnu,
-            &neo,
-            &TuiContract::KnownTextDivergences(&expected),
-        );
-
-        assert!(!report.is_satisfied());
-        assert_eq!(report.unexpected_rows(), vec![1]);
-        assert_eq!(report.stale_expectations(), &[expected[0].clone()]);
-    }
-
-    #[test]
-    fn legacy_numeric_row_budget_has_a_shrinking_ratchet() {
-        fn rust_sources_below(directory: &Path, sources: &mut Vec<PathBuf>) {
-            for entry in std::fs::read_dir(directory).expect("read TUI test source directory") {
-                let path = entry.expect("read TUI test source entry").path();
-                if path.is_dir() {
-                    rust_sources_below(&path, sources);
-                } else if path.extension().is_some_and(|extension| extension == "rs") {
-                    sources.push(path);
-                }
+        assert!(report.unexpected().iter().any(|difference| matches!(
+            difference,
+            DisplayDifference::StyleClass {
+                cell: DisplayCell { row: 0, column: 1 },
+                gnu_class: DisplayCell { row: 0, column: 1 },
+                neomacs_class: DisplayCell { row: 0, column: 0 },
             }
-        }
+        )));
+    }
 
-        let mut sources = Vec::new();
-        rust_sources_below(
-            &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests"),
-            &mut sources,
+    #[test]
+    fn exact_display_style_classes_are_palette_independent() {
+        let gnu = screen(1, 4, b"\x1b[31mAB\x1b[34mC\x1b[0m");
+        let neo = screen(1, 4, b"\x1b[32mAB\x1b[33mC\x1b[0m");
+
+        let report = compare_displays(gnu.screen(), neo.screen());
+
+        assert!(report.is_satisfied(), "{report:#?}");
+    }
+
+    #[test]
+    fn exact_display_ignores_foreground_only_state_on_blank_cells() {
+        // GNU's `tty_clear_end_of_line` clears while the current face's
+        // foreground is still active.  A renderer may reset that foreground
+        // first; with the default background the two blank remainders are
+        // visually identical even though their terminal cells differ.
+        let gnu = screen(1, 8, b"\x1b[31mabc\x1b[K");
+        let neo = screen(1, 8, b"\x1b[32mabc\x1b[0m\x1b[K");
+
+        let report = compare_displays(gnu.screen(), neo.screen());
+
+        assert!(report.is_satisfied(), "{report:#?}");
+    }
+
+    #[test]
+    fn exact_display_retains_visible_background_state_on_blank_cells() {
+        let gnu = screen(1, 8, b"\x1b[1;2H\x1b[31mabc\x1b[44m   ");
+        let neo = screen(1, 8, b"\x1b[1;2H\x1b[32mabc\x1b[0m   ");
+
+        let report = compare_displays(gnu.screen(), neo.screen());
+
+        assert!(report.unexpected().iter().any(|difference| matches!(
+            difference,
+            DisplayDifference::StyleClass {
+                cell: DisplayCell { row: 0, column: 4 },
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn exact_display_retains_visible_underline_state_on_blank_cells() {
+        let gnu = screen(1, 8, b"\x1b[1;2H\x1b[31mabc\x1b[4m   ");
+        let neo = screen(1, 8, b"\x1b[1;2H\x1b[32mabc\x1b[0m   ");
+
+        let report = compare_displays(gnu.screen(), neo.screen());
+
+        assert!(report.unexpected().iter().any(|difference| matches!(
+            difference,
+            DisplayDifference::StyleClass {
+                cell: DisplayCell { row: 0, column: 4 },
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn exact_display_rejects_different_soft_wrap_state() {
+        let gnu = screen(2, 4, b"abcde");
+        let neo = screen(2, 4, b"abcd\x1b[2;1He");
+
+        let report = compare_displays(gnu.screen(), neo.screen());
+
+        assert!(report.unexpected().contains(&DisplayDifference::RowWrap {
+            row: TuiRow::absolute(0),
+            gnu: true,
+            neomacs: false,
+        }));
+    }
+
+    #[test]
+    fn exact_display_rejects_a_different_cursor_position() {
+        let gnu = screen(2, 8, b"abc");
+        let neo = screen(2, 8, b"abc\x1b[1;1H");
+
+        let report = compare_displays(gnu.screen(), neo.screen());
+
+        assert!(
+            report
+                .unexpected()
+                .contains(&DisplayDifference::CursorPosition {
+                    gnu: DisplayCell { row: 0, column: 3 },
+                    neomacs: DisplayCell { row: 0, column: 0 },
+                })
         );
-        let source = sources
-            .iter()
-            .map(|path| std::fs::read_to_string(path).expect("read TUI test source"))
-            .collect::<String>();
+    }
 
-        let legacy_budgets = source
-            .split("assert_pair_nearly_matches(")
-            .skip(1)
-            .filter_map(|suffix| suffix.split_once(");").map(|(arguments, _)| arguments))
-            .map(|arguments| arguments.trim_end().trim_end_matches(','))
-            .filter_map(|arguments| arguments.rsplit_once(',').map(|(_, budget)| budget.trim()))
-            .filter_map(|budget| budget.parse::<usize>().ok())
-            .collect::<Vec<_>>();
+    #[test]
+    fn exact_display_rejects_different_cursor_visibility() {
+        let gnu = screen(2, 8, b"abc\x1b[?25l");
+        let neo = screen(2, 8, b"abc");
 
-        assert_eq!(
-            legacy_budgets.len(),
-            796,
-            "migrate an existing legacy call instead of adding one"
-        );
-        assert_eq!(
-            legacy_budgets.iter().sum::<usize>(),
-            1685,
-            "legacy numeric row budgets may only shrink"
+        let report = compare_displays(gnu.screen(), neo.screen());
+
+        assert!(
+            report
+                .unexpected()
+                .contains(&DisplayDifference::CursorVisibility {
+                    gnu: CursorVisibility::Hidden,
+                    neomacs: CursorVisibility::Visible,
+                })
         );
     }
 }

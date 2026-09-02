@@ -90,6 +90,11 @@ fn project_find_file_via_mx_opens_file_relative_to_git_root() {
                 .iter()
                 .any(|row| row.contains("(defun neo-project-beta"))
     });
+    assert_pair_exact_display(
+        "project_find_file_via_mx_opens_file_relative_to_git_root",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -112,4 +117,9 @@ fn project_dired_via_mx_opens_project_root_listing() {
             && grid.iter().any(|row| row.contains("README.md"))
             && grid.iter().any(|row| row.contains("src"))
     });
+    assert_pair_exact_display(
+        "project_dired_via_mx_opens_project_root_listing",
+        &gnu,
+        &neo,
+    );
 }

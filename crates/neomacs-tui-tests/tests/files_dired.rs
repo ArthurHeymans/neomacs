@@ -69,7 +69,7 @@ fn find_file_via_cx_cf() {
         "alpha line\nbeta line\n",
         "C-x C-f",
     );
-    assert_pair_nearly_matches("find_file_via_cx_cf", &gnu, &neo, 2);
+    assert_pair_exact_display("find_file_via_cx_cf", &gnu, &neo);
 }
 
 #[test]
@@ -99,11 +99,10 @@ fn find_file_literally_via_mx_visits_file_without_modes() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "find_file_literally_via_mx_visits_file_without_modes",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -137,11 +136,10 @@ fn find_file_literally_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "find_file_literally_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -164,11 +162,10 @@ fn find_file_tab_completion_via_cx_cf_completes_unique_home_file() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "find_file_tab_completion_via_cx_cf_completes_unique_home_file/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -182,11 +179,10 @@ fn find_file_tab_completion_via_cx_cf_completes_unique_home_file() {
     gnu.read_until(Duration::from_secs(6), completed);
     neo.read_until(Duration::from_secs(8), completed);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "find_file_tab_completion_via_cx_cf_completes_unique_home_file/completed",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "RET");
@@ -198,11 +194,10 @@ fn find_file_tab_completion_via_cx_cf_completes_unique_home_file() {
     gnu.read_until(Duration::from_secs(6), ready);
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "find_file_tab_completion_via_cx_cf_completes_unique_home_file",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -237,11 +232,10 @@ fn find_file_minibuffer_del_deletes_previous_character() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "find_file_minibuffer_del_deletes_previous_character",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -274,11 +268,10 @@ fn find_file_empty_minibuffer_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "find_file_empty_minibuffer_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -311,11 +304,10 @@ fn find_file_minibuffer_ctrl_h_does_not_delete_previous_character() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "find_file_minibuffer_ctrl_h_does_not_delete_previous_character",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -340,11 +332,10 @@ fn keyboard_quit_after_find_file_ctrl_h_returns_to_scratch() {
     neo.read_until(Duration::from_secs(8), scratch_only);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "keyboard_quit_after_find_file_ctrl_h_returns_to_scratch",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -380,7 +371,7 @@ fn list_directory_via_cx_cd_lists_entries() {
     neo.read_until(Duration::from_secs(20), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("list_directory_via_cx_cd_lists_entries", &gnu, &neo, 2);
+    assert_pair_exact_display("list_directory_via_cx_cd_lists_entries", &gnu, &neo);
 }
 
 #[test]
@@ -390,12 +381,7 @@ fn dired_open_directory_via_cx_d_lists_entries() {
 
     open_shared_dired(&mut gnu, &mut neo, &dir);
 
-    assert_pair_matches_contract(
-        "dired_open_directory_via_cx_d_lists_entries",
-        &gnu,
-        &neo,
-        &TuiContract::ExactText,
-    );
+    assert_pair_exact_display("dired_open_directory_via_cx_d_lists_entries", &gnu, &neo);
 }
 
 #[test]
@@ -415,12 +401,7 @@ fn dired_mark_flag_and_unmark_current_file() {
     gnu.read_until(Duration::from_secs(6), alpha_marked);
     neo.read_until(Duration::from_secs(8), alpha_marked);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
-        "dired_mark_flag_and_unmark_current_file/mark",
-        &gnu,
-        &neo,
-        0,
-    );
+    assert_pair_exact_display("dired_mark_flag_and_unmark_current_file/mark", &gnu, &neo);
 
     send_both(&mut gnu, &mut neo, "DEL");
     let alpha_unmarked = |grid: &[String]| {
@@ -433,12 +414,7 @@ fn dired_mark_flag_and_unmark_current_file() {
     gnu.read_until(Duration::from_secs(6), alpha_unmarked);
     neo.read_until(Duration::from_secs(8), alpha_unmarked);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
-        "dired_mark_flag_and_unmark_current_file/unmark",
-        &gnu,
-        &neo,
-        0,
-    );
+    assert_pair_exact_display("dired_mark_flag_and_unmark_current_file/unmark", &gnu, &neo);
 
     dired_goto_file(&mut gnu, &mut neo, &beta);
     send_both(&mut gnu, &mut neo, "d");
@@ -449,12 +425,7 @@ fn dired_mark_flag_and_unmark_current_file() {
     gnu.read_until(Duration::from_secs(6), beta_flagged);
     neo.read_until(Duration::from_secs(8), beta_flagged);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
-        "dired_mark_flag_and_unmark_current_file/flag",
-        &gnu,
-        &neo,
-        0,
-    );
+    assert_pair_exact_display("dired_mark_flag_and_unmark_current_file/flag", &gnu, &neo);
 
     send_both(&mut gnu, &mut neo, "DEL");
     let beta_unflagged = |grid: &[String]| {
@@ -467,12 +438,7 @@ fn dired_mark_flag_and_unmark_current_file() {
     gnu.read_until(Duration::from_secs(6), beta_unflagged);
     neo.read_until(Duration::from_secs(8), beta_unflagged);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
-        "dired_mark_flag_and_unmark_current_file/unflag",
-        &gnu,
-        &neo,
-        0,
-    );
+    assert_pair_exact_display("dired_mark_flag_and_unmark_current_file/unflag", &gnu, &neo);
 }
 
 #[test]
@@ -493,12 +459,7 @@ fn dired_find_file_via_ret_visits_current_file() {
     neo.read_until(Duration::from_secs(60), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_matches_contract(
-        "dired_find_file_via_ret_visits_current_file",
-        &gnu,
-        &neo,
-        &TuiContract::ExactText,
-    );
+    assert_pair_exact_display("dired_find_file_via_ret_visits_current_file", &gnu, &neo);
 }
 
 #[test]
@@ -531,11 +492,10 @@ fn dired_jump_via_cx_cj_opens_parent_listing_on_current_file() {
     gnu.read_until(Duration::from_secs(10), dired_ready);
     neo.read_until(Duration::from_secs(20), dired_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "dired_jump_via_cx_cj_opens_parent_listing_on_current_file/dired",
         &gnu,
         &neo,
-        0,
     );
 
     send_both(&mut gnu, &mut neo, "RET");
@@ -543,11 +503,10 @@ fn dired_jump_via_cx_cj_opens_parent_listing_on_current_file() {
     neo.read_until(Duration::from_secs(8), file_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "dired_jump_via_cx_cj_opens_parent_listing_on_current_file/revisit",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -583,11 +542,10 @@ fn dired_jump_other_window_via_cx4_cj_keeps_file_and_listing_visible() {
     neo.read_until(Duration::from_secs(20), jump_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "dired_jump_other_window_via_cx4_cj_keeps_file_and_listing_visible",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -631,11 +589,10 @@ fn dired_copy_current_file_via_c_copies_file_and_updates_listing() {
         "alpha body\n"
     );
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "dired_copy_current_file_via_c_copies_file_and_updates_listing",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -679,11 +636,10 @@ fn dired_rename_current_file_via_r_moves_file_and_updates_listing() {
         "Neomacs should rename beta.org to beta-renamed.org"
     );
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "dired_rename_current_file_via_r_moves_file_and_updates_listing",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -719,11 +675,10 @@ fn dired_delete_current_file_via_d_confirms_and_removes_listing() {
     neo.read(Duration::from_secs(1));
     assert!(!zeta.exists(), "Neomacs should delete zeta.log from disk");
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "dired_delete_current_file_via_d_confirms_and_removes_listing",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -736,11 +691,10 @@ fn make_directory_via_mx_creates_directory_on_disk() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "make_directory_via_mx_creates_directory_on_disk/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -750,11 +704,10 @@ fn make_directory_via_mx_creates_directory_on_disk() {
     gnu.read_until(Duration::from_secs(6), typed_ready);
     neo.read_until(Duration::from_secs(8), typed_ready);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "make_directory_via_mx_creates_directory_on_disk/before-ret",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "RET");
@@ -780,11 +733,10 @@ fn make_directory_via_mx_creates_directory_on_disk() {
     gnu.read_until(Duration::from_secs(6), scratch_ready);
     neo.read_until(Duration::from_secs(8), scratch_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "make_directory_via_mx_creates_directory_on_disk",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -817,11 +769,10 @@ fn make_directory_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "make_directory_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -836,11 +787,10 @@ fn rename_file_via_mx_moves_file_on_disk() {
     gnu.read_until(Duration::from_secs(6), source_prompt);
     neo.read_until(Duration::from_secs(8), source_prompt);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "rename_file_via_mx_moves_file_on_disk/source-prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -850,11 +800,10 @@ fn rename_file_via_mx_moves_file_on_disk() {
     gnu.read_until(Duration::from_secs(6), source_typed);
     neo.read_until(Duration::from_secs(8), source_typed);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "rename_file_via_mx_moves_file_on_disk/source-before-ret",
         &gnu,
         &neo,
-        2,
     );
     send_both(&mut gnu, &mut neo, "RET");
 
@@ -862,11 +811,10 @@ fn rename_file_via_mx_moves_file_on_disk() {
     gnu.read_until(Duration::from_secs(6), dest_prompt);
     neo.read_until(Duration::from_secs(8), dest_prompt);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "rename_file_via_mx_moves_file_on_disk/dest-prompt",
         &gnu,
         &neo,
-        3,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -876,11 +824,10 @@ fn rename_file_via_mx_moves_file_on_disk() {
     gnu.read_until(Duration::from_secs(6), dest_typed);
     neo.read_until(Duration::from_secs(8), dest_typed);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "rename_file_via_mx_moves_file_on_disk/dest-before-ret",
         &gnu,
         &neo,
-        3,
     );
     send_both(&mut gnu, &mut neo, "RET");
 
@@ -916,7 +863,7 @@ fn rename_file_via_mx_moves_file_on_disk() {
     gnu.read_until(Duration::from_secs(6), scratch_ready);
     neo.read_until(Duration::from_secs(8), scratch_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches("rename_file_via_mx_moves_file_on_disk", &gnu, &neo, 2);
+    assert_pair_exact_display("rename_file_via_mx_moves_file_on_disk", &gnu, &neo);
 }
 
 #[test]
@@ -950,11 +897,10 @@ fn rename_file_empty_source_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "rename_file_empty_source_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -969,11 +915,10 @@ fn delete_file_via_mx_removes_file_from_disk() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_file_via_mx_removes_file_from_disk/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -983,11 +928,10 @@ fn delete_file_via_mx_removes_file_from_disk() {
     gnu.read_until(Duration::from_secs(6), typed_ready);
     neo.read_until(Duration::from_secs(8), typed_ready);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_file_via_mx_removes_file_from_disk/before-ret",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "RET");
@@ -1013,7 +957,7 @@ fn delete_file_via_mx_removes_file_from_disk() {
     gnu.read_until(Duration::from_secs(6), scratch_ready);
     neo.read_until(Duration::from_secs(8), scratch_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches("delete_file_via_mx_removes_file_from_disk", &gnu, &neo, 2);
+    assert_pair_exact_display("delete_file_via_mx_removes_file_from_disk", &gnu, &neo);
 }
 
 #[test]
@@ -1047,11 +991,10 @@ fn delete_file_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_file_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1068,11 +1011,10 @@ fn delete_directory_via_mx_removes_empty_directory() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_directory_via_mx_removes_empty_directory/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -1082,11 +1024,10 @@ fn delete_directory_via_mx_removes_empty_directory() {
     gnu.read_until(Duration::from_secs(6), typed_ready);
     neo.read_until(Duration::from_secs(8), typed_ready);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_directory_via_mx_removes_empty_directory/before-ret",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "RET");
@@ -1110,11 +1051,10 @@ fn delete_directory_via_mx_removes_empty_directory() {
     gnu.read_until(Duration::from_secs(6), scratch_ready);
     neo.read_until(Duration::from_secs(8), scratch_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_directory_via_mx_removes_empty_directory",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1151,11 +1091,10 @@ fn delete_directory_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_directory_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1175,11 +1114,10 @@ fn copy_directory_via_mx_copies_nested_tree() {
     gnu.read_until(Duration::from_secs(6), source_prompt);
     neo.read_until(Duration::from_secs(8), source_prompt);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "copy_directory_via_mx_copies_nested_tree/source-prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -1236,7 +1174,7 @@ fn copy_directory_via_mx_copies_nested_tree() {
     gnu.read_until(Duration::from_secs(6), scratch_ready);
     neo.read_until(Duration::from_secs(8), scratch_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches("copy_directory_via_mx_copies_nested_tree", &gnu, &neo, 2);
+    assert_pair_exact_display("copy_directory_via_mx_copies_nested_tree", &gnu, &neo);
 }
 
 #[test]
@@ -1273,11 +1211,10 @@ fn copy_directory_empty_source_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "copy_directory_empty_source_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1301,7 +1238,7 @@ fn find_file_other_window_via_cx4_cf() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("find_file_other_window_via_cx4_cf", &gnu, &neo, 2);
+    assert_pair_exact_display("find_file_other_window_via_cx4_cf", &gnu, &neo);
 }
 
 #[test]
@@ -1325,11 +1262,10 @@ fn find_file_read_only_then_toggle_and_save_via_cx_cr_cx_cq() {
     gnu.read_until(Duration::from_secs(6), readonly_ready);
     neo.read_until(Duration::from_secs(8), readonly_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "find_file_read_only_then_toggle_and_save_via_cx_cr_cx_cq/readonly",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "C-x C-q");
@@ -1348,11 +1284,10 @@ fn find_file_read_only_then_toggle_and_save_via_cx_cr_cx_cq() {
         "read-only-toggle.txt",
         "edited line\noriginal read-only body\n",
     );
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "find_file_read_only_then_toggle_and_save_via_cx_cr_cx_cq",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1375,11 +1310,10 @@ fn find_alternate_file_via_cx_cv_replaces_buffer() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "find_alternate_file_via_cx_cv_replaces_buffer/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "C-a C-k");
@@ -1391,11 +1325,10 @@ fn find_alternate_file_via_cx_cv_replaces_buffer() {
     gnu.read_until(Duration::from_secs(6), typed_path);
     neo.read_until(Duration::from_secs(8), typed_path);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "find_alternate_file_via_cx_cv_replaces_buffer/before-ret",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "RET");
@@ -1409,12 +1342,7 @@ fn find_alternate_file_via_cx_cv_replaces_buffer() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
-        "find_alternate_file_via_cx_cv_replaces_buffer",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("find_alternate_file_via_cx_cv_replaces_buffer", &gnu, &neo);
 }
 
 #[test]
@@ -1456,11 +1384,10 @@ fn find_alternate_file_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "find_alternate_file_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1492,4 +1419,9 @@ fn find_file_via_cx_cf_opens_existing_file_with_contents_visible() {
             "{label}: mode-line should show the reopened file name"
         );
     }
+    assert_pair_exact_display(
+        "find_file_via_cx_cf_opens_existing_file_with_contents_visible",
+        &gnu,
+        &neo,
+    );
 }

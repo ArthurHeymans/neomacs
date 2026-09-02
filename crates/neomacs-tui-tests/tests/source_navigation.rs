@@ -39,6 +39,11 @@ fn xref_find_definitions_and_go_back_from_elisp_symbol() {
         grid.iter().any(|row| row.contains(name))
             && grid.iter().any(|row| row.contains("(comment-dwim nil)"))
     });
+    assert_pair_exact_display(
+        "xref_find_definitions_and_go_back_from_elisp_symbol",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -58,4 +63,5 @@ fn find_function_via_mx_opens_lisp_definition() {
         grid.iter().any(|row| row.contains("newcomment.el"))
             && grid.iter().any(|row| row.contains("(defun comment-dwim"))
     });
+    assert_pair_exact_display("find_function_via_mx_opens_lisp_definition", &gnu, &neo);
 }

@@ -39,11 +39,10 @@ fn eval_last_sexp_via_cx_ce_prints_echo_area_value() {
             "{label} should show eval-last-sexp's value in the echo area"
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "eval_last_sexp_via_cx_ce_prints_echo_area_value",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -78,12 +77,7 @@ fn eval_last_sexp_error_via_cx_ce_opens_backtrace() {
             "{label} should show the void variable in the backtrace"
         );
     }
-    assert_pair_nearly_matches(
-        "eval_last_sexp_error_via_cx_ce_opens_backtrace",
-        &gnu,
-        &neo,
-        4,
-    );
+    assert_pair_exact_display("eval_last_sexp_error_via_cx_ce_opens_backtrace", &gnu, &neo);
 }
 
 #[test]
@@ -115,11 +109,10 @@ fn eval_expression_minibuffer_ctrl_h_does_not_delete_previous_character() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "eval_expression_minibuffer_ctrl_h_does_not_delete_previous_character",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -152,11 +145,10 @@ fn eval_expression_minibuffer_del_deletes_previous_character() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "eval_expression_minibuffer_del_deletes_previous_character",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -212,12 +204,7 @@ fn next_line_key_preserves_goal_column_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "next_line_key_preserves_goal_column_like_gnu",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("next_line_key_preserves_goal_column_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -248,12 +235,7 @@ fn next_line_ignores_invisible_newlines_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "next_line_ignores_invisible_newlines_like_gnu",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("next_line_ignores_invisible_newlines_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -284,11 +266,10 @@ fn previous_line_ignores_invisible_newlines_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "previous_line_ignores_invisible_newlines_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -320,11 +301,10 @@ fn previous_line_without_ignore_invisible_matches_gnu_position() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "previous_line_without_ignore_invisible_matches_gnu_position",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -358,11 +338,10 @@ fn eval_expression_empty_minibuffer_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "eval_expression_empty_minibuffer_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -395,11 +374,10 @@ fn execute_extended_command_minibuffer_ctrl_h_preserves_command_text() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "execute_extended_command_minibuffer_ctrl_h_preserves_command_text",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -437,11 +415,10 @@ fn execute_extended_command_minibuffer_del_deletes_previous_character() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "execute_extended_command_minibuffer_del_deletes_previous_character",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -478,11 +455,10 @@ fn execute_extended_command_minibuffer_multiple_del_keyhits() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "execute_extended_command_minibuffer_multiple_del_keyhits",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -516,11 +492,10 @@ fn execute_extended_command_empty_minibuffer_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "execute_extended_command_empty_minibuffer_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -580,11 +555,10 @@ fn trace_function_background_writes_trace_output_buffer() {
             "{label} should show trace exit"
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "trace_function_background_writes_trace_output_buffer",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -621,11 +595,10 @@ fn completion_at_point_in_elisp_buffer_completes_function_name() {
             grid.join("\n")
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "completion_at_point_in_elisp_buffer_completes_function_name",
         &gnu,
         &neo,
-        3,
     );
 }
 
@@ -638,11 +611,10 @@ fn eval_expression_via_mcolon_prints_echo_area_value() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "eval_expression_via_mcolon_prints_echo_area_value/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -670,11 +642,10 @@ fn eval_expression_via_mcolon_prints_echo_area_value() {
             "{label} should show eval-expression's integer value formats"
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "eval_expression_via_mcolon_prints_echo_area_value",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -687,11 +658,10 @@ fn eval_expression_history_via_mcolon_mp_recalls_previous_expression() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "eval_expression_history_via_mcolon_mp_recalls_previous_expression/prompt-1",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -702,11 +672,10 @@ fn eval_expression_history_via_mcolon_mp_recalls_previous_expression() {
     gnu.read_until(Duration::from_secs(6), first_expr_typed);
     neo.read_until(Duration::from_secs(8), first_expr_typed);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "eval_expression_history_via_mcolon_mp_recalls_previous_expression/typed-1",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "RET");
@@ -714,22 +683,20 @@ fn eval_expression_history_via_mcolon_mp_recalls_previous_expression() {
     gnu.read_until(Duration::from_secs(6), first_result);
     neo.read_until(Duration::from_secs(8), first_result);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "eval_expression_history_via_mcolon_mp_recalls_previous_expression/result-1",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "M-:");
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "eval_expression_history_via_mcolon_mp_recalls_previous_expression/prompt-2",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "M-p");
@@ -737,11 +704,10 @@ fn eval_expression_history_via_mcolon_mp_recalls_previous_expression() {
     gnu.read_until(Duration::from_secs(6), recalled);
     neo.read_until(Duration::from_secs(8), recalled);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "eval_expression_history_via_mcolon_mp_recalls_previous_expression/recalled",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "DEL DEL");
@@ -750,11 +716,10 @@ fn eval_expression_history_via_mcolon_mp_recalls_previous_expression() {
     gnu.read_until(Duration::from_secs(6), edited);
     neo.read_until(Duration::from_secs(8), edited);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "eval_expression_history_via_mcolon_mp_recalls_previous_expression/edited",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "RET");
@@ -762,11 +727,10 @@ fn eval_expression_history_via_mcolon_mp_recalls_previous_expression() {
     gnu.read_until(Duration::from_secs(6), second_result);
     neo.read_until(Duration::from_secs(8), second_result);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "eval_expression_history_via_mcolon_mp_recalls_previous_expression/result-2",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -779,11 +743,10 @@ fn eval_expression_error_via_mcolon_opens_backtrace() {
     gnu.read_until(Duration::from_secs(6), prompt_ready);
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "eval_expression_error_via_mcolon_opens_backtrace/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -818,11 +781,10 @@ fn eval_expression_error_via_mcolon_opens_backtrace() {
             "{label} should show the void variable in the backtrace"
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "eval_expression_error_via_mcolon_opens_backtrace",
         &gnu,
         &neo,
-        4,
     );
 }
 
@@ -853,6 +815,7 @@ fn eval_expression() {
         neo_echo.contains('3'),
         "NEO echo should show 3: {neo_echo:?}"
     );
+    assert_pair_exact_display("eval_expression", &gnu, &neo);
 }
 
 // ── File modtime tests ───────────────────────────────────────
@@ -902,11 +865,10 @@ fn visited_file_modtime_returns_cons_after_file_visit() {
             "{label}: visited-file-modtime should return cons, not 0. Echo: {echo}"
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "visited_file_modtime_returns_cons_after_file_visit",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -948,11 +910,10 @@ fn verify_visited_file_modtime_returns_t_for_unmodified_file() {
             "{label}: verify-visited-file-modtime should return t. Echo: {echo}"
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "verify_visited_file_modtime_returns_t_for_unmodified_file",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -992,6 +953,7 @@ fn mode_line_shows_buffer_position_percent() {
         has_pos(neo_mode),
         "NEO mode-line should have position indicator: {neo_mode}"
     );
+    assert_pair_exact_display("mode_line_shows_buffer_position_percent", &gnu, &neo);
 }
 
 // ── Lisp environment semantics tests ────────────────────────
@@ -1039,6 +1001,11 @@ fn lisp_environment_variables_match_gnu_emacs_semantics() {
             "{label}: (>= emacs-major-version 31) should be t. Echo: {echo}"
         );
     }
+    assert_pair_exact_display(
+        "lisp_environment_variables_match_gnu_emacs_semantics",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -1067,12 +1034,7 @@ fn defconst_sets_local_binding_like_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "defconst_sets_local_binding_like_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("defconst_sets_local_binding_like_gnu_semantics", &gnu, &neo);
 }
 
 // ── Face inheritance tests ──────────────────────────────────
@@ -1096,6 +1058,11 @@ fn face_attribute_inherit_returns_correct_chain_for_mode_line() {
             "{label}: (face-attribute 'mode-line :inherit) should return value. Echo: {echo}"
         );
     }
+    assert_pair_exact_display(
+        "face_attribute_inherit_returns_correct_chain_for_mode_line",
+        &gnu,
+        &neo,
+    );
 }
 
 // ── Buffer position correctness tests ───────────────────────
@@ -1159,6 +1126,11 @@ fn buffer_positions_are_correct_1_based_after_file_visit() {
             "{label}: (point) at buffer start should be 1. Echo: {echo}"
         );
     }
+    assert_pair_exact_display(
+        "buffer_positions_are_correct_1_based_after_file_visit",
+        &gnu,
+        &neo,
+    );
 }
 
 // ── Fundamental Elisp operation tests ───────────────────────
@@ -1218,6 +1190,11 @@ fn fundamental_elisp_operations_return_correct_values() {
             "{label}: (listp (cons 1 2)) should be t. Echo: {echo}"
         );
     }
+    assert_pair_exact_display(
+        "fundamental_elisp_operations_return_correct_values",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -1249,11 +1226,10 @@ fn sequence_mutation_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "sequence_mutation_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1285,11 +1261,10 @@ fn aset_unibyte_string_non_byte_error_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "aset_unibyte_string_non_byte_error_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1320,11 +1295,10 @@ fn aset_multibyte_string_non_ascii_replacement_error_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "aset_multibyte_string_non_ascii_replacement_error_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1365,11 +1339,10 @@ fn store_substring_preserves_aset_multibyte_errors_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "store_substring_preserves_aset_multibyte_errors_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1399,7 +1372,7 @@ fn nconc_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("nconc_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("nconc_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -1431,11 +1404,10 @@ fn nconc_circular_nonfinal_list_error_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "nconc_circular_nonfinal_list_error_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1469,11 +1441,10 @@ fn equal_circular_list_behavior_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "equal_circular_list_behavior_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1503,11 +1474,10 @@ fn vector_sort_compare_strings_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "vector_sort_compare_strings_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1537,12 +1507,7 @@ fn compare_strings_reversed_range_errors_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "compare_strings_reversed_range_errors_like_gnu",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("compare_strings_reversed_range_errors_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -1575,7 +1540,7 @@ fn sort_keyword_error_semantics_match_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("sort_keyword_error_semantics_match_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("sort_keyword_error_semantics_match_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -1604,7 +1569,7 @@ fn sort_detects_circular_lists_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("sort_detects_circular_lists_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("sort_detects_circular_lists_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -1635,7 +1600,7 @@ fn sort_rejects_records_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("sort_rejects_records_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("sort_rejects_records_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -1666,12 +1631,7 @@ fn copy_tree_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "copy_tree_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("copy_tree_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -1703,11 +1663,10 @@ fn property_list_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "property_list_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1739,11 +1698,10 @@ fn property_list_edge_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "property_list_edge_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1771,11 +1729,10 @@ fn plist_get_circular_missing_property_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "plist_get_circular_missing_property_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1808,11 +1765,10 @@ fn symbol_property_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "symbol_property_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1838,11 +1794,10 @@ fn overriding_plist_environment_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "overriding_plist_environment_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1880,11 +1835,10 @@ fn string_search_replace_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "string_search_replace_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1916,11 +1870,10 @@ fn string_case_predicate_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "string_case_predicate_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1952,11 +1905,10 @@ fn subst_char_in_string_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "subst_char_in_string_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1986,11 +1938,10 @@ fn remove_delq_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "remove_delq_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2022,11 +1973,10 @@ fn alist_lookup_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "alist_lookup_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2057,11 +2007,10 @@ fn assq_delete_all_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "assq_delete_all_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2091,11 +2040,10 @@ fn member_predicate_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "member_predicate_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2126,7 +2074,7 @@ fn assoc_detects_circular_alists_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("assoc_detects_circular_alists_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("assoc_detects_circular_alists_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -2158,12 +2106,7 @@ fn memq_circular_list_error_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "memq_circular_list_error_matches_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("memq_circular_list_error_matches_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -2195,11 +2138,10 @@ fn copy_sequence_circular_list_error_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "copy_sequence_circular_list_error_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2232,11 +2174,10 @@ fn append_circular_list_error_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "append_circular_list_error_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2269,11 +2210,10 @@ fn vconcat_circular_list_error_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "vconcat_circular_list_error_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2305,7 +2245,7 @@ fn vconcat_rejects_records_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("vconcat_rejects_records_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("vconcat_rejects_records_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -2333,11 +2273,10 @@ fn elt_rejects_records_even_though_length_accepts_them_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "elt_rejects_records_even_though_length_accepts_them_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2369,11 +2308,10 @@ fn vector_array_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "vector_array_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2403,11 +2341,10 @@ fn vector_subseq_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "vector_subseq_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2439,12 +2376,7 @@ fn fillarray_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "fillarray_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("fillarray_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -2482,11 +2414,10 @@ fn fillarray_and_clear_string_multibyte_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "fillarray_and_clear_string_multibyte_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2515,11 +2446,10 @@ fn fillarray_multibyte_string_preserves_character_codepoints_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "fillarray_multibyte_string_preserves_character_codepoints_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2552,11 +2482,10 @@ fn reverse_circular_list_error_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "reverse_circular_list_error_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2587,7 +2516,7 @@ fn delq_detects_circular_lists_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("delq_detects_circular_lists_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("delq_detects_circular_lists_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -2617,7 +2546,7 @@ fn delete_dups_detects_circular_lists_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("delete_dups_detects_circular_lists_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("delete_dups_detects_circular_lists_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -2646,7 +2575,7 @@ fn mapcar_detects_circular_lists_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("mapcar_detects_circular_lists_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("mapcar_detects_circular_lists_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -2675,7 +2604,7 @@ fn mapconcat_detects_circular_lists_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("mapconcat_detects_circular_lists_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("mapconcat_detects_circular_lists_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -2704,7 +2633,7 @@ fn mapc_detects_circular_lists_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("mapc_detects_circular_lists_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("mapc_detects_circular_lists_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -2733,7 +2662,7 @@ fn mapcan_detects_circular_lists_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("mapcan_detects_circular_lists_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("mapcan_detects_circular_lists_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -2764,7 +2693,7 @@ fn copy_alist_detects_circular_lists_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("copy_alist_detects_circular_lists_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("copy_alist_detects_circular_lists_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -2792,7 +2721,7 @@ fn mapcar_rejects_char_tables_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("mapcar_rejects_char_tables_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("mapcar_rejects_char_tables_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -2823,7 +2752,7 @@ fn mapcar_rejects_records_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("mapcar_rejects_records_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("mapcar_rejects_records_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -2855,11 +2784,10 @@ fn length_predicates_large_circular_lists_match_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "length_predicates_large_circular_lists_match_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2889,11 +2817,10 @@ fn bool_vector_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "bool_vector_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2924,11 +2851,10 @@ fn make_bool_vector_negative_length_error_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "make_bool_vector_negative_length_error_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -2961,11 +2887,10 @@ fn bool_vector_destination_return_value_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "bool_vector_destination_return_value_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3000,11 +2925,10 @@ fn bool_vector_reader_size_validation_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "bool_vector_reader_size_validation_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3034,7 +2958,7 @@ fn record_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("record_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("record_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -3063,12 +2987,7 @@ fn hash_table_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "hash_table_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("hash_table_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -3097,11 +3016,10 @@ fn hash_table_copy_maphash_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "hash_table_copy_maphash_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3131,12 +3049,7 @@ fn maphash_mutation_visits_live_entries_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "maphash_mutation_visits_live_entries_like_gnu",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("maphash_mutation_visits_live_entries_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -3164,11 +3077,10 @@ fn hash_table_key_test_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "hash_table_key_test_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3198,11 +3110,10 @@ fn equal_hash_table_overlay_keys_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "equal_hash_table_overlay_keys_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3232,11 +3143,10 @@ fn hash_table_custom_test_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "hash_table_custom_test_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3266,11 +3176,10 @@ fn hash_table_weakness_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "hash_table_weakness_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3302,11 +3211,10 @@ fn make_hash_table_invalid_keyword_error_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "make_hash_table_invalid_keyword_error_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3338,11 +3246,10 @@ fn make_hash_table_obsolete_keywords_and_odd_args_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "make_hash_table_obsolete_keywords_and_odd_args_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3371,7 +3278,7 @@ fn marker_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("marker_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("marker_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -3396,11 +3303,10 @@ fn insert_before_markers_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "insert_before_markers_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3426,11 +3332,10 @@ fn delete_region_marker_adjustment_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_region_marker_adjustment_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3460,11 +3365,10 @@ fn marker_cross_buffer_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "marker_cross_buffer_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3494,11 +3398,10 @@ fn set_marker_buffer_type_error_uses_bufferp_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "set_marker_buffer_type_error_uses_bufferp_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3528,11 +3431,10 @@ fn marker_insertion_type_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "marker_insertion_type_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3561,11 +3463,10 @@ fn marker_last_position_after_kill_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "marker_last_position_after_kill_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3602,12 +3503,7 @@ fn narrowing_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "narrowing_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("narrowing_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -3636,11 +3532,10 @@ fn narrowing_point_clamp_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "narrowing_point_clamp_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3670,7 +3565,7 @@ fn overlay_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("overlay_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("overlay_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -3702,11 +3597,10 @@ fn overlay_accessors_after_buffer_kill_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "overlay_accessors_after_buffer_kill_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3736,11 +3630,10 @@ fn overlay_move_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "overlay_move_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3770,11 +3663,10 @@ fn overlay_advance_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "overlay_advance_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3804,11 +3696,10 @@ fn overlay_overlap_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "overlay_overlap_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3838,7 +3729,7 @@ fn overlay_change_respects_narrowing_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("overlay_change_respects_narrowing_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("overlay_change_respects_narrowing_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -3869,11 +3760,10 @@ fn get_char_property_window_object_matches_gnu_overlay_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "get_char_property_window_object_matches_gnu_overlay_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3906,11 +3796,10 @@ fn single_char_property_change_sees_overlay_boundaries_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "single_char_property_change_sees_overlay_boundaries_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3943,11 +3832,10 @@ fn overlay_intangible_motion_matches_gnu_point_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "overlay_intangible_motion_matches_gnu_point_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -3980,11 +3868,10 @@ fn text_property_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "text_property_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4021,11 +3908,10 @@ fn reversed_text_property_ranges_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "reversed_text_property_ranges_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4062,11 +3948,10 @@ fn text_property_plist_validation_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "text_property_plist_validation_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4096,11 +3981,10 @@ fn next_property_change_limit_t_matches_gnu_interval_boundary_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "next_property_change_limit_t_matches_gnu_interval_boundary_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4137,11 +4021,10 @@ fn text_property_change_out_of_range_errors_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "text_property_change_out_of_range_errors_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4178,11 +4061,10 @@ fn buffer_text_property_change_respects_narrowing_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "buffer_text_property_change_respects_narrowing_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4213,11 +4095,10 @@ fn text_properties_at_out_of_range_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "text_properties_at_out_of_range_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4255,11 +4136,10 @@ fn text_property_mutation_out_of_range_errors_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "text_property_mutation_out_of_range_errors_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4291,11 +4171,10 @@ fn text_property_equality_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "text_property_equality_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4334,11 +4213,10 @@ fn case_conversion_preserves_string_text_properties_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "case_conversion_preserves_string_text_properties_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4368,11 +4246,10 @@ fn sxhash_equal_including_properties_hashes_string_intervals_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "sxhash_equal_including_properties_hashes_string_intervals_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4402,11 +4279,10 @@ fn marker_and_overlay_equal_hash_semantics_match_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "marker_and_overlay_equal_hash_semantics_match_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4437,11 +4313,10 @@ fn text_property_copy_sequence_and_substring_independence_match_gnu_semantics() 
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "text_property_copy_sequence_and_substring_independence_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4478,11 +4353,10 @@ fn display_property_substring_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "display_property_substring_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4514,11 +4388,10 @@ fn text_read_only_property_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "text_read_only_property_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4555,11 +4428,10 @@ fn category_read_only_property_protects_text_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "category_read_only_property_protects_text_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4594,12 +4466,7 @@ fn text_property_modification_hooks_run_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "text_property_modification_hooks_run_like_gnu",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("text_property_modification_hooks_run_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -4633,7 +4500,7 @@ fn text_property_insert_hooks_run_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("text_property_insert_hooks_run_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("text_property_insert_hooks_run_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -4661,11 +4528,10 @@ fn text_property_removal_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "text_property_removal_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4698,11 +4564,10 @@ fn text_property_stickiness_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "text_property_stickiness_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4732,11 +4597,10 @@ fn text_property_search_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "text_property_search_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4766,11 +4630,10 @@ fn text_property_change_limit_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "text_property_change_limit_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4803,7 +4666,7 @@ fn button_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("button_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("button_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -4842,11 +4705,10 @@ fn field_property_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "field_property_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4876,11 +4738,10 @@ fn buffer_substring_property_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "buffer_substring_property_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4910,11 +4771,10 @@ fn buffer_local_variable_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "buffer_local_variable_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4944,11 +4804,10 @@ fn local_variable_if_set_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "local_variable_if_set_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -4978,11 +4837,10 @@ fn variable_binding_locus_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "variable_binding_locus_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5012,11 +4870,10 @@ fn default_local_variable_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "default_local_variable_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5046,11 +4903,10 @@ fn permanent_local_variable_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "permanent_local_variable_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5080,7 +4936,7 @@ fn hook_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("hook_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("hook_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -5112,11 +4968,10 @@ fn condition_object_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "condition_object_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5142,11 +4997,10 @@ fn condition_case_success_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "condition_case_success_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5175,11 +5029,10 @@ fn nonlocal_exit_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "nonlocal_exit_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5209,11 +5062,10 @@ fn timer_object_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "timer_object_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5239,11 +5091,10 @@ fn unwind_protect_cleanup_error_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "unwind_protect_cleanup_error_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5276,11 +5127,10 @@ fn define_error_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "define_error_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5312,11 +5162,10 @@ fn read_from_string_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "read_from_string_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5345,11 +5194,10 @@ fn circular_read_print_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "circular_read_print_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5379,12 +5227,7 @@ fn invalid_read_label_error_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "invalid_read_label_error_matches_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("invalid_read_label_error_matches_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -5416,7 +5259,7 @@ fn read_circle_nil_rejects_read_label_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("read_circle_nil_rejects_read_label_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("read_circle_nil_rejects_read_label_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -5452,11 +5295,10 @@ fn hash_table_reader_constructor_errors_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "hash_table_reader_constructor_errors_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5486,11 +5328,10 @@ fn radix_reader_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "radix_reader_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5520,11 +5361,10 @@ fn character_reader_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "character_reader_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5555,11 +5395,10 @@ fn incomplete_character_reader_errors_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "incomplete_character_reader_errors_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5590,11 +5429,10 @@ fn malformed_unicode_character_escape_error_matches_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "malformed_unicode_character_escape_error_matches_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5629,11 +5467,10 @@ fn unicode_character_reader_error_payloads_match_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "unicode_character_reader_error_payloads_match_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5667,12 +5504,7 @@ fn hex_character_reader_error_payloads_match_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "hex_character_reader_error_payloads_match_gnu",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("hex_character_reader_error_payloads_match_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -5701,11 +5533,10 @@ fn provide_eval_after_load_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "provide_eval_after_load_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5735,12 +5566,7 @@ fn match_data_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "match_data_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("match_data_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -5767,11 +5593,10 @@ fn invalid_regexp_error_payload_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "invalid_regexp_error_payload_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5799,11 +5624,10 @@ fn string_match_start_type_error_matches_gnu_fixnump_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "string_match_start_type_error_matches_gnu_fixnump_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5838,11 +5662,10 @@ fn match_data_reuse_and_reseat_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "match_data_reuse_and_reseat_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5873,11 +5696,10 @@ fn inhibit_changing_match_data_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "inhibit_changing_match_data_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5907,11 +5729,10 @@ fn match_data_reuse_list_is_destructively_updated_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "match_data_reuse_list_is_destructively_updated_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5937,11 +5758,10 @@ fn looking_at_p_match_data_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "looking_at_p_match_data_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -5967,11 +5787,10 @@ fn posix_looking_at_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "posix_looking_at_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6000,11 +5819,10 @@ fn optional_submatch_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "optional_submatch_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6037,11 +5855,10 @@ fn match_string_source_type_error_matches_gnu_substring_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "match_string_source_type_error_matches_gnu_substring_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6071,11 +5888,10 @@ fn failed_match_data_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "failed_match_data_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6105,7 +5921,7 @@ fn obarray_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("obarray_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("obarray_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -6137,11 +5953,10 @@ fn vector_obarray_slot_zero_conversion_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "vector_obarray_slot_zero_conversion_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6172,11 +5987,10 @@ fn invalid_obarray_argument_errors_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "invalid_obarray_argument_errors_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6206,11 +6020,10 @@ fn mapatoms_obarray_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "mapatoms_obarray_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6243,11 +6056,10 @@ fn symbol_keyword_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "symbol_keyword_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6277,11 +6089,10 @@ fn abbrev_table_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "abbrev_table_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6311,11 +6122,10 @@ fn face_attribute_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "face_attribute_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6345,11 +6155,10 @@ fn symbol_value_cell_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "symbol_value_cell_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6379,11 +6188,10 @@ fn variable_watcher_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "variable_watcher_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6413,11 +6221,10 @@ fn symbol_function_cell_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "symbol_function_cell_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6448,11 +6255,10 @@ fn symbol_with_pos_type_and_negative_position_semantics_match_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "symbol_with_pos_type_and_negative_position_semantics_match_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6481,11 +6287,10 @@ fn symbol_with_pos_is_not_transparent_to_symbol_cell_apis_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "symbol_with_pos_is_not_transparent_to_symbol_cell_apis_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6514,11 +6319,10 @@ fn symbol_with_pos_is_not_transparent_to_binding_apis_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "symbol_with_pos_is_not_transparent_to_binding_apis_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6547,11 +6351,10 @@ fn symbol_with_pos_print_symbols_bare_semantics_match_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "symbol_with_pos_print_symbols_bare_semantics_match_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6581,11 +6384,10 @@ fn read_positioning_symbols_print_and_cell_semantics_match_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "read_positioning_symbols_print_and_cell_semantics_match_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6615,11 +6417,10 @@ fn function_predicate_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "function_predicate_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6652,11 +6453,10 @@ fn function_arity_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "function_arity_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6686,11 +6486,10 @@ fn interactive_form_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "interactive_form_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6726,11 +6525,10 @@ fn commandp_interactive_form_property_error_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "commandp_interactive_form_property_error_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6763,11 +6561,10 @@ fn interactive_form_command_alias_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "interactive_form_command_alias_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6797,12 +6594,7 @@ fn autoload_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "autoload_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("autoload_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -6836,11 +6628,10 @@ fn interactive_form_unloaded_autoload_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "interactive_form_unloaded_autoload_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6870,11 +6661,10 @@ fn documentation_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "documentation_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6907,11 +6697,10 @@ fn documentation_property_overrides_function_docstring_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "documentation_property_overrides_function_docstring_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6943,11 +6732,10 @@ fn documentation_property_accepts_non_symbol_properties_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "documentation_property_accepts_non_symbol_properties_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -6977,7 +6765,7 @@ fn advice_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("advice_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("advice_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -7006,11 +6794,10 @@ fn lambda_binding_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "lambda_binding_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7040,11 +6827,10 @@ fn let_sequence_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "let_sequence_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7074,11 +6860,10 @@ fn boolean_short_circuit_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "boolean_short_circuit_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7108,7 +6893,7 @@ fn cond_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("cond_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("cond_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -7137,7 +6922,7 @@ fn loop_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("loop_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("loop_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -7166,7 +6951,7 @@ fn pcase_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("pcase_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("pcase_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -7195,7 +6980,7 @@ fn cl_lib_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("cl_lib_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("cl_lib_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -7224,11 +7009,10 @@ fn cl_defstruct_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "cl_defstruct_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7258,11 +7042,10 @@ fn cl_symbol_macrolet_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "cl_symbol_macrolet_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7292,7 +7075,7 @@ fn seq_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("seq_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("seq_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -7321,11 +7104,10 @@ fn byte_compile_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "byte_compile_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7355,7 +7137,7 @@ fn rx_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("rx_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("rx_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -7384,11 +7166,10 @@ fn regexp_opt_depth_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "regexp_opt_depth_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7428,11 +7209,10 @@ fn regexp_quote_words_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "regexp_quote_words_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7462,7 +7242,7 @@ fn ring_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("ring_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("ring_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -7493,7 +7273,7 @@ fn subr_x_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("subr_x_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("subr_x_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -7522,11 +7302,10 @@ fn thread_macro_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "thread_macro_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7556,7 +7335,7 @@ fn eieio_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("eieio_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("eieio_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -7588,12 +7367,7 @@ fn cl_generic_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "cl_generic_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("cl_generic_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -7624,11 +7398,10 @@ fn define_minor_mode_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "define_minor_mode_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7660,11 +7433,10 @@ fn define_derived_mode_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "define_derived_mode_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7694,7 +7466,7 @@ fn map_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("map_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("map_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -7722,11 +7494,10 @@ fn macroexpand_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "macroexpand_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7758,12 +7529,7 @@ fn macroexp_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "macroexp_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("macroexp_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -7792,11 +7558,10 @@ fn syntax_table_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "syntax_table_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7826,11 +7591,10 @@ fn syntax_table_copy_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "syntax_table_copy_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7860,11 +7624,10 @@ fn syntax_table_regexp_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "syntax_table_regexp_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7894,11 +7657,10 @@ fn syntax_property_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "syntax_property_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7928,11 +7690,10 @@ fn syntax_table_comment_flags_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "syntax_table_comment_flags_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7962,11 +7723,10 @@ fn skip_syntax_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "skip_syntax_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -7996,11 +7756,10 @@ fn category_table_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "category_table_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8030,12 +7789,7 @@ fn char_table_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "char_table_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("char_table_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -8072,11 +7826,10 @@ fn char_table_range_error_and_reversed_range_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "char_table_range_error_and_reversed_range_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8105,11 +7858,10 @@ fn set_char_table_reversed_range_returns_value_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "set_char_table_reversed_range_returns_value_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8140,11 +7892,10 @@ fn make_char_table_purpose_type_error_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "make_char_table_purpose_type_error_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8175,11 +7926,10 @@ fn make_char_table_extra_slots_property_type_error_matches_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "make_char_table_extra_slots_property_type_error_matches_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8209,11 +7959,10 @@ fn case_table_fillarray_preserves_gnu_extra_slot_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "case_table_fillarray_preserves_gnu_extra_slot_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8246,7 +7995,7 @@ fn char_table_extra_slots_initialize_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("char_table_extra_slots_initialize_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("char_table_extra_slots_initialize_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -8274,11 +8023,10 @@ fn char_table_extra_slot_index_type_errors_use_fixnump_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "char_table_extra_slot_index_type_errors_use_fixnump_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8308,11 +8056,10 @@ fn char_table_map_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "char_table_map_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8342,11 +8089,10 @@ fn map_char_table_parent_inheritance_ranges_match_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "map_char_table_parent_inheritance_ranges_match_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8376,11 +8122,10 @@ fn display_table_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "display_table_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8411,11 +8156,10 @@ fn char_table_printer_includes_initialized_standard_slots_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "char_table_printer_includes_initialized_standard_slots_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8448,11 +8192,10 @@ fn display_table_width_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "display_table_width_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8481,7 +8224,7 @@ fn string_width_reversed_range_errors_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("string_width_reversed_range_errors_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("string_width_reversed_range_errors_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -8510,11 +8253,10 @@ fn save_excursion_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "save_excursion_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8540,11 +8282,10 @@ fn save_excursion_killed_buffer_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "save_excursion_killed_buffer_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8574,11 +8315,10 @@ fn save_mark_and_excursion_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "save_mark_and_excursion_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8608,11 +8348,10 @@ fn save_current_buffer_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "save_current_buffer_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8644,11 +8383,10 @@ fn generate_buffer_name_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "generate_buffer_name_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8680,11 +8418,10 @@ fn rename_buffer_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "rename_buffer_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8710,11 +8447,10 @@ fn buffer_last_name_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "buffer_last_name_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8763,11 +8499,10 @@ fn set_visited_file_name_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "set_visited_file_name_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8797,11 +8532,10 @@ fn indirect_buffer_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "indirect_buffer_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8831,11 +8565,10 @@ fn killed_buffer_local_value_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "killed_buffer_local_value_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8861,11 +8594,10 @@ fn killed_buffer_file_name_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "killed_buffer_file_name_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8895,11 +8627,10 @@ fn kill_buffer_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "kill_buffer_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8925,11 +8656,10 @@ fn kill_current_buffer_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "kill_current_buffer_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8955,11 +8685,10 @@ fn other_buffer_visible_preference_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "other_buffer_visible_preference_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -8985,11 +8714,10 @@ fn buffer_list_startup_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "buffer_list_startup_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9019,11 +8747,10 @@ fn buffer_modified_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "buffer_modified_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9053,11 +8780,10 @@ fn buffer_modified_tick_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "buffer_modified_tick_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9083,11 +8809,10 @@ fn text_property_modified_tick_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "text_property_modified_tick_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9113,11 +8838,10 @@ fn overlay_property_modified_tick_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "overlay_property_modified_tick_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9143,11 +8867,10 @@ fn subst_char_in_region_noundo_tick_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "subst_char_in_region_noundo_tick_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9179,11 +8902,10 @@ fn transpose_regions_moves_text_properties_and_markers_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "transpose_regions_moves_text_properties_and_markers_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9209,11 +8931,10 @@ fn delete_and_extract_empty_region_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_and_extract_empty_region_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9239,11 +8960,10 @@ fn delete_and_extract_region_properties_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_and_extract_region_properties_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9269,11 +8989,10 @@ fn delete_and_extract_region_narrowing_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_and_extract_region_narrowing_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9299,11 +9018,10 @@ fn erase_buffer_narrowing_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "erase_buffer_narrowing_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9336,11 +9054,10 @@ fn buffer_undo_list_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "buffer_undo_list_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9366,11 +9083,10 @@ fn primitive_undo_narrowing_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "primitive_undo_narrowing_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9400,11 +9116,10 @@ fn buffer_disable_undo_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "buffer_disable_undo_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9449,11 +9164,10 @@ fn column_motion_elisp_functions_match_gnu_semantics() {
         "Neomacs move-to-column FORCE inside a tab should replace the tab with spaces when indent-tabs-mode is nil"
     );
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "column_motion_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9486,11 +9200,10 @@ fn thing_at_point_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "thing_at_point_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9520,11 +9233,10 @@ fn point_motion_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "point_motion_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9554,11 +9266,10 @@ fn point_character_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "point_character_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9588,11 +9299,10 @@ fn save_window_excursion_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "save_window_excursion_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9618,11 +9328,10 @@ fn window_visibility_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "window_visibility_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9652,11 +9361,10 @@ fn split_window_order_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "split_window_order_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9697,11 +9405,10 @@ fn window_defvar_lisp_variables_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "window_defvar_lisp_variables_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9731,11 +9438,10 @@ fn line_position_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "line_position_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9765,11 +9471,10 @@ fn line_position_field_constraints_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "line_position_field_constraints_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9810,11 +9515,10 @@ fn editfns_defvar_lisp_variables_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "editfns_defvar_lisp_variables_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9860,7 +9564,7 @@ fn core_c_defvar_variables_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("core_c_defvar_variables_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("core_c_defvar_variables_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -9949,11 +9653,10 @@ fn true_default_c_defvar_variables_are_special_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "true_default_c_defvar_variables_are_special_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -9979,11 +9682,10 @@ fn select_active_regions_default_matches_gnu_keyboard_defvar() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "select_active_regions_default_matches_gnu_keyboard_defvar",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10015,11 +9717,10 @@ fn display_fill_column_indicator_column_matches_gnu_xdisp_defvar_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "display_fill_column_indicator_column_matches_gnu_xdisp_defvar_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10099,11 +9800,10 @@ fn c_bootstrap_defvars_match_gnu_defaults_and_specialness() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "c_bootstrap_defvars_match_gnu_defaults_and_specialness",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10150,12 +9850,7 @@ fn eval_depth_limit_variables_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "eval_depth_limit_variables_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("eval_depth_limit_variables_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -10184,11 +9879,10 @@ fn move_beginning_of_line_field_constraints_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "move_beginning_of_line_field_constraints_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10218,11 +9912,10 @@ fn line_boundary_predicate_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "line_boundary_predicate_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10254,12 +9947,7 @@ fn sort_lines_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "sort_lines_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("sort_lines_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -10290,11 +9978,10 @@ fn delete_text_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_text_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10324,12 +10011,7 @@ fn kill_ring_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "kill_ring_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("kill_ring_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -10359,11 +10041,10 @@ fn change_hook_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "change_hook_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10400,11 +10081,10 @@ fn combine_after_change_calls_coalesces_events_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "combine_after_change_calls_coalesces_events_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10434,11 +10114,10 @@ fn char_at_point_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "char_at_point_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10468,11 +10147,10 @@ fn line_motion_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "line_motion_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10502,11 +10180,10 @@ fn sexp_motion_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "sexp_motion_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10536,12 +10213,7 @@ fn scan_lists_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "scan_lists_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("scan_lists_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -10572,11 +10244,10 @@ fn parse_partial_sexp_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "parse_partial_sexp_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10603,11 +10274,10 @@ fn parse_partial_sexp_comment_stop_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "parse_partial_sexp_comment_stop_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10641,11 +10311,10 @@ fn emacs_lisp_indent_region_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "emacs_lisp_indent_region_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10675,11 +10344,10 @@ fn case_fold_search_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "case_fold_search_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10709,11 +10377,10 @@ fn case_fold_regexp_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "case_fold_regexp_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10743,11 +10410,10 @@ fn replace_match_literal_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "replace_match_literal_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10776,11 +10442,10 @@ fn replace_match_buffer_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "replace_match_buffer_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10806,11 +10471,10 @@ fn replace_match_case_transfer_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "replace_match_case_transfer_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10836,11 +10500,10 @@ fn replace_match_subexp_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "replace_match_subexp_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10877,11 +10540,10 @@ fn replace_match_string_text_properties_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "replace_match_string_text_properties_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10911,11 +10573,10 @@ fn replace_regexp_in_string_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "replace_regexp_in_string_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10953,11 +10614,10 @@ fn replace_regexp_in_string_text_properties_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "replace_regexp_in_string_text_properties_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -10987,11 +10647,10 @@ fn equality_predicate_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "equality_predicate_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11021,11 +10680,10 @@ fn substring_sequence_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "substring_sequence_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11055,11 +10713,10 @@ fn ignore_errors_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "ignore_errors_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11092,11 +10749,10 @@ fn completion_table_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "completion_table_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11129,11 +10785,10 @@ fn completion_ignore_case_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "completion_ignore_case_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11163,11 +10818,10 @@ fn add_to_history_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "add_to_history_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11197,11 +10851,10 @@ fn add_to_history_keep_all_and_limits_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "add_to_history_keep_all_and_limits_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11231,11 +10884,10 @@ fn numeric_rounding_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "numeric_rounding_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11265,11 +10917,10 @@ fn arithmetic_remainder_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "arithmetic_remainder_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11301,11 +10952,10 @@ fn substring_list_type_error_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "substring_list_type_error_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11334,11 +10984,10 @@ fn string_number_conversion_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "string_number_conversion_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11373,11 +11022,10 @@ fn string_to_number_special_float_exponents_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "string_to_number_special_float_exponents_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11410,11 +11058,10 @@ fn string_to_number_base_type_error_matches_gnu_fixnump_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "string_to_number_base_type_error_matches_gnu_fixnump_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11444,11 +11091,10 @@ fn integer_bit_arithmetic_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "integer_bit_arithmetic_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11478,12 +11124,7 @@ fn time_value_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "time_value_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("time_value_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -11513,12 +11154,7 @@ fn parse_time_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "parse_time_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("parse_time_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -11546,11 +11182,10 @@ fn split_string_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "split_string_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11582,12 +11217,7 @@ fn file_name_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "file_name_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("file_name_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -11623,11 +11253,10 @@ fn write_region_inhibit_fsync_matches_gnu_fileio_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "write_region_inhibit_fsync_matches_gnu_fileio_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11664,11 +11293,10 @@ fn temporary_file_directory_matches_gnu_filelock_defvar_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "temporary_file_directory_matches_gnu_filelock_defvar_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11705,11 +11333,10 @@ fn create_lockfiles_matches_gnu_filelock_defvar_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "create_lockfiles_matches_gnu_filelock_defvar_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11751,11 +11378,10 @@ fn file_name_coding_system_variables_match_gnu_fileio_defvar_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "file_name_coding_system_variables_match_gnu_fileio_defvar_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11789,11 +11415,10 @@ fn file_name_edge_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "file_name_edge_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11821,11 +11446,10 @@ fn expand_file_name_preserves_double_slash_root_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "expand_file_name_preserves_double_slash_root_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11854,11 +11478,10 @@ fn expand_file_name_preserves_posix_superroot_parent_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "expand_file_name_preserves_posix_superroot_parent_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11888,11 +11511,10 @@ fn file_name_handler_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "file_name_handler_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11924,12 +11546,7 @@ fn file_mode_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "file_mode_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("file_mode_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -11958,11 +11575,10 @@ fn invisible_p_buffer_invisibility_spec_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "invisible_p_buffer_invisibility_spec_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -11995,11 +11611,10 @@ fn invisible_p_overlay_invisibility_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "invisible_p_overlay_invisibility_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12032,11 +11647,10 @@ fn invisible_p_category_invisibility_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "invisible_p_category_invisibility_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12070,11 +11684,10 @@ fn invisible_p_default_text_properties_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "invisible_p_default_text_properties_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12104,11 +11717,10 @@ fn character_string_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "character_string_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12141,11 +11753,10 @@ fn characterp_ignored_second_arg_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "characterp_ignored_second_arg_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12179,11 +11790,10 @@ fn unibyte_char_to_multibyte_rejects_negative_chars_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "unibyte_char_to_multibyte_rejects_negative_chars_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12216,7 +11826,7 @@ fn encode_char_rejects_negative_chars_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("encode_char_rejects_negative_chars_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("encode_char_rejects_negative_chars_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -12248,11 +11858,10 @@ fn coding_string_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "coding_string_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12292,12 +11901,7 @@ fn url_util_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "url_util_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("url_util_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -12332,12 +11936,7 @@ fn url_parse_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
-        "url_parse_elisp_functions_match_gnu_semantics",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("url_parse_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -12370,11 +11969,10 @@ fn url_network_support_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "url_network_support_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12404,11 +12002,10 @@ fn url_file_handler_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "url_file_handler_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12434,11 +12031,10 @@ fn split_string_trim_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "split_string_trim_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12471,11 +12067,10 @@ fn char_code_property_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "char_code_property_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12505,11 +12100,10 @@ fn string_compare_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "string_compare_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12542,11 +12136,10 @@ fn string_comparison_functions_accept_symbols_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "string_comparison_functions_accept_symbols_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12577,11 +12170,10 @@ fn string_comparison_positioned_symbol_designators_match_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "string_comparison_positioned_symbol_designators_match_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12613,11 +12205,10 @@ fn compare_strings_bounds_and_ignore_case_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "compare_strings_bounds_and_ignore_case_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12647,11 +12238,10 @@ fn string_algorithm_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "string_algorithm_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12683,11 +12273,10 @@ fn string_distance_unibyte_inputs_use_byte_compare_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "string_distance_unibyte_inputs_use_byte_compare_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12724,11 +12313,10 @@ fn format_print_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "format_print_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12778,11 +12366,10 @@ fn float_output_format_matches_gnu_print_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "float_output_format_matches_gnu_print_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12812,11 +12399,10 @@ fn format_percent_c_preserves_large_character_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "format_percent_c_preserves_large_character_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12854,11 +12440,10 @@ fn format_copies_format_string_text_properties_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "format_copies_format_string_text_properties_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12895,11 +12480,10 @@ fn format_preserves_format_and_string_argument_properties_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "format_preserves_format_and_string_argument_properties_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12936,11 +12520,10 @@ fn format_message_preserves_text_properties_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "format_message_preserves_text_properties_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -12974,11 +12557,10 @@ fn format_message_text_quoting_style_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "format_message_text_quoting_style_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13014,11 +12596,10 @@ fn format_left_aligned_precision_extends_string_properties_match_gnu_semantics()
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "format_left_aligned_precision_extends_string_properties_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13047,11 +12628,10 @@ fn format_string_precision_uses_display_width_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "format_string_precision_uses_display_width_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13085,11 +12665,10 @@ fn format_numeric_precision_and_prefixes_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "format_numeric_precision_and_prefixes_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13118,11 +12697,10 @@ fn format_integer_conversion_accepts_nonfinite_floats_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "format_integer_conversion_accepts_nonfinite_floats_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13159,7 +12737,7 @@ fn format_huge_field_width_overflows_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches("format_huge_field_width_overflows_like_gnu", &gnu, &neo, 2);
+    assert_pair_exact_display("format_huge_field_width_overflows_like_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -13194,11 +12772,10 @@ fn format_print_level_notation_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "format_print_level_notation_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13235,11 +12812,10 @@ fn with_output_to_string_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "with_output_to_string_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13269,11 +12845,10 @@ fn print_circle_nil_bounded_cycle_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "print_circle_nil_bounded_cycle_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13304,11 +12879,10 @@ fn print_circle_nil_tail_cycle_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "print_circle_nil_tail_cycle_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13342,11 +12916,10 @@ fn print_level_vectorlike_notation_matches_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "print_level_vectorlike_notation_matches_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13384,11 +12957,10 @@ fn process_output_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "process_output_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13422,11 +12994,10 @@ fn process_signal_status_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "process_signal_status_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13463,11 +13034,10 @@ fn call_process_region_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "call_process_region_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13505,11 +13075,10 @@ fn call_process_exec_path_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "call_process_exec_path_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13542,11 +13111,10 @@ fn async_process_exec_path_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "async_process_exec_path_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13577,11 +13145,10 @@ fn async_shell_process_wrappers_use_dynamic_shell_file_name_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "async_shell_process_wrappers_use_dynamic_shell_file_name_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13614,11 +13181,10 @@ fn callproc_directory_variables_are_special_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "callproc_directory_variables_are_special_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13651,11 +13217,10 @@ fn hash_base64_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "hash_base64_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13695,7 +13260,7 @@ fn json_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("json_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("json_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -13728,7 +13293,7 @@ fn xml_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("xml_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("xml_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -13760,7 +13325,7 @@ fn dom_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches("dom_elisp_functions_match_gnu_semantics", &gnu, &neo, 2);
+    assert_pair_exact_display("dom_elisp_functions_match_gnu_semantics", &gnu, &neo);
 }
 
 #[test]
@@ -13844,6 +13409,11 @@ fn string_and_numeric_operations_match_gnu_semantics() {
             "{label}: (intern \"hello\") should be hello. Echo: {echo}"
         );
     }
+    assert_pair_exact_display(
+        "string_and_numeric_operations_match_gnu_semantics",
+        &gnu,
+        &neo,
+    );
 }
 
 // ── Environment and keymap tests ────────────────────────────
@@ -13875,6 +13445,7 @@ fn getenv_returns_same_path_as_gnu() {
             "{label}: (getenv USER) should return a string. Echo: {echo}"
         );
     }
+    assert_pair_exact_display("getenv_returns_same_path_as_gnu", &gnu, &neo);
 }
 
 #[test]
@@ -13906,11 +13477,10 @@ fn key_description_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "key_description_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13943,11 +13513,10 @@ fn event_conversion_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "event_conversion_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -13977,11 +13546,10 @@ fn command_remapping_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "command_remapping_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -14011,11 +13579,10 @@ fn sparse_keymap_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "sparse_keymap_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -14045,11 +13612,10 @@ fn local_keymap_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "local_keymap_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -14079,11 +13645,10 @@ fn full_keymap_prompt_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "full_keymap_prompt_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -14113,11 +13678,10 @@ fn keymap_parent_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "keymap_parent_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -14149,11 +13713,10 @@ fn substitute_command_keys_elisp_functions_match_gnu_semantics() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "substitute_command_keys_elisp_functions_match_gnu_semantics",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -14176,6 +13739,7 @@ fn lookup_key_global_map_returns_correct_binding() {
             "{label}: (lookup-key global-map (kbd C-x C-f)) should find binding"
         );
     }
+    assert_pair_exact_display("lookup_key_global_map_returns_correct_binding", &gnu, &neo);
 }
 
 // ── Hash table tests ────────────────────────────────────────
@@ -14209,6 +13773,7 @@ fn hash_table_operations_match_gnu_semantics() {
             "{label}: (gethash 'key (make-hash-table)) should be nil. Echo: {echo}"
         );
     }
+    assert_pair_exact_display("hash_table_operations_match_gnu_semantics", &gnu, &neo);
 }
 
 // ── Sequence tests ──────────────────────────────────────────
@@ -14242,6 +13807,7 @@ fn sequence_operations_match_gnu_semantics() {
             "{label}: (aref [1 2 3] 0) should be 1. Echo: {echo}"
         );
     }
+    assert_pair_exact_display("sequence_operations_match_gnu_semantics", &gnu, &neo);
 }
 
 // ── Regexp and assoc tests ──────────────────────────────────
@@ -14275,6 +13841,11 @@ fn regexp_and_assoc_operations_match_gnu_semantics() {
             "{label}: (assoc 'b ...) should find (b . 2). Echo: {echo}"
         );
     }
+    assert_pair_exact_display(
+        "regexp_and_assoc_operations_match_gnu_semantics",
+        &gnu,
+        &neo,
+    );
 }
 
 // ── Evaluator core tests ────────────────────────────────────
@@ -14321,6 +13892,7 @@ fn lambda_apply_funcall_match_gnu_semantics() {
             "{label}: (funcall '+ 1 2 3) should be 6. Echo: {echo}"
         );
     }
+    assert_pair_exact_display("lambda_apply_funcall_match_gnu_semantics", &gnu, &neo);
 }
 
 // ── Macro and control flow tests ────────────────────────────
@@ -14358,6 +13930,7 @@ fn macroexpand_and_condition_case_match_gnu() {
             "{label}: (eval '(+ 1 2)) should be 3. Echo: {echo}"
         );
     }
+    assert_pair_exact_display("macroexpand_and_condition_case_match_gnu", &gnu, &neo);
 }
 
 // ── Non-local exit tests ────────────────────────────────────
@@ -14391,6 +13964,7 @@ fn catch_throw_and_unwind_protect_match_gnu() {
             "{label}: (unwind-protect 42 ...) should return 42"
         );
     }
+    assert_pair_exact_display("catch_throw_and_unwind_protect_match_gnu", &gnu, &neo);
 }
 
 // ── Prefix argument diagnostic ──────────────────────────────
@@ -14432,6 +14006,7 @@ fn prefix_arg_survives_from_cu_to_next_command() {
             "{label}: current-prefix-arg should be nil"
         );
     }
+    assert_pair_exact_display("prefix_arg_survives_from_cu_to_next_command", &gnu, &neo);
 }
 
 // ── Function definition and call tests ──────────────────────
@@ -14473,6 +14048,11 @@ fn defun_and_optional_args_preserve_argument_semantics() {
             "{label}: (defun fn (a &optional b)) then (fn 5 3) should be 8"
         );
     }
+    assert_pair_exact_display(
+        "defun_and_optional_args_preserve_argument_semantics",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -14498,6 +14078,11 @@ fn where_is_internal_returns_key_bindings_for_commands() {
             "{label}: where-is-internal find-file should show wi=N with N > 0"
         );
     }
+    assert_pair_exact_display(
+        "where_is_internal_returns_key_bindings_for_commands",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -14529,6 +14114,11 @@ fn where_is_internal_firstonly_preserves_keymap_order_like_gnu() {
             "{label}: where-is-internal FIRSTONLY should keep GNU keymap order instead of choosing the shortest binding"
         );
     }
+    assert_pair_exact_display(
+        "where_is_internal_firstonly_preserves_keymap_order_like_gnu",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -14550,6 +14140,11 @@ fn apropos_command_includes_key_binding_for_find_file() {
             "{label}: apropos-command should open *Apropos* buffer"
         );
     }
+    assert_pair_exact_display(
+        "apropos_command_includes_key_binding_for_find_file",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -14582,4 +14177,5 @@ fn recent_keys_includes_command_after_self_insert() {
             "{label}: M-: eval should produce a numeric result"
         );
     }
+    assert_pair_exact_display("recent_keys_includes_command_after_self_insert", &gnu, &neo);
 }

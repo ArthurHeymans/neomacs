@@ -345,6 +345,11 @@ fn accept_process_output_drains_while_command_input_pending() {
          draining the ready process fd) so APO-DRAIN-DONE never appeared:\n{}",
         neo.text_grid().join("\n")
     );
+    assert_pair_exact_display(
+        "accept_process_output_drains_while_command_input_pending",
+        &gnu,
+        &neo,
+    );
 }
 
 /// Finding 1 (keyboard/command-loop audit) — pressing a truly-unbound key

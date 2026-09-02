@@ -87,6 +87,11 @@ fn scratch_self_insert_ret_creates_three_visible_lines() {
         neo_buffer, EXPECTED_BUFFER,
         "Neomacs scratch buffer contents"
     );
+    assert_pair_exact_display(
+        "scratch_self_insert_ret_creates_three_visible_lines",
+        &gnu,
+        &neo,
+    );
 }
 
 #[test]
@@ -118,11 +123,10 @@ fn electric_return_newline_and_indent_in_lisp_buffer() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "electric_return_newline_and_indent_in_lisp_buffer",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -178,11 +182,10 @@ fn next_line_preserves_interactive_goal_column_like_gnu() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "next_line_preserves_interactive_goal_column_like_gnu",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -204,5 +207,10 @@ fn delete_char_via_cd_removes_character_after_point() {
         &mut neo,
         name,
         expected,
+    );
+    assert_pair_exact_display(
+        "delete_char_via_cd_removes_character_after_point",
+        &gnu,
+        &neo,
     );
 }

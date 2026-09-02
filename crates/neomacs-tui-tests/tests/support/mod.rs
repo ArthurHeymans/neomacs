@@ -295,12 +295,45 @@ pub fn save_current_file_and_assert_contents(
 
 // ── Assertion and utility helpers ──────────────────────────────────────
 
-/// Filter out boot-info rows (product name, version, etc.) from diffs.
-pub fn meaningful_diffs(diffs: Vec<RowDiff>) -> Vec<RowDiff> {
-    diffs
-        .into_iter()
-        .filter(|d| !is_boot_info_row(&d.gnu, &d.neo))
-        .collect()
+/// Assert complete GNU/Neomacs display parity.
+pub fn assert_pair_exact_display(label: &str, gnu: &TuiSession, neo: &TuiSession) {
+    let report = compare_session_displays(gnu, neo);
+    if report.is_satisfied() {
+        return;
+    }
+
+    for difference in report.unexpected().iter().take(40) {
+        eprintln!("  unexpected display difference: {difference:#?}");
+    }
+    if let Some(DisplayDifference::StyleClass { cell, .. }) = report
+        .unexpected()
+        .iter()
+        .find(|difference| matches!(difference, DisplayDifference::StyleClass { .. }))
+    {
+        for (editor, screen) in [("GNU", gnu.screen()), ("Neomacs", neo.screen())] {
+            let raw = screen
+                .cell(cell.row, cell.column)
+                .expect("reported style cell is inside terminal geometry");
+            eprintln!(
+                "  {editor} style cell {cell:?}: contents={:?} fg={:?} bg={:?} bold={} dim={} italic={} underline={} inverse={}",
+                raw.contents(),
+                raw.fgcolor(),
+                raw.bgcolor(),
+                raw.bold(),
+                raw.dim(),
+                raw.italic(),
+                raw.underline(),
+                raw.inverse(),
+            );
+        }
+    }
+    if report.unexpected().len() > 40 {
+        eprintln!(
+            "  ... and {} more unexpected display differences",
+            report.unexpected().len() - 40
+        );
+    }
+    panic!("{label} violated exact TUI display parity");
 }
 
 /// Predicate: the `*scratch*` buffer is visible with its default content.
@@ -309,55 +342,6 @@ pub fn scratch_ready(grid: &[String]) -> bool {
         && grid
             .iter()
             .any(|row| row.contains("This buffer is for text that is not saved"))
-}
-
-/// Assert that both editor grids satisfy an explicit typed comparison contract.
-pub fn assert_pair_matches_contract(
-    label: &str,
-    gnu: &TuiSession,
-    neo: &TuiSession,
-    contract: &TuiContract<'_>,
-) {
-    let report = compare_text_grids_with_contract(&gnu.text_grid(), &neo.text_grid(), contract);
-    if report.is_satisfied() {
-        return;
-    }
-
-    for diff in report.unexpected() {
-        eprintln!("  unexpected row {:2}:", diff.row);
-        eprintln!("    GNU: |{}|", diff.gnu);
-        eprintln!("    NEO: |{}|", diff.neo);
-    }
-    for expected in report.stale_expectations() {
-        eprintln!(
-            "  stale expected divergence at {:?} (GNU |{}|, NEO |{}|): {}",
-            expected.row, expected.gnu, expected.neomacs, expected.reason
-        );
-    }
-    panic!("{label} violated its TUI comparison contract");
-}
-
-/// Legacy whole-screen row budget retained only while existing tests migrate
-/// to [`assert_pair_matches_contract`]. New tests must name exact divergence
-/// locations and reasons through [`TuiContract`].
-pub fn assert_pair_nearly_matches(
-    label: &str,
-    gnu: &TuiSession,
-    neo: &TuiSession,
-    allowed_rows: usize,
-) {
-    let gl = gnu.text_grid();
-    let nl = neo.text_grid();
-    let diffs = meaningful_diffs(diff_text_grids(&gl, &nl));
-    if !diffs.is_empty() {
-        eprintln!("{label}: {} rows differ", diffs.len());
-        print_row_diffs(&diffs);
-    }
-    assert!(
-        diffs.len() <= allowed_rows,
-        "{label} differs in {} rows",
-        diffs.len()
-    );
 }
 
 /// Dump both editor grids and their diffs to stderr for debugging.
@@ -370,10 +354,15 @@ pub fn dump_pair_grids(label: &str, gnu: &TuiSession, neo: &TuiSession) {
     for (row, text) in neo.text_grid().iter().enumerate() {
         eprintln!("  {row:02}: |{}|", text.trim_end());
     }
-    let diffs = meaningful_diffs(diff_text_grids(&gnu.text_grid(), &neo.text_grid()));
-    if !diffs.is_empty() {
-        eprintln!("{label}: {} differing rows", diffs.len());
-        print_row_diffs(&diffs);
+    let report = compare_session_displays(gnu, neo);
+    if !report.is_satisfied() {
+        eprintln!(
+            "{label}: {} exact display differences",
+            report.unexpected().len()
+        );
+        for difference in report.unexpected().iter().take(40) {
+            eprintln!("  {difference:#?}");
+        }
     }
 }
 

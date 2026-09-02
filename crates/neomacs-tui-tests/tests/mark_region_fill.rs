@@ -31,7 +31,7 @@ fn mark_sexp_via_cmeta_spc_then_kill_region() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("mark_sexp_via_cmeta_spc_then_kill_region", &gnu, &neo, 2);
+    assert_pair_exact_display("mark_sexp_via_cmeta_spc_then_kill_region", &gnu, &neo);
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn mark_defun_via_cmeta_h_then_kill_region() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("mark_defun_via_cmeta_h_then_kill_region", &gnu, &neo, 2);
+    assert_pair_exact_display("mark_defun_via_cmeta_h_then_kill_region", &gnu, &neo);
 }
 
 #[test]
@@ -88,11 +88,10 @@ fn pop_global_mark_via_cx_cspc_returns_to_marked_buffer_position() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "pop_global_mark_via_cx_cspc_returns_to_marked_buffer_position",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "pop_global_mark_via_cx_cspc_returns_to_marked_buffer_position",
@@ -127,11 +126,10 @@ fn pop_local_mark_via_cu_cspc_returns_to_current_buffer_mark() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "pop_local_mark_via_cu_cspc_returns_to_current_buffer_mark",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "pop_local_mark_via_cu_cspc_returns_to_current_buffer_mark",
@@ -173,11 +171,10 @@ fn set_mark_command_repeat_pop_repeats_local_mark_pop_like_gnu() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "set_mark_command_repeat_pop_repeats_local_mark_pop_like_gnu",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "set_mark_command_repeat_pop_repeats_local_mark_pop_like_gnu",
@@ -246,11 +243,10 @@ fn pop_global_mark_widens_to_reach_mark_outside_narrowing_like_gnu() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "pop_global_mark_widens_to_reach_mark_outside_narrowing_like_gnu",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "pop_global_mark_widens_to_reach_mark_outside_narrowing_like_gnu",
@@ -282,11 +278,10 @@ fn narrow_to_defun_once_then_widen_via_cx_n_d_w() {
     gnu.read_until(Duration::from_secs(8), narrowed_ready);
     neo.read_until(Duration::from_secs(12), narrowed_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "narrow_to_defun_once_then_widen_via_cx_n_d_w/narrowed",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "C-x n w M-<");
@@ -299,12 +294,7 @@ fn narrow_to_defun_once_then_widen_via_cx_n_d_w() {
     neo.read_until(Duration::from_secs(8), widened_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
-        "narrow_to_defun_once_then_widen_via_cx_n_d_w",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("narrow_to_defun_once_then_widen_via_cx_n_d_w", &gnu, &neo);
 }
 
 #[test]
@@ -327,11 +317,10 @@ fn set_fill_column_then_fill_paragraph_via_cx_f_mq() {
     neo.read_until(Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "set_fill_column_then_fill_paragraph_via_cx_f_mq/prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -350,11 +339,10 @@ fn set_fill_column_then_fill_paragraph_via_cx_f_mq() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "set_fill_column_then_fill_paragraph_via_cx_f_mq",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -398,11 +386,10 @@ fn set_fill_column_empty_prompt_multiple_del_keeps_prompt() {
         );
     }
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "set_fill_column_empty_prompt_multiple_del_keeps_prompt",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -467,11 +454,10 @@ fn auto_fill_mode_wraps_inserted_text_after_fill_column() {
     );
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "auto_fill_mode_wraps_inserted_text_after_fill_column",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -518,11 +504,10 @@ fn set_fill_prefix_then_fill_paragraph_via_cx_dot_mq() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "set_fill_prefix_then_fill_paragraph_via_cx_dot_mq",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -553,7 +538,7 @@ fn center_line_via_mx_uses_fill_column() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("center_line_via_mx_uses_fill_column", &gnu, &neo, 2);
+    assert_pair_exact_display("center_line_via_mx_uses_fill_column", &gnu, &neo);
     save_current_file_and_assert_contents(
         "center_line_via_mx_uses_fill_column",
         &mut gnu,
@@ -603,7 +588,7 @@ fn fill_region_via_mx_wraps_active_region() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("fill_region_via_mx_wraps_active_region", &gnu, &neo, 2);
+    assert_pair_exact_display("fill_region_via_mx_wraps_active_region", &gnu, &neo);
     save_current_file_and_assert_contents(
         "fill_region_via_mx_wraps_active_region",
         &mut gnu,
@@ -622,11 +607,10 @@ fn set_variable_fill_column_via_mx_updates_buffer_local_value() {
     gnu.read_until(Duration::from_secs(6), variable_prompt);
     neo.read_until(Duration::from_secs(8), variable_prompt);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "set_variable_fill_column_via_mx_updates_buffer_local_value/variable_prompt",
         &gnu,
         &neo,
-        2,
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -677,11 +661,10 @@ fn set_variable_fill_column_via_mx_updates_buffer_local_value() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "set_variable_fill_column_via_mx_updates_buffer_local_value",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -715,15 +698,15 @@ fn recenter_top_bottom_cycle_via_cl() {
 
     send_both(&mut gnu, &mut neo, "C-l");
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches("recenter_top_bottom_cycle_via_cl/middle", &gnu, &neo, 2);
+    assert_pair_exact_display("recenter_top_bottom_cycle_via_cl/middle", &gnu, &neo);
 
     send_both(&mut gnu, &mut neo, "C-l");
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches("recenter_top_bottom_cycle_via_cl/top", &gnu, &neo, 2);
+    assert_pair_exact_display("recenter_top_bottom_cycle_via_cl/top", &gnu, &neo);
 
     send_both(&mut gnu, &mut neo, "C-l");
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches("recenter_top_bottom_cycle_via_cl/bottom", &gnu, &neo, 2);
+    assert_pair_exact_display("recenter_top_bottom_cycle_via_cl/bottom", &gnu, &neo);
 }
 
 #[test]
@@ -756,11 +739,10 @@ fn delete_trailing_whitespace_via_mx_cleans_buffer_before_save() {
         "delete-trailing-whitespace.txt",
         "alpha\nbeta\n",
     );
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "delete_trailing_whitespace_via_mx_cleans_buffer_before_save",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -794,11 +776,10 @@ fn untabify_region_via_mx_expands_tabs_before_save() {
         "untabify-region.txt",
         "a       b\n        indent\n",
     );
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "untabify_region_via_mx_expands_tabs_before_save",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -832,11 +813,10 @@ fn tabify_region_via_mx_converts_spaces_before_save() {
         "tabify-region.txt",
         "a\tb\n\tindent\n",
     );
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "tabify_region_via_mx_converts_spaces_before_save",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -863,11 +843,10 @@ fn indent_rigidly_with_prefix_via_mx_indents_region() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "indent_rigidly_with_prefix_via_mx_indents_region",
         &gnu,
         &neo,
-        2,
     );
     save_current_file_and_assert_contents(
         "indent_rigidly_with_prefix_via_mx_indents_region",
@@ -912,7 +891,7 @@ fn indent_region_elisp_via_cmeta_backslash() {
         "indent-region.el",
         "(defun sample ()\n  (message \"alpha\")\n  (when t\n    (message \"beta\")))\n",
     );
-    assert_pair_nearly_matches("indent_region_elisp_via_cmeta_backslash", &gnu, &neo, 2);
+    assert_pair_exact_display("indent_region_elisp_via_cmeta_backslash", &gnu, &neo);
 }
 
 #[test]
@@ -940,11 +919,10 @@ fn set_mark_command_then_kill_region_via_cspc_mf_cw() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "set_mark_command_then_kill_region_via_cspc_mf_cw",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -974,7 +952,7 @@ fn mark_word_then_kill_region_via_mat_cw() {
     neo.read_until(Duration::from_secs(8), yanked);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("mark_word_then_kill_region_via_mat_cw", &gnu, &neo, 2);
+    assert_pair_exact_display("mark_word_then_kill_region_via_mat_cw", &gnu, &neo);
 }
 
 #[test]
@@ -1009,11 +987,10 @@ fn mark_whole_buffer_then_kill_and_yank_via_cx_h_cw_cy() {
     neo.read_until(Duration::from_secs(8), restored);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "mark_whole_buffer_then_kill_and_yank_via_cx_h_cw_cy",
         &gnu,
         &neo,
-        2,
     );
 }
 
@@ -1042,7 +1019,7 @@ fn mark_page_then_kill_region_via_cx_cp_cw() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("mark_page_then_kill_region_via_cx_cp_cw", &gnu, &neo, 2);
+    assert_pair_exact_display("mark_page_then_kill_region_via_cx_cp_cw", &gnu, &neo);
 }
 
 #[test]
@@ -1087,11 +1064,10 @@ fn narrow_to_region_once_then_widen_via_cx_n_n_w() {
     gnu.read_until(Duration::from_secs(8), narrowed_ready);
     neo.read_until(Duration::from_secs(12), narrowed_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "narrow_to_region_once_then_widen_via_cx_n_n_w/narrowed",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "C-x n w");
@@ -1104,12 +1080,7 @@ fn narrow_to_region_once_then_widen_via_cx_n_n_w() {
     neo.read_until(Duration::from_secs(8), widened_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
-        "narrow_to_region_once_then_widen_via_cx_n_n_w",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_exact_display("narrow_to_region_once_then_widen_via_cx_n_n_w", &gnu, &neo);
 }
 
 #[test]
@@ -1155,11 +1126,10 @@ fn narrow_to_page_once_then_widen_via_cx_n_p_w() {
     gnu.read_until(Duration::from_secs(8), narrowed_ready);
     neo.read_until(Duration::from_secs(12), narrowed_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
-    assert_pair_nearly_matches(
+    assert_pair_exact_display(
         "narrow_to_page_once_then_widen_via_cx_n_p_w/narrowed",
         &gnu,
         &neo,
-        2,
     );
 
     send_both(&mut gnu, &mut neo, "C-x n w");
@@ -1173,5 +1143,5 @@ fn narrow_to_page_once_then_widen_via_cx_n_p_w() {
     neo.read_until(Duration::from_secs(8), widened_ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("narrow_to_page_once_then_widen_via_cx_n_p_w", &gnu, &neo, 2);
+    assert_pair_exact_display("narrow_to_page_once_then_widen_via_cx_n_p_w", &gnu, &neo);
 }
