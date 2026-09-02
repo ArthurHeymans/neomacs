@@ -14,7 +14,6 @@ use std::ffi::{OsStr, OsString};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
-use std::process::Command;
 
 pub(crate) enum EnvironmentLookup {
     Value(Value),
@@ -264,7 +263,10 @@ impl ChildEnvironment {
         Self { entries }
     }
 
-    pub(crate) fn apply_to_command(&self, command: &mut Command) {
+    pub(crate) fn apply_to_child_command(
+        &self,
+        command: &mut crate::emacs_core::callproc::ChildCommand,
+    ) {
         command.env_clear();
         command.envs(self.entries.iter().map(|(name, value)| (name, value)));
     }

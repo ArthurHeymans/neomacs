@@ -19,6 +19,7 @@
 //! The default rustls backend uses Mozilla roots and augments them with any
 //! GNU-compatible `:trustfiles` supplied by Lisp.
 
+use crate::emacs_core::callproc::{ChildStdio, SpawnedChild};
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_min_args};
 use num_enum::IntoPrimitive;
@@ -36,7 +37,6 @@ use std::os::unix::ffi::{OsStrExt, OsStringExt};
 #[cfg(unix)]
 use std::os::unix::net::{SocketAddr as UnixSocketAddr, UnixDatagram, UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -1099,7 +1099,7 @@ struct LiveProcessIo {
 }
 
 enum ChildOutputReader {
-    Stdout(std::process::ChildStdout),
+    Stdout(std::fs::File),
     Shared(os_pipe::PipeReader),
 }
 
@@ -5668,7 +5668,7 @@ impl ProcessManager {
     #[cfg(unix)]
     fn register_child_stdin_writable_with_poller(
         poller: &polling::Poller,
-        stdin: &std::process::ChildStdin,
+        stdin: &std::fs::File,
         id: ProcessId,
     ) {
         use std::os::unix::io::AsRawFd;
@@ -5680,7 +5680,7 @@ impl ProcessManager {
     #[cfg(not(unix))]
     fn register_child_stdin_writable_with_poller(
         _poller: &polling::Poller,
-        _stdin: &std::process::ChildStdin,
+        _stdin: &std::fs::File,
         _id: ProcessId,
     ) {
         // Windows subprocess stdin is not integrated into the poller yet.
@@ -5689,7 +5689,7 @@ impl ProcessManager {
     #[cfg(unix)]
     fn unregister_child_stdin_writable_from_poller(
         poller: &polling::Poller,
-        stdin: &std::process::ChildStdin,
+        stdin: &std::fs::File,
     ) {
         use std::os::unix::io::AsRawFd;
         let fd = stdin.as_raw_fd();
@@ -5700,7 +5700,7 @@ impl ProcessManager {
     #[cfg(not(unix))]
     fn unregister_child_stdin_writable_from_poller(
         _poller: &polling::Poller,
-        _stdin: &std::process::ChildStdin,
+        _stdin: &std::fs::File,
     ) {
         // See `register_child_stdin_writable_with_poller`.
     }
@@ -6180,12 +6180,12 @@ impl ProcessManager {
 
         let mut cmd = crate::emacs_core::callproc::new_child_command(&argv_os[0]);
         cmd.args(&argv_os[1..]);
-        cmd.stdin(Stdio::piped());
+        cmd.stdin(ChildStdio::Piped);
         let shared_output_reader = if let Some(writer) = stderr_transfer.writer() {
             let child_writer = writer
                 .try_clone()
                 .map_err(|error| format!("Failed to duplicate stderr pipe: {error}"))?;
-            cmd.stdout(Stdio::piped());
+            cmd.stdout(ChildStdio::Piped);
             cmd.stderr(child_writer);
             None
         } else {
@@ -6203,7 +6203,7 @@ impl ProcessManager {
         }
 
         if let Some(environment) = child_environment {
-            environment.apply_to_command(&mut cmd);
+            environment.apply_to_child_command(&mut cmd);
         }
 
         for (key, val) in env_overrides {
@@ -6398,7 +6398,7 @@ impl ProcessManager {
                 cmd.current_dir(dir);
             }
             if let Some(environment) = child_environment {
-                environment.apply_to_command(&mut cmd);
+                environment.apply_to_child_command(&mut cmd);
             }
             for (key, val) in env_overrides {
                 let key_str = lisp_string_to_os_string(key);
@@ -6411,12 +6411,15 @@ impl ProcessManager {
                     }
                 }
             }
-            // `new_child_command` already installs a `pre_exec` that calls
-            // `setsid` (own session, no controlling tty).  Chain a second
-            // `pre_exec` that opens the PTY slave by path and makes it the
-            // controlling terminal on fds 0/1, leaving fd 2 (stderr) on the
-            // pipe `Command` set up — exactly GNU's forkin/forkout=pty_tty,
-            // forkerr=stderr-pipe arrangement.
+            // A pty child needs post-fork setup `posix_spawn` cannot express,
+            // so take the forking `Command` (GNU likewise falls back to `vfork`
+            // for pty children).  It already carries the `setsid` `pre_exec`
+            // (own session, no controlling tty).  Chain a second `pre_exec`
+            // that opens the PTY slave by path and makes it the controlling
+            // terminal on fds 0/1, leaving fd 2 (stderr) on the pipe set up
+            // above — exactly GNU's forkin/forkout=pty_tty, forkerr=stderr-pipe
+            // arrangement.
+            let mut cmd = cmd.into_forking_command();
             let tty_cstr = match std::ffi::CString::new(tty_path.as_os_str().as_bytes()) {
                 Ok(path) => path,
                 Err(_) => return Err("PTY tty name contains an interior NUL".to_string()),
@@ -6430,7 +6433,7 @@ impl ProcessManager {
             }
 
             let child = match cmd.spawn() {
-                Ok(child) => child,
+                Ok(child) => SpawnedChild::from_std(child),
                 Err(error) => return Err(format!("Failed to spawn PTY child: {error}")),
             };
             stderr_transfer.commit();

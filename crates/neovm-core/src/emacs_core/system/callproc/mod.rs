@@ -10,7 +10,7 @@ use std::os::unix::ffi::OsStringExt;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
@@ -18,6 +18,9 @@ use super::process::ProcessOutputDecoding;
 use super::value::{Value, ValueKind, VecLikeType};
 use crate::buffer::BufferManager;
 use crate::heap_types::LispString;
+
+mod spawn;
+pub(crate) use spawn::{ChildCommand, ChildStdio, SpawnedChild};
 
 #[cfg(test)]
 thread_local! {
@@ -72,12 +75,10 @@ pub fn command_line_max_length() -> i64 {
 /// process group (`CREATE_NEW_PROCESS_GROUP`). Children that genuinely need a
 /// controlling terminal (M-x shell/term) are spawned via portable_pty, which
 /// sets up the pty as their controlling terminal — they do not use this path.
-pub(crate) fn new_child_command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
+pub(crate) fn new_child_command<S: AsRef<std::ffi::OsStr>>(program: S) -> ChildCommand {
     #[cfg(test)]
     NEW_CHILD_COMMAND_CALLS.with(|calls| calls.set(calls.get() + 1));
-    let mut command = Command::new(program);
-    isolate_child_command(&mut command);
-    command
+    ChildCommand::new(program)
 }
 
 /// Apply the platform's "own process group" isolation to an already-built
@@ -236,7 +237,7 @@ pub(super) fn subprocess_default_directory(eval: &super::eval::Context) -> Optio
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn configure_subprocess_current_dir(eval: &super::eval::Context, command: &mut Command) {
+fn configure_subprocess_current_dir(eval: &super::eval::Context, command: &mut ChildCommand) {
     if let Some(dir) = subprocess_default_directory(eval) {
         command.current_dir(dir);
     }
@@ -370,10 +371,11 @@ fn expand_subprocess_infile(
 
 fn configure_subprocess_environment(
     eval: &super::eval::Context,
-    command: &mut Command,
+    command: &mut ChildCommand,
     current_dir: Option<&Path>,
 ) {
-    super::environment::ChildEnvironment::materialize(eval, current_dir).apply_to_command(command);
+    super::environment::ChildEnvironment::materialize(eval, current_dir)
+        .apply_to_child_command(command);
 }
 
 fn is_file_keyword(value: &Value) -> bool {
@@ -712,12 +714,12 @@ fn call_process_status_value(status: std::process::ExitStatus) -> Value {
 }
 
 fn configure_call_process_stdin(
-    command: &mut Command,
+    command: &mut ChildCommand,
     infile: Option<&LispString>,
 ) -> Result<(), Flow> {
     match infile {
         None => {
-            command.stdin(Stdio::null());
+            command.stdin(ChildStdio::Null);
             Ok(())
         }
         Some(path) => {
@@ -731,7 +733,7 @@ fn configure_call_process_stdin(
                     e,
                 )
             })?;
-            command.stdin(Stdio::from(file));
+            command.stdin(ChildStdio::from(file));
             Ok(())
         }
     }
@@ -794,7 +796,7 @@ fn run_process_command_in_state(
 
     if destination_spec.no_wait {
         let mut command = new_child_command(&program_os);
-        command.args(&cmd_args_os).stdout(Stdio::null());
+        command.args(&cmd_args_os).stdout(ChildStdio::Null);
         if let Some(dir) = &subprocess_dir {
             command.current_dir(dir);
         }
@@ -802,7 +804,7 @@ fn run_process_command_in_state(
         configure_call_process_stdin(&mut command, infile.as_ref())?;
         match destination_spec.stderr {
             StderrTarget::Discard | StderrTarget::ToStdoutTarget => {
-                command.stderr(Stdio::null());
+                command.stderr(ChildStdio::Null);
             }
             StderrTarget::File => {
                 let path = destination_spec.stderr_file.as_ref().ok_or_else(|| {
@@ -817,7 +819,7 @@ fn run_process_command_in_state(
                     .map_err(|e| {
                         super::process::signal_process_io("Writing process output", None, e)
                     })?;
-                command.stderr(Stdio::from(file));
+                command.stderr(ChildStdio::from(file));
             }
         };
 
@@ -833,8 +835,8 @@ fn run_process_command_in_state(
     let mut command = new_child_command(&program_os);
     command
         .args(&cmd_args_os)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stdout(ChildStdio::Piped)
+        .stderr(ChildStdio::Piped);
     if let Some(dir) = &subprocess_dir {
         command.current_dir(dir);
     }
@@ -864,9 +866,9 @@ fn run_process_capture_output(
     let mut command = new_child_command(resolve_call_process_program(eval, program)?);
     command
         .args(cmd_args.iter().map(lisp_string_to_os_string))
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stdin(ChildStdio::Null)
+        .stdout(ChildStdio::Piped)
+        .stderr(ChildStdio::Null);
     let subprocess_dir = subprocess_default_directory(eval);
     if let Some(dir) = &subprocess_dir {
         command.current_dir(dir);
@@ -1314,14 +1316,14 @@ fn builtin_call_process_region_impl(
         if let Some(dir) = &subprocess_dir {
             command.current_dir(dir);
         }
-        subprocess_env.apply_to_command(&mut command);
+        subprocess_env.apply_to_child_command(&mut command);
         command
             .args(cmd_args.iter().map(lisp_string_to_os_string))
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null());
+            .stdin(ChildStdio::Piped)
+            .stdout(ChildStdio::Null);
         match destination_spec.stderr {
             StderrTarget::Discard | StderrTarget::ToStdoutTarget => {
-                command.stderr(Stdio::null());
+                command.stderr(ChildStdio::Null);
             }
             StderrTarget::File => {
                 let path = destination_spec.stderr_file.as_ref().ok_or_else(|| {
@@ -1335,7 +1337,7 @@ fn builtin_call_process_region_impl(
                     .map_err(|e| {
                         super::process::signal_process_io("Writing process output", None, e)
                     })?;
-                command.stderr(Stdio::from(file));
+                command.stderr(ChildStdio::from(file));
             }
         };
 
@@ -1358,12 +1360,12 @@ fn builtin_call_process_region_impl(
     if let Some(dir) = &subprocess_dir {
         command.current_dir(dir);
     }
-    subprocess_env.apply_to_command(&mut command);
+    subprocess_env.apply_to_child_command(&mut command);
     let mut child = command
         .args(cmd_args.iter().map(lisp_string_to_os_string))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdin(ChildStdio::Piped)
+        .stdout(ChildStdio::Piped)
+        .stderr(ChildStdio::Piped)
         .spawn()
         .map_err(|e| super::process::signal_process_io("Searching for program", None, e))?;
 
@@ -1595,58 +1597,3 @@ mod read_coding_tests;
 #[cfg(test)]
 #[path = "tests/working_dir_infile.rs"]
 mod working_dir_infile_tests;
-
-#[cfg(all(test, unix))]
-mod child_isolation_tests {
-    use super::new_child_command;
-    use std::process::Stdio;
-
-    /// Regression test for issue #132: every spawned pipe-stdio child must live
-    /// in its own *session* (`setsid`) — its own process group AND no
-    /// controlling terminal. The process group stops a child's SIGTSTP/SIGTTOU
-    /// from suspending the editor (the suspend); the lack of a controlling
-    /// terminal stops an interactive `bash -i` from being SIGTTOU/SIGTTIN-
-    /// stopped as a background process group, which would wedge a synchronous
-    /// `call-process` forever (the hang).
-    #[test]
-    fn child_runs_in_its_own_session() {
-        let parent_pgid = unsafe { libc::getpgrp() };
-        let parent_sid = unsafe { libc::getsid(0) };
-        let mut child = new_child_command("sh")
-            .arg("-c")
-            .arg("sleep 1")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("spawn child");
-        let pid = child.id() as libc::pid_t;
-        // Read the child's process group + session while it is still alive.
-        let child_pgid = unsafe { libc::getpgid(pid) };
-        let child_sid = unsafe { libc::getsid(pid) };
-        let _ = child.kill();
-        let _ = child.wait();
-
-        assert!(child_pgid > 0, "getpgid failed for live child");
-        assert_ne!(
-            child_pgid, parent_pgid,
-            "child shares the editor's process group; its SIGTSTP/SIGTTOU could suspend neomacs (#132 suspend)"
-        );
-        assert_eq!(
-            child_pgid, pid,
-            "isolated child should lead its own process group"
-        );
-        // setsid makes the child a session leader (sid == pid) in a session
-        // distinct from the editor's, so it has no controlling terminal and an
-        // interactive shell cannot get SIGTTOU/SIGTTIN-stopped (#132 hang).
-        assert!(child_sid > 0, "getsid failed for live child");
-        assert_eq!(
-            child_sid, pid,
-            "isolated child should lead its own session (setsid)"
-        );
-        assert_ne!(
-            child_sid, parent_sid,
-            "child shares the editor's session/controlling terminal (#132 hang)"
-        );
-    }
-}

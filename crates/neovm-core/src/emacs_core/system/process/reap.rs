@@ -132,6 +132,7 @@
 //! through the state machine.
 
 use super::{Value, process_status_exit_value};
+use crate::emacs_core::callproc::SpawnedChild;
 
 /// A child this port spawned and has **not** reaped: GNU's `p->alive == 1`,
 /// carrying the pid that authorises `waitpid` and `kill` on it.
@@ -158,7 +159,7 @@ pub(crate) struct ReapableChild {
 enum ChildHandle {
     /// `std::process::Child`: the pipe spawn, and the pty spawn whose
     /// `:stderr` split goes through `pre_exec`.
-    Pipe(Box<std::process::Child>),
+    Pipe(Box<SpawnedChild>),
     /// `portable_pty`'s child handle.
     Pty(Box<dyn portable_pty::Child + Send + Sync>),
 }
@@ -222,7 +223,7 @@ pub(crate) enum ChildOwnership {
 
 impl ChildOwnership {
     /// Take ownership of a freshly spawned `std::process::Child`.
-    pub(crate) fn of_pipe_child(child: std::process::Child) -> Self {
+    pub(crate) fn of_pipe_child(child: SpawnedChild) -> Self {
         Self::Unreaped(ReapableChild {
             pid: child.id(),
             handle: ChildHandle::Pipe(Box::new(child)),
@@ -279,7 +280,7 @@ impl ChildOwnership {
 
     /// The child's stdin while it exists.  Not a reap, and the only reason the
     /// handle is reachable at all.
-    pub(crate) fn stdin_mut(&mut self) -> Option<&mut std::process::ChildStdin> {
+    pub(crate) fn stdin_mut(&mut self) -> Option<&mut std::fs::File> {
         match self {
             Self::Unreaped(ReapableChild {
                 handle: ChildHandle::Pipe(child),
@@ -291,7 +292,7 @@ impl ChildOwnership {
 
     /// The child's stdin for the poller registrations, which need the
     /// descriptor and nothing else.
-    pub(crate) fn stdin(&self) -> Option<&std::process::ChildStdin> {
+    pub(crate) fn stdin(&self) -> Option<&std::fs::File> {
         match self {
             Self::Unreaped(ReapableChild {
                 handle: ChildHandle::Pipe(child),
@@ -418,12 +419,12 @@ impl ReapableChild {
     }
 
     #[cfg(unix)]
-    fn probe_pipe(pid: u32, _child: &mut std::process::Child) -> ChildStatusChange {
+    fn probe_pipe(pid: u32, _child: &mut SpawnedChild) -> ChildStatusChange {
         super::process_child_status_change_from_wait(super::sys::poll_child_status(pid))
     }
 
     #[cfg(not(unix))]
-    fn probe_pipe(_pid: u32, child: &mut std::process::Child) -> ChildStatusChange {
+    fn probe_pipe(_pid: u32, child: &mut SpawnedChild) -> ChildStatusChange {
         match child.try_wait() {
             Ok(Some(status)) => ChildStatusChange::Reaped(super::process_status_from_exit(&status)),
             Ok(None) => ChildStatusChange::NoChange,
