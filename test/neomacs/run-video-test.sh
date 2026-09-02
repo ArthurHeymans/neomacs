@@ -6,14 +6,16 @@
 # 2. Captures GPU rendering logs
 # 3. Takes a screenshot
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NEOMACS_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 EMACS_BIN="$NEOMACS_ROOT/target/release/neomacs"
 TEST_EL="$SCRIPT_DIR/neomacs-video-test.el"
-LOG_FILE="/tmp/neomacs-video-test-$$.log"
-SCREENSHOT_FILE="/tmp/neomacs-video-test-screenshot-$$.png"
+ARTIFACT_DIR="$NEOMACS_ROOT/target/neomacs-video-test"
+LOG_FILE="$ARTIFACT_DIR/neomacs-video-test-$$.log"
+SCREENSHOT_FILE="$ARTIFACT_DIR/neomacs-video-test-screenshot-$$.png"
+mkdir -p "$ARTIFACT_DIR"
 
 # Colors for output
 RED='\033[0;31m'
@@ -38,10 +40,10 @@ if [[ ! -f "$TEST_EL" ]]; then
 fi
 
 # Check for test video
-VIDEO_FILE="/home/exec/Videos/4k_f1.mp4"
+VIDEO_FILE="${NEOMACS_VIDEO_TEST_FILE:-/home/exec/Videos/4k_f1.mp4}"
 if [[ ! -f "$VIDEO_FILE" ]]; then
-    echo -e "${YELLOW}WARNING: Test video not found at $VIDEO_FILE${NC}"
-    echo "Will try with fallback video..."
+    echo -e "${RED}ERROR: Test video not found at $VIDEO_FILE${NC}"
+    exit 1
 fi
 
 echo "Neomacs binary: $EMACS_BIN"
@@ -50,13 +52,13 @@ echo "Log file: $LOG_FILE"
 echo ""
 
 # Enable video debug logs
-export RUST_LOG="neomacs_display::backend::wgpu::video_cache=debug,neomacs_display::backend::wgpu::vulkan_dmabuf=debug,info"
+export RUST_LOG="neomacs_renderer_wgpu::video_cache=debug,neomacs_video=debug,info"
 
 echo "Running test with RUST_LOG=$RUST_LOG"
 echo ""
 
 # Run emacs and capture logs
-timeout 15 "$EMACS_BIN" -Q \
+NEOMACS_VIDEO_TEST_FILE="$VIDEO_FILE" timeout 15 "$EMACS_BIN" -Q \
     --eval "(setq inhibit-startup-screen t)" \
     -l "$TEST_EL" \
     2>&1 | tee "$LOG_FILE" &
@@ -78,8 +80,17 @@ if command -v import &> /dev/null && [[ -n "$DISPLAY" ]]; then
     fi
 fi
 
-# Wait for emacs to finish
-wait $EMACS_PID 2>/dev/null || true
+# Wait for Neomacs and preserve failures from Lisp, the native backend, or the
+# timeout.  The old smoke test discarded this status and could report success
+# when every video native function was absent.
+set +e
+wait "$EMACS_PID"
+NEOMACS_STATUS=$?
+set -e
+if [[ $NEOMACS_STATUS -ne 0 ]]; then
+    echo -e "${RED}VIDEO TEST: Neomacs exited with status $NEOMACS_STATUS${NC}"
+    exit "$NEOMACS_STATUS"
+fi
 
 echo ""
 echo "=== Analyzing logs ==="
@@ -88,7 +99,7 @@ echo ""
 # Check for video-related logs
 VIDEO_SUCCESS=false
 
-if grep -q "VideoCache" "$LOG_FILE" 2>/dev/null; then
+if grep -q "Video cache initialized" "$LOG_FILE" 2>/dev/null; then
     echo -e "${GREEN}[INFO] VideoCache activity detected${NC}"
     VIDEO_SUCCESS=true
 fi
@@ -98,7 +109,7 @@ if grep -q "GStreamer" "$LOG_FILE" 2>/dev/null; then
     VIDEO_SUCCESS=true
 fi
 
-if grep -q "video.*load\|load.*video" "$LOG_FILE" 2>/dev/null; then
+if grep -q "opening video\|video open queued" "$LOG_FILE" 2>/dev/null; then
     echo -e "${GREEN}[INFO] Video loading detected${NC}"
     VIDEO_SUCCESS=true
 fi
@@ -107,7 +118,14 @@ if grep -q "DMA-BUF\|dmabuf\|DmaBuf" "$LOG_FILE" 2>/dev/null; then
     echo -e "${GREEN}[INFO] DMA-BUF activity detected${NC}"
 fi
 
-# Check for errors
+# Backend/session failures are fatal.  General Neomacs diagnostics remain
+# visible below without making unrelated warnings fail this focused smoke test.
+if grep -Eqi "native video subsystem is unavailable|video playback failed|panic" "$LOG_FILE"; then
+    echo -e "${RED}VIDEO TEST: Native video backend failed${NC}"
+    grep -Ei "native video subsystem is unavailable|video playback failed|panic" "$LOG_FILE" | head -10
+    exit 1
+fi
+
 if grep -qi "error\|failed\|panic" "$LOG_FILE" 2>/dev/null; then
     echo -e "${YELLOW}[WARN] Some errors in log:${NC}"
     grep -i "error\|failed\|panic" "$LOG_FILE" | head -10
@@ -119,11 +137,8 @@ echo "=== Summary ==="
 if [[ "$VIDEO_SUCCESS" == "true" ]]; then
     echo -e "${GREEN}VIDEO TEST: Activity detected${NC}"
 else
-    echo -e "${YELLOW}VIDEO TEST: No video activity in logs${NC}"
-    echo "This might be because:"
-    echo "  - Video FFI functions are still stubs"
-    echo "  - GStreamer not properly initialized"
-    echo "  - Video feature not fully integrated yet"
+    echo -e "${RED}VIDEO TEST: No video session activity in logs${NC}"
+    exit 1
 fi
 
 echo ""
