@@ -20,7 +20,7 @@ use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{
     Glyph, GlyphArea, GlyphPointerAppearance, GlyphPointerOccurrenceIdentity,
     GlyphPointerSourceIdentity, GlyphPointerSourceKind, GlyphProvenance, GlyphRow, GlyphStringId,
-    GlyphStringSource, GlyphType,
+    GlyphStringSource, GlyphType, GlyphlessPresentation,
 };
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::Rect;
@@ -190,7 +190,7 @@ fn row_text(row: &neomacs_display_protocol::glyph_matrix::GlyphRow) -> String {
         .filter(|glyph| !glyph.padding)
     {
         match &glyph.glyph_type {
-            GlyphType::Char { ch } | GlyphType::Glyphless { ch } => text.push(*ch),
+            GlyphType::Char { ch } | GlyphType::Glyphless { ch, .. } => text.push(*ch),
             GlyphType::Composite { text: cluster } => text.push_str(cluster),
             GlyphType::Stretch { width_cols } => {
                 text.push_str(&" ".repeat(usize::from(*width_cols)))
@@ -254,7 +254,13 @@ fn display_row_progress_writer_uses_empty_box_glyphless_width() {
 
     assert_eq!(progress.end(), DisplayRowPosition::new(8.0, 1));
     let glyph = &row.glyphs[GlyphArea::Text.index()][0];
-    assert_eq!(glyph.glyph_type, GlyphType::Glyphless { ch: '\u{fffc}' });
+    assert_eq!(
+        glyph.glyph_type,
+        GlyphType::Glyphless {
+            ch: '\u{fffc}',
+            presentation: GlyphlessPresentation::EmptyBox,
+        }
+    );
     assert_eq!(glyph.pixel_width, 8.0);
 }
 
@@ -271,7 +277,13 @@ fn display_row_progress_writer_uses_hex_code_glyphless_width() {
     assert_eq!(progress.slots()[0].width_px(), 48.0);
     assert_eq!(progress.slots()[0].width_cols(), 6);
     let glyph = &row.glyphs[GlyphArea::Text.index()][0];
-    assert_eq!(glyph.glyph_type, GlyphType::Glyphless { ch: '\u{fff0}' });
+    assert_eq!(
+        glyph.glyph_type,
+        GlyphType::Glyphless {
+            ch: '\u{fff0}',
+            presentation: GlyphlessPresentation::HexCode,
+        }
+    );
     assert_eq!(glyph.pixel_width, 48.0);
 }
 
@@ -286,7 +298,13 @@ fn display_row_progress_writer_uses_thin_space_glyphless_width() {
 
     assert_eq!(progress.end(), DisplayRowPosition::new(2.0, 1));
     let glyph = &row.glyphs[GlyphArea::Text.index()][0];
-    assert_eq!(glyph.glyph_type, GlyphType::Glyphless { ch: '\u{2009}' });
+    assert_eq!(
+        glyph.glyph_type,
+        GlyphType::Glyphless {
+            ch: '\u{2009}',
+            presentation: GlyphlessPresentation::ThinSpace,
+        }
+    );
     assert_eq!(glyph.pixel_width, 2.0);
 }
 

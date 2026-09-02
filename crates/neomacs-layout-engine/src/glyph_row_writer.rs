@@ -101,7 +101,7 @@ fn bidi_char_for_glyph(glyph: &Glyph) -> Option<char> {
     }
 
     match &glyph.glyph_type {
-        GlyphType::Char { ch } | GlyphType::Glyphless { ch } => Some(*ch),
+        GlyphType::Char { ch } | GlyphType::Glyphless { ch, .. } => Some(*ch),
         GlyphType::Composite { text } => text.chars().next(),
         GlyphType::Stretch { .. } => Some(' '),
         GlyphType::Image { .. }
@@ -117,7 +117,7 @@ fn apply_bidi_mirroring(glyph: &mut Glyph, level: u8) {
     }
 
     match &mut glyph.glyph_type {
-        GlyphType::Char { ch } | GlyphType::Glyphless { ch } => {
+        GlyphType::Char { ch } | GlyphType::Glyphless { ch, .. } => {
             if let Some(mirrored) = bidi::bidi_mirror(*ch) {
                 *ch = mirrored;
             }

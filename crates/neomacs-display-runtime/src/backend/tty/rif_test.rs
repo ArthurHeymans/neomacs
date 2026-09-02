@@ -6,7 +6,7 @@ use neomacs_display_protocol::frame_glyphs::{
 };
 use neomacs_display_protocol::glyph_matrix::{
     FaceFillItem, FrameDisplayState, Glyph, GlyphArea, GlyphMatrix, GlyphProvenance, GlyphRow,
-    RowDamage, WindowMatrixEntry,
+    GlyphlessPresentation, RowDamage, WindowMatrixEntry,
 };
 use neomacs_display_protocol::tty_capabilities::{
     TerminfoExpander, TerminfoParameters, TtyCapability, TtyColorCapabilities, TtyColorDepth,
@@ -2541,6 +2541,36 @@ fn plain_cluster_composite_stays_one_cell_and_skips_joiners() {
     assert_eq!(rif.desired.cells[0].ch, '\u{1F468}');
     // The ZWJ is dropped; extenders hold only the second emoji.
     assert_eq!(rif.desired.cells[0].extenders.as_deref(), Some("\u{1F469}"));
+}
+
+#[test]
+fn glyphless_thin_space_projects_to_a_terminal_blank_cell() {
+    // GNU term.c `produce_glyphless_glyph` cannot represent a one-pixel
+    // graphical thin space and therefore emits one canonical space. The
+    // source format character must never leak onto the terminal wire.
+    let glyph = Glyph {
+        glyph_type: GlyphType::Glyphless {
+            ch: '\u{200C}',
+            presentation: GlyphlessPresentation::ThinSpace,
+        },
+        face_id: FaceId::new(0),
+        box_vertical_edges: Default::default(),
+        provenance: GlyphProvenance::buffer(0),
+        bidi_level: 0,
+        wide: false,
+        pixel_width: 0.25,
+        pixel_height: 0.0,
+        pixel_ascent: 0.0,
+        vertical_offset_px: 0.0,
+        padding: false,
+        pointer_appearance: None,
+    };
+    let mut rif = TtyRif::new(10, 5);
+
+    rif.rasterize(&state_with_text_glyphs(10, vec![glyph]));
+
+    assert_eq!(rif.desired.cells[0].ch, ' ');
+    assert_eq!(rif.desired.cells[0].extenders, None);
 }
 
 // --- The realized terminal colour is what the writer writes ----------------

@@ -2236,7 +2236,7 @@ fn display_row_buffer_and_lisp_sources_share_control_and_glyphless_semantics() {
     assert!(
         row_text_glyph_types(&buffer_row)
             .iter()
-            .any(|kind| matches!(kind, GlyphType::Glyphless { ch: '\u{fffc}' })),
+            .any(|kind| matches!(kind, GlyphType::Glyphless { ch: '\u{fffc}', .. })),
         "glyphless buffer source chars should reach the same row builder path as Lisp strings"
     );
 }

@@ -239,7 +239,7 @@ fn row_text(row: &GlyphRow) -> (String, Vec<FaceRun>) {
                     col += marker.chars().count();
                     text.push_str(&marker);
                 }
-                GlyphType::Glyphless { ch } => {
+                GlyphType::Glyphless { ch, .. } => {
                     text.push(*ch);
                     col += 1;
                 }

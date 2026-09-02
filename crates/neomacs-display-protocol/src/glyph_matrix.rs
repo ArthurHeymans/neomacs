@@ -60,8 +60,32 @@ pub enum GlyphType {
     /// Inline shader surface (NeoMacs extension): a compositor-rendered GPU
     /// texture owned by the row primitive that reserves its layout slot.
     Surface { surface_id: i32, width_cols: u16 },
-    /// Character with no available glyph (rendered as hex code or thin-space).
-    Glyphless { ch: char },
+    /// Character whose visible representation is selected by
+    /// `glyphless-char-display`.
+    ///
+    /// The presentation is part of the glyph rather than reconstructed from
+    /// its width: GNU's `thin-space` is a one-pixel blank on a graphical frame
+    /// but a one-cell blank on a terminal, while `empty-box` and `hex-code`
+    /// have different backend projections again.
+    Glyphless {
+        ch: char,
+        presentation: GlyphlessPresentation,
+    },
+}
+
+/// A materialized, non-zero-width `glyphless-char-display` presentation.
+///
+/// `zero-width` is deliberately absent: it produces no glyph. Acronyms are
+/// currently lowered to their explicit character run before the protocol
+/// boundary. Keeping this enum closed makes it impossible for a backend to
+/// mistake a thin-space glyph for the source character merely because both
+/// carry the same codepoint.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[repr(u8)]
+pub enum GlyphlessPresentation {
+    ThinSpace,
+    EmptyBox,
+    HexCode,
 }
 
 /// GNU `enum glyph_type` discriminants.
@@ -1047,7 +1071,9 @@ impl GlyphRow {
                         surface_id,
                         width_cols,
                     } => 0x7000_0000 ^ (*surface_id as u64) ^ u64::from(*width_cols).rotate_left(5),
-                    GlyphType::Glyphless { ch } => 0x2000_0000 | (*ch as u64),
+                    GlyphType::Glyphless { ch, presentation } => {
+                        0x2000_0000 | (*ch as u64) | ((*presentation as u64) << 32)
+                    }
                 };
                 hash ^= ch_val;
                 hash = hash.wrapping_mul(FNV_PRIME);
@@ -3162,39 +3188,58 @@ impl FrameDisplayState {
                             box_vertical_edges: glyph.box_vertical_edges,
                         });
                     }
-                    GlyphType::Glyphless { ch } => {
-                        let font_ascent =
-                            self.resolve_face_for_materialize(glyph.face_id).font_ascent;
-                        let row_ascent = if glyph_row.ascent_px > 0.0 {
-                            glyph_row.ascent_px
-                        } else if font_ascent > 0.0 {
-                            font_ascent.min(row_height)
-                        } else {
-                            row_height
-                        };
-                        let baseline = y + row_ascent + glyph.vertical_offset_px;
-                        push(FrameGlyph::Char {
-                            window_id,
-                            row_role,
-                            clip_rect,
-                            slot_id,
-                            bidi_level: glyph.bidi_level,
-                            char: *ch,
-                            composed: None,
-                            x,
-                            y,
-                            baseline,
-                            width: materialized_width,
-                            height: row_height,
-                            ascent: if font_ascent > 0.0 {
+                    GlyphType::Glyphless { ch, presentation } => match presentation {
+                        GlyphlessPresentation::ThinSpace => {
+                            let face_data = self.resolve_face_for_materialize(glyph.face_id);
+                            push(FrameGlyph::Stretch {
+                                window_id,
+                                row_role,
+                                clip_rect,
+                                slot_id,
+                                bidi_level: glyph.bidi_level,
+                                x,
+                                y,
+                                width: materialized_width,
+                                height: row_height,
+                                bg: face_data.bg,
+                                face_id: glyph.face_id,
+                                box_vertical_edges: glyph.box_vertical_edges,
+                            });
+                        }
+                        GlyphlessPresentation::EmptyBox | GlyphlessPresentation::HexCode => {
+                            let font_ascent =
+                                self.resolve_face_for_materialize(glyph.face_id).font_ascent;
+                            let row_ascent = if glyph_row.ascent_px > 0.0 {
+                                glyph_row.ascent_px
+                            } else if font_ascent > 0.0 {
                                 font_ascent.min(row_height)
                             } else {
-                                row_ascent
-                            },
-                            face_id: glyph.face_id,
-                            box_vertical_edges: glyph.box_vertical_edges,
-                        });
-                    }
+                                row_height
+                            };
+                            let baseline = y + row_ascent + glyph.vertical_offset_px;
+                            push(FrameGlyph::Char {
+                                window_id,
+                                row_role,
+                                clip_rect,
+                                slot_id,
+                                bidi_level: glyph.bidi_level,
+                                char: *ch,
+                                composed: None,
+                                x,
+                                y,
+                                baseline,
+                                width: materialized_width,
+                                height: row_height,
+                                ascent: if font_ascent > 0.0 {
+                                    font_ascent.min(row_height)
+                                } else {
+                                    row_ascent
+                                },
+                                face_id: glyph.face_id,
+                                box_vertical_edges: glyph.box_vertical_edges,
+                            });
+                        }
+                    },
                 }
                 col += usize::from(glyph.materialized_slot_span());
                 x_cursor += glyph_width;

@@ -9561,7 +9561,7 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
             assert_eq!(text.len(), 1);
             assert!(matches!(
                 text[0].glyph_type,
-                neomacs_display_protocol::glyph_matrix::GlyphType::Glyphless { ch: '\u{fffc}' }
+                neomacs_display_protocol::glyph_matrix::GlyphType::Glyphless { ch: '\u{fffc}', .. }
             ));
         })
         .expect("current row");

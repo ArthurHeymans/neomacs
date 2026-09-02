@@ -1117,14 +1117,6 @@ impl GlyphlessAcronym {
             format!("[{acronym}]")
         }
     }
-
-    pub(crate) const fn tty_column_count(self) -> usize {
-        if self.len == 1 {
-            1
-        } else {
-            self.len as usize + 2
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

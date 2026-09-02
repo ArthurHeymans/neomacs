@@ -2020,6 +2020,45 @@ impl TtyRif {
                             col = col.saturating_add(1);
                         }
                     }
+                    GlyphType::Glyphless { presentation, .. } => {
+                        use neomacs_display_protocol::glyph_matrix::GlyphlessPresentation;
+                        match presentation {
+                            // GNU term.c `produce_glyphless_glyph`: graphical
+                            // thin-space is one pixel, but a terminal has no
+                            // sub-cell space and emits one canonical blank.
+                            GlyphlessPresentation::ThinSpace => {
+                                if let Some(col) = visible_cell(col, self.desired.width) {
+                                    self.set_desired_glyph_cell(
+                                        screen_row,
+                                        col,
+                                        ' ',
+                                        attrs,
+                                        false,
+                                        BlankErase::Explicit,
+                                    );
+                                }
+                                col = col.saturating_add(1);
+                            }
+                            // These presentations retain their source scalar
+                            // and method in the protocol. Their complete boxed
+                            // terminal lowering is intentionally centralized
+                            // here rather than inferred from pixel width.
+                            GlyphlessPresentation::EmptyBox | GlyphlessPresentation::HexCode => {
+                                let ch = glyph_to_char(glyph);
+                                if let Some(col) = visible_cell(col, self.desired.width) {
+                                    self.set_desired_glyph_cell(
+                                        screen_row,
+                                        col,
+                                        ch,
+                                        attrs,
+                                        false,
+                                        BlankErase::Explicit,
+                                    );
+                                }
+                                col = col.saturating_add(1);
+                            }
+                        }
+                    }
                     _ => {
                         // A wide base in the final screen column has no room
                         // for its padding half: the terminal blanks it while
@@ -2896,7 +2935,7 @@ fn glyph_to_char(glyph: &Glyph) -> char {
         | GlyphType::Video { .. }
         | GlyphType::Xwidget { .. }
         | GlyphType::Surface { .. } => ' ',
-        GlyphType::Glyphless { ch } => *ch,
+        GlyphType::Glyphless { ch, .. } => *ch,
     }
 }
 

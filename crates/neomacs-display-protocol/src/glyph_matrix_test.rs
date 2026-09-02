@@ -673,7 +673,11 @@ fn glyph_type_kind_codes_match_gnu_glyph_type() {
         GlyphTypeKind::Composite
     );
     assert_eq!(
-        GlyphType::Glyphless { ch: '\u{fffd}' }.gnu_kind(),
+        GlyphType::Glyphless {
+            ch: '\u{fffd}',
+            presentation: GlyphlessPresentation::EmptyBox,
+        }
+        .gnu_kind(),
         GlyphTypeKind::Glyphless
     );
     assert_eq!(

@@ -1855,7 +1855,7 @@ fn glyphs_logical_text(glyphs: &[Glyph]) -> String {
         .iter()
         .filter(|glyph| !glyph.padding)
         .map(|glyph| match &glyph.glyph_type {
-            GlyphType::Char { ch } | GlyphType::Glyphless { ch } => ch.to_string(),
+            GlyphType::Char { ch } | GlyphType::Glyphless { ch, .. } => ch.to_string(),
             GlyphType::Composite { text } => text.to_string(),
             GlyphType::Stretch { width_cols } => " ".repeat(usize::from(*width_cols)),
             _ => String::new(),
@@ -2785,7 +2785,7 @@ impl GlyphTrace {
             GlyphType::Surface { surface_id, .. } => GlyphKindTrace::Surface(*surface_id),
             GlyphType::Video { video_id, .. } => GlyphKindTrace::Image(video_id.get() as i32),
             GlyphType::Xwidget { xwidget_id, .. } => GlyphKindTrace::Image(xwidget_id.get() as i32),
-            GlyphType::Glyphless { ch } => GlyphKindTrace::Glyphless(*ch),
+            GlyphType::Glyphless { ch, .. } => GlyphKindTrace::Glyphless(*ch),
         };
         Self {
             kind,
@@ -9399,9 +9399,10 @@ fn layout_frame_rust_renders_buffer_glyphless_chars_as_glyphless() {
         .expect("text row");
 
     assert!(
-        text_row.glyphs[1]
-            .iter()
-            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Glyphless { ch: '\u{fffc}' })),
+        text_row.glyphs[1].iter().any(|glyph| matches!(
+            glyph.glyph_type,
+            GlyphType::Glyphless { ch: '\u{fffc}', .. }
+        )),
         "buffer glyphless source char should emit a glyphless glyph, row={:?}",
         text_row.glyphs[1]
     );
@@ -22274,9 +22275,10 @@ fn layout_frame_rust_renders_overlay_string_glyphless_chars_as_glyphless() {
         .expect("text row");
 
     assert!(
-        text_row.glyphs[1]
-            .iter()
-            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Glyphless { ch: '\u{fffc}' })),
+        text_row.glyphs[1].iter().any(|glyph| matches!(
+            glyph.glyph_type,
+            GlyphType::Glyphless { ch: '\u{fffc}', .. }
+        )),
         "overlay glyphless source char should emit a glyphless glyph, row={:?}",
         text_row.glyphs[1]
     );

@@ -2447,11 +2447,14 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             }
             return;
         }
-        let Some(pixel_width) = self.glyphless_pixel_width(&glyphless) else {
+        let Some((presentation, pixel_width)) = self.glyphless_presentation(&glyphless) else {
             return;
         };
         let glyph = Glyph {
-            glyph_type: GlyphType::Glyphless { ch: glyphless.ch },
+            glyph_type: GlyphType::Glyphless {
+                ch: glyphless.ch,
+                presentation,
+            },
             face_id,
             provenance: GlyphProvenance::buffer(charpos),
             bidi_level: 0,
@@ -2471,25 +2474,34 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         }
     }
 
-    fn glyphless_pixel_width(&self, glyphless: &DisplayGlyphless) -> Option<f32> {
+    fn glyphless_presentation(
+        &self,
+        glyphless: &DisplayGlyphless,
+    ) -> Option<(
+        neomacs_display_protocol::glyph_matrix::GlyphlessPresentation,
+        f32,
+    )> {
+        use neomacs_display_protocol::glyph_matrix::GlyphlessPresentation;
         let char_width_px = self.layout.char_width_px.max(1.0);
         match glyphless.method {
             GlyphlessMethod::ZeroWidth => None,
-            GlyphlessMethod::ThinSpace => Some(char_width_px * 0.25),
-            GlyphlessMethod::EmptyBox => {
-                let width_cols = base_width_cols(glyphless.ch).clamp(1, 4);
-                Some(char_width_px * f32::from(width_cols))
+            GlyphlessMethod::ThinSpace => {
+                Some((GlyphlessPresentation::ThinSpace, char_width_px * 0.25))
             }
-            GlyphlessMethod::HexCode => {
+            GlyphlessMethod::EmptyBox => Some((GlyphlessPresentation::EmptyBox, {
+                let width_cols = base_width_cols(glyphless.ch).clamp(1, 4);
+                char_width_px * f32::from(width_cols)
+            })),
+            GlyphlessMethod::HexCode => Some((GlyphlessPresentation::HexCode, {
                 let label_cols = if (glyphless.ch as u32) < 0x10000 {
                     6
                 } else {
                     8
                 };
-                Some(char_width_px * label_cols as f32)
-            }
-            GlyphlessMethod::Acronym(acronym) => {
-                Some(char_width_px * acronym.tty_column_count() as f32)
+                char_width_px * label_cols as f32
+            })),
+            GlyphlessMethod::Acronym(_) => {
+                unreachable!("glyphless acronyms are lowered to text before presentation")
             }
         }
     }
