@@ -620,6 +620,12 @@ impl SavedBindingValue {
         Self(value)
     }
 
+    /// The cell contents to store back: `Value::UNBOUND` restores "unbound".
+    #[inline]
+    fn as_plain(self) -> Value {
+        self.0
+    }
+
     #[inline]
     pub(crate) fn get(self) -> Option<Value> {
         (!self.0.is_unbound()).then_some(self.0)
@@ -17066,7 +17072,7 @@ impl Context {
             let old_value = SavedBindingValue::from_plain(sym.plain());
             self.specpdl.push(SpecBinding::Let { sym_id, old_value });
             self.run_specbind_watcher(sym_id, value, "let")?;
-            self.obarray.set_symbol_value_id(sym_id, value);
+            self.obarray.store_plain_value_id(sym_id, value);
             self.sync_cached_runtime_binding_by_id(sym_id, value);
             return Ok(());
         }

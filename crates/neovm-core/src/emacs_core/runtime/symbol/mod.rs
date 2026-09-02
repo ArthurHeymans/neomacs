@@ -2106,6 +2106,23 @@ impl Obarray {
         self.set_symbol_value_id_inner(id, value);
     }
 
+    /// GNU `SET_SYMBOL_VAL` for a caller that already holds
+    /// `redirect == Plainval` for `id` (a `specbind` or `unbind_to` of a plain
+    /// cell): the membership check, the seqlock bracket and the SATB pre-image
+    /// note stay; the alias walk, slot growth and redirect re-arming of the
+    /// general store do not apply.  `Value::UNBOUND` stores "unbound", exactly
+    /// as `makunbound_id` leaves a plain cell.
+    pub(crate) fn store_plain_value_id(&mut self, id: SymId, value: Value) {
+        self.ensure_global_member_if_canonical(id);
+        let _seq_guard = self.seqlock_guard(id);
+        let Some(sym) = self.slot_mut(id) else {
+            return self.set_symbol_value_id_inner(id, value);
+        };
+        debug_assert_eq!(sym.flags.redirect(), SymbolRedirect::Plainval);
+        crate::tagged::gc::note_root_overwrite(unsafe { sym.val.plain });
+        store_value_atomic(unsafe { &mut sym.val.plain }, value);
+    }
+
     /// Allocate a fresh `LispBufferLocalValue` for `id`, flip the
     /// symbol's redirect to `Localized`, and store the BLV pointer in
     /// `val.blv`. Mirrors GNU `make_blv` (`src/data.c:2112-2140`).

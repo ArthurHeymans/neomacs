@@ -24576,3 +24576,30 @@ fn let_of_a_plain_symbol_runs_variable_watchers() {
     ));
     assert_eq!(result, "OK ((1 unlet) (2 let))");
 }
+
+/// The plain-let unwind restores every binding of a multi-variable `let`
+/// in one pass, values and order exactly as GNU `unbind_to`.
+#[test]
+fn nested_plain_lets_unwind_to_their_old_values() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let result = format_eval_result(&ev.eval_str(
+        "(progn (setq unwind-a 1 unwind-b 10) \
+         (list (let ((unwind-a 2) (unwind-b 20)) (let ((unwind-a 3)) (list unwind-a unwind-b))) unwind-a unwind-b))",
+    ));
+    assert_eq!(result, "OK ((3 20) 1 10)");
+}
+
+/// A specpdl suffix that mixes a plain `let` with an `unwind-protect`
+/// entry takes the general path; both must still run in order.
+#[test]
+fn let_inside_unwind_protect_restores_before_the_cleanup_runs() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let result = format_eval_result(&ev.eval_str(
+        "(progn (setq unwind-p 1) (setq unwind-seen nil) \
+         (unwind-protect (let ((unwind-p 2)) unwind-p) (setq unwind-seen unwind-p)) \
+         (list unwind-p unwind-seen))",
+    ));
+    assert_eq!(result, "OK (1 1)");
+}
