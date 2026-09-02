@@ -293,6 +293,54 @@ impl RetainedWindowKey {
         aligned == *curr
     }
 
+    /// The names of every field that differs between two keys — the
+    /// diagnostic behind a declined fast path (`RUST_LOG=neomacs_layout_engine=debug`).
+    pub(crate) fn differing_fields(&self, other: &Self) -> Vec<&'static str> {
+        macro_rules! diff {
+            ($($field:ident),* $(,)?) => {{
+                let mut out = Vec::new();
+                $( if self.$field != other.$field { out.push(stringify!($field)); } )*
+                out
+            }};
+        }
+        diff!(
+            media_generation,
+            buffer_id,
+            window_start,
+            point,
+            display_line_numbers,
+            buffer_begv,
+            buffer_size,
+            partition,
+            hscroll,
+            vscroll,
+            wrap_mode,
+            word_wrap,
+            tab_width,
+            char_width,
+            char_height,
+            font_pixel_size,
+            tab_stop_list,
+            extra_line_spacing,
+            selective_display,
+            selected,
+            show_trailing_whitespace,
+            trailing_ws_bg,
+            nobreak_char_display,
+            glyphless_char_fg,
+            indicate_empty_lines,
+            line_prefix,
+            wrap_prefix,
+            is_multibyte,
+            chars_modified_tick,
+            props_modified_tick,
+            overlay_modified_tick,
+            face_change_count,
+            display_var_change_count,
+            line_number_faces_equal,
+        )
+    }
+
     /// Whether body rows whose left margin holds glyphs may be reused by the
     /// scroll and edit replays.
     ///

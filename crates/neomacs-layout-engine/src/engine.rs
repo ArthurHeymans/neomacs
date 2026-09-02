@@ -3067,10 +3067,18 @@ impl LayoutEngine {
         // damage. The fontification pass has already run by now and widened
         // the live accumulator to the whole jit-lock chunk; using the live
         // range would relay every chunk row for identical faces.
-        let (dirty_start, dirty_end) = (*self
+        let Some((dirty_start, dirty_end)) = *self
             .pre_fontify_dirty_spans
             .get(&params.buffer_id)
-            .unwrap_or(&None))?;
+            .unwrap_or(&None)
+        else {
+            tracing::debug!(
+                window = params.window_id,
+                differing = ?prev.key.differing_fields(&curr_key),
+                "edit replay declined: no keystroke damage span this frame"
+            );
+            return None;
+        };
         let delta = curr_key.buffer_size - prev.key.buffer_size;
         // Below-reuse SAFETY GATE, part 1: every char in the dirty span is
         // printable ASCII (graphic or space) or a newline — combined with
@@ -3122,7 +3130,54 @@ impl LayoutEngine {
                 EditReplayStructureProperty::symbols(),
             );
         let damage = EditDamage::new(dirty_start, dirty_end, delta, span_newlines);
-        let mut replay = prev.edit_replay(&curr_key, damage, span_structure_safe)?;
+        let Some(mut replay) = prev.edit_replay(&curr_key, damage, span_structure_safe) else {
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                let body: Vec<&neomacs_display_protocol::glyph_matrix::GlyphRow> = prev
+                    .matrix
+                    .rows
+                    .iter()
+                    .filter(|row| {
+                        row.enabled && !RetainedWindowMatrix::is_chrome_role(row.role)
+                    })
+                    .map(|row| &**row)
+                    .collect();
+                tracing::debug!(
+                    window = params.window_id,
+                    differing = ?prev.key.differing_fields(&curr_key),
+                    validity = ?prev.validity,
+                    vscroll = curr_key.vscroll,
+                    dirty_start,
+                    dirty_end,
+                    delta,
+                    span_newlines,
+                    span_structure_safe,
+                    body_rows = body.len(),
+                    margin_rows = body
+                        .iter()
+                        .filter(|row| {
+                            !row.glyphs
+                                [neomacs_display_protocol::glyph_matrix::GlyphArea::LeftMargin.index()]
+                            .is_empty()
+                        })
+                        .count(),
+                    margin_rows_reusable = curr_key.margin_rows_reusable(),
+                    continued_rows = body.iter().filter(|row| row.continued).count(),
+                    truncated_rows = body.iter().filter(|row| row.truncated_left).count(),
+                    text_fringe_rows = body
+                        .iter()
+                        .filter(|row| {
+                            (row.left_fringe_bitmap.is_some() || row.right_fringe_bitmap.is_some())
+                                && row.displays_text
+                        })
+                        .count(),
+                    first_dirty = body
+                        .iter()
+                        .position(|row| row.end_charpos as i64 >= dirty_start),
+                    "edit replay declined by the retained matrix"
+                );
+            }
+            return None;
+        };
         if prev.chrome_reusable_after_edit(
             &replay,
             damage,
