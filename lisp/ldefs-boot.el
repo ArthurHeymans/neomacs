@@ -23047,6 +23047,23 @@ recompiling; signals an error if no frame shader is installed
 
 ;;; Generated autoloads from neomacs-video.el
 
+(autoload 'neomacs-video-play-file "neomacs-video"
+"Play video FILE in a new player.
+Return the opaque video-session handle.
+
+(fn FILE)" t)
+(autoload 'neomacs-video-mode "neomacs-video"
+"Major mode for visiting video files with native playback.
+Dired's normal file-opening commands enter this mode through
+`auto-mode-alist'.  The original file bytes remain in the buffer underneath a
+single video display property, following the lifecycle used by `image-mode'.
+
+In addition to any hooks its parent mode `special-mode' might have
+run, this mode runs the hook `neomacs-video-mode-hook', as the final
+or penultimate step during initialization.
+
+\\{neomacs-video-mode-map}" t)
+(add-to-list 'auto-mode-alist '("\\.\\(?:avi\\|m4v\\|mkv\\|mov\\|mp4\\|mpeg\\|mpg\\|ogv\\|webm\\)\\'" . neomacs-video-mode))
 (register-definition-prefixes "neomacs-video" '("neomacs-video-"))
 
 
