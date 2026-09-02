@@ -1,6 +1,6 @@
 use super::{
     CachedVideo, NativeVideoSessionId, VideoCache, VideoChannelPreparation, VideoGpuAccounting,
-    VideoGpuAccountingChange, VideoState, VideoSystemState, remap_event, video_channel_preparation,
+    VideoGpuAccountingChange, VideoState, VideoSystemState, video_channel_preparation,
 };
 use neomacs_display_protocol::types::VideoId;
 use neomacs_video::{
@@ -154,12 +154,10 @@ fn native_session_identity_is_distinct_from_stable_video_identity() {
     assert_ne!(old_native, new_native);
     assert_ne!(old_native.protocol(), stable);
     assert_eq!(
-        remap_event(
-            VideoEvent::Ended {
-                id: new_native.protocol(),
-            },
-            stable,
-        ),
+        VideoEvent::Ended {
+            id: new_native.protocol(),
+        }
+        .with_id(stable),
         VideoEvent::Ended { id: stable }
     );
 }
