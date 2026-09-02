@@ -300,6 +300,35 @@ fn composition_char_from_code(code: i64) -> Option<char> {
     u32::try_from(code).ok().and_then(char::from_u32)
 }
 
+/// A component in GNU's static composition vector.
+///
+/// TAB is structural: it requests left/right padding around an adjacent
+/// glyph, but is never itself emitted (`term.c:615`, `xdisp.c:30837`).  Keeping
+/// it distinct from a drawable character prevents a later display consumer
+/// from accidentally expanding it as an ordinary terminal tab.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CompositionDisplayComponent {
+    Glyph(char),
+    PaddingMarker,
+}
+
+impl CompositionDisplayComponent {
+    fn from_code(code: i64) -> Option<Self> {
+        let ch = composition_char_from_code(code)?;
+        Some(if ch == '\t' {
+            Self::PaddingMarker
+        } else {
+            Self::Glyph(ch)
+        })
+    }
+
+    fn append_visible_text(self, text: &mut String) {
+        if let Self::Glyph(ch) = self {
+            text.push(ch);
+        }
+    }
+}
+
 fn composition_components_display_text(components: Value, relative_p: bool) -> Option<String> {
     match components.kind() {
         ValueKind::Fixnum(code) => composition_char_from_code(code).map(|ch| ch.to_string()),
@@ -331,7 +360,7 @@ fn composition_items_display_text(items: &[Value], relative_p: bool) -> Option<S
     let mut text = String::new();
     for item in glyphs {
         let code = item.as_fixnum()?;
-        text.push(composition_char_from_code(code)?);
+        CompositionDisplayComponent::from_code(code)?.append_visible_text(&mut text);
     }
     Some(text)
 }

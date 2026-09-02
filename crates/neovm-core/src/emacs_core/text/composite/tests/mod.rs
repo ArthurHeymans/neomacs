@@ -291,6 +291,29 @@ fn compose_string_internal_accepts_raw_unibyte_ranges() {
 }
 
 #[test]
+fn composition_display_text_treats_tabs_as_padding_markers() {
+    crate::test_utils::init_test_tracing();
+    // `descr-text.el` composes "\tA\t" to center the described character.
+    // GNU's terminal encoder skips those structural TAB components; exposing
+    // them as text would expand both tabs across the Help row.
+    let components = Value::vector(vec![
+        Value::fixnum('\t' as i64),
+        Value::fixnum('A' as i64),
+        Value::fixnum('\t' as i64),
+    ]);
+    let id = composition_assign_id(&components, true);
+    let property = Value::list(vec![
+        Value::fixnum(id),
+        Value::fixnum(1),
+        components,
+    ]);
+
+    let display = composition_display_text_for_property(property).expect("valid composition");
+    assert_eq!(display.text(), "A");
+    assert_eq!(display.char_len(), 1);
+}
+
+#[test]
 fn find_composition_internal_returns_nil_when_no_composition() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
