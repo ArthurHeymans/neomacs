@@ -619,17 +619,26 @@ fn preferred_sink_caps(
     policy: FrameImportPolicy,
     native_formats: NativeVideoFormatSupport,
 ) -> gst::Caps {
+    let mut builder = gst::Caps::builder_full();
     // Modern GStreamer includes a hardware/driver-specific modifier in the
     // `drm-format` string. Caps cannot express "these fourccs with any
-    // modifier", so accept DMA_DRM here and validate its typed sample before
-    // importing it. Requiring the bare "NV12" string would exclude the real
-    // `NV12:0x...` output advertised by VA decoders.
-    let mut builder = gst::Caps::builder_full().structure_with_features(
-        gst::Structure::builder("video/x-raw")
-            .field("format", "DMA_DRM")
-            .build(),
-        gst::CapsFeatures::new(["memory:DMABuf"]),
-    );
+    // modifier", so the generic DMA_DRM form is safe only when the renderer
+    // accepts every native decoder format Neomacs supports. Otherwise a
+    // decoder can select the unsupported member and fail before the packed
+    // DMA-BUF fallback gets a chance to negotiate.
+    //
+    // Requiring a bare "NV12" or "P010" drm-format would exclude the real
+    // modifier-bearing output advertised by VA decoders. Adapters supporting
+    // only one native format therefore use the explicit legacy linear form
+    // below until modifier capabilities can be enumerated end to end.
+    if native_formats.nv12 && native_formats.p010 {
+        builder = builder.structure_with_features(
+            gst::Structure::builder("video/x-raw")
+                .field("format", "DMA_DRM")
+                .build(),
+            gst::CapsFeatures::new(["memory:DMABuf"]),
+        );
+    }
     let mut native_drm_formats = Vec::with_capacity(2);
     if native_formats.p010 {
         native_drm_formats.push("P010");

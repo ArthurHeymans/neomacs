@@ -152,21 +152,8 @@ fn sink_caps_accept_modifier_bearing_dma_drm_then_validate_the_sample() {
             p010: false,
         },
     );
-    assert_eq!(
-        caps.structure(0)
-            .unwrap()
-            .get::<String>("format")
-            .unwrap(),
-        "DMA_DRM"
-    );
-    assert!(
-        caps.structure(0)
-            .unwrap()
-            .get::<String>("drm-format")
-            .is_err()
-    );
     let legacy_formats = caps
-        .structure(1)
+        .structure(0)
         .unwrap()
         .get::<gstreamer::List>("format")
         .unwrap();
@@ -176,7 +163,31 @@ fn sink_caps_accept_modifier_bearing_dma_drm_then_validate_the_sample() {
         .collect();
 
     assert_eq!(legacy_formats, ["NV12"]);
-    assert_eq!(caps.size(), 3);
+    assert_eq!(caps.size(), 2);
+
+    let all_native_formats = preferred_sink_caps(
+        FrameImportPolicy::AllowGpuBlit,
+        NativeVideoFormatSupport {
+            nv12: true,
+            p010: true,
+        },
+    );
+    assert_eq!(
+        all_native_formats
+            .structure(0)
+            .unwrap()
+            .get::<String>("format")
+            .unwrap(),
+        "DMA_DRM"
+    );
+    assert!(
+        all_native_formats
+            .structure(0)
+            .unwrap()
+            .get::<String>("drm-format")
+            .is_err()
+    );
+    assert_eq!(all_native_formats.size(), 3);
 
     let packed_only = preferred_sink_caps(
         FrameImportPolicy::AllowGpuBlit,
@@ -185,18 +196,10 @@ fn sink_caps_accept_modifier_bearing_dma_drm_then_validate_the_sample() {
             p010: false,
         },
     );
-    assert_eq!(packed_only.size(), 2);
+    assert_eq!(packed_only.size(), 1);
     assert_eq!(
         packed_only
             .structure(0)
-            .unwrap()
-            .get::<String>("format")
-            .unwrap(),
-        "DMA_DRM"
-    );
-    assert_eq!(
-        packed_only
-            .structure(1)
             .unwrap()
             .get::<String>("colorimetry")
             .unwrap(),
