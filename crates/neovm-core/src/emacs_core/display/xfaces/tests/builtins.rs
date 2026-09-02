@@ -1589,6 +1589,34 @@ fn face_font_eval_returns_font_name_on_live_gui_frame() {
 }
 
 #[test]
+fn default_face_font_attribute_stays_unspecified_on_live_tty_frame() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+
+    assert!(
+        eval.frame_manager()
+            .get(frame_id)
+            .expect("selected frame")
+            .window_system
+            .is_none(),
+        "test must exercise GNU's TTY lface path"
+    );
+
+    let result = builtin_internal_get_lisp_face_attribute(
+        &mut eval,
+        vec![
+            Value::symbol("default"),
+            Value::keyword(":font"),
+            Value::make_frame(frame_id.0),
+        ],
+    )
+    .expect("default TTY face font attribute");
+
+    assert_eq!(result.as_symbol_name(), Some("unspecified"));
+}
+
+#[test]
 fn internal_lisp_face_attribute_values_discrete_boolean_attrs() {
     crate::test_utils::init_test_tracing();
     let result =

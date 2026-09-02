@@ -24,8 +24,8 @@ use super::intern::intern;
 use super::symbol::LispVariableLocality;
 use super::value::*;
 use crate::buffer::{
-    Buffer, BufferId, CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, LispCharPos1,
-    TextPropertyTable,
+    AccessibleEmacsByteRange, Buffer, BufferId, CharLen, CharPos0, CharRange, EmacsBytePos,
+    EmacsByteRange, LispCharPos1, TextPropertyTable,
 };
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_args_range};
@@ -210,15 +210,20 @@ pub fn column_spec_consumed() -> bool {
     COLUMN_SPEC_CONSUMED.with(std::cell::Cell::get)
 }
 
-fn prefix_line_and_column(buf: &Buffer, end_byte: EmacsBytePos) -> LineColumn {
-    let end = end_byte.min(buf.point_max_emacs_byte_pos());
+fn prefix_line_and_column(
+    buf: &Buffer,
+    accessible: AccessibleEmacsByteRange,
+    end_byte: EmacsBytePos,
+) -> LineColumn {
+    let origin = accessible.start();
+    let end = accessible.clamp(end_byte);
     // Column only needs the current line's prefix: find its start with a
     // backward newline scan (O(column) via memrchr, not O(point)) and count
     // chars over just that span.
     let bol = buf
-        .prev_newline_emacs_byte(end, EmacsBytePos::ZERO)
+        .prev_newline_emacs_byte(end, origin)
         .map(|nl| nl.add_len(crate::buffer::EmacsByteLen::new(1)))
-        .unwrap_or(EmacsBytePos::ZERO);
+        .unwrap_or(origin);
     // Line number: GNU keeps a base_line_pos/base_line_number anchor so the
     // newline count runs from a recently displayed line, not from the buffer
     // start (xdisp.c:29486-29620) — O(distance moved), not O(point). The
@@ -227,27 +232,40 @@ fn prefix_line_and_column(buf: &Buffer, end_byte: EmacsBytePos) -> LineColumn {
     // accumulator is the BEG_UNCHANGED analog of GNU's
     // BASE_LINE_NUMBER_VALID_P (xdisp.c:19351). An invalid or missing
     // anchor falls back to the full prefix scan (SIMD over the gap buffer).
-    let (anchor_byte, anchor_line) = buf.line_number_anchor.get();
-    let anchor_valid = anchor_line > 0
-        && anchor_byte <= end.get()
-        && buf.changed_char_range().is_none_or(|(dirty_start, _)| {
-            buf.char_pos_to_emacs_byte_pos_clamped(crate::buffer::CharPos0::new(
-                dirty_start.max(0) as usize
-            ))
-            .get()
-                > anchor_byte
-        });
+    let anchor = buf.line_number_anchor.get();
+    let anchor_valid = anchor.is_some_and(|anchor| {
+        anchor.accessible_start == origin
+            && anchor.line_start <= end
+            && buf.changed_char_range().is_none_or(|(dirty_start, _)| {
+                buf.char_pos_to_emacs_byte_pos_clamped(crate::buffer::CharPos0::new(
+                    dirty_start.max(0) as usize,
+                )) > anchor.line_start
+            })
+    });
     let line = if anchor_valid {
-        anchor_line as usize + buf.count_newlines_emacs_byte(EmacsBytePos::new(anchor_byte), end)
+        let anchor = anchor.expect("validated mode-line number anchor");
+        anchor.line_number + buf.count_newlines_emacs_byte(anchor.line_start, end)
     } else {
-        buf.count_newlines_emacs_byte(EmacsBytePos::ZERO, end) + 1
+        buf.count_newlines_emacs_byte(origin, end) + 1
     };
     // Re-seat the anchor at this line's start whenever it was invalid or
     // point moved far from it (GNU re-seats near the window when the count
     // drifts past a few window heights, xdisp.c:29544-29552).
     const RESEAT_DISTANCE_BYTES: usize = 32 * 1024;
-    if !anchor_valid || end.get().abs_diff(anchor_byte) > RESEAT_DISTANCE_BYTES {
-        buf.line_number_anchor.set((bol.get(), line as i64));
+    if !anchor_valid
+        || end.get().abs_diff(
+            anchor
+                .expect("validated mode-line number anchor")
+                .line_start
+                .get(),
+        ) > RESEAT_DISTANCE_BYTES
+    {
+        buf.line_number_anchor
+            .set(Some(crate::buffer::buffer::ModeLineNumberAnchor {
+                accessible_start: origin,
+                line_start: bol,
+                line_number: line,
+            }));
     }
     let mut tail = Vec::new();
     buf.copy_emacs_byte_range_to(EmacsByteRange::new(bol, end), &mut tail);
@@ -1339,7 +1357,9 @@ pub fn format_mode_line_for_display_with_sources(
             &eval.obarray,
             args.get(2),
         );
-        pctx.target_width = Some(target_cols);
+        pctx.target = ModeLineTarget::Display {
+            columns: target_cols,
+        };
         let mut rendered = ModeLineRendered::default();
         {
             // pctx caches heap Values (frame name, eol indicator) captured
@@ -1605,35 +1625,48 @@ struct ModeLinePercentContext {
     /// Coding system mnemonic character for `%z`/`%Z`.
     /// GNU: `CODING_ATTR_MNEMONIC` from the coding system spec.
     coding_mnemonic: char,
-    /// Terminal output coding mnemonic (TTY only). For `%z` on TTY
-    /// frames, GNU outputs 3 chars: terminal + keyboard + buffer.
-    terminal_coding_mnemonic: char,
-    /// Keyboard input coding mnemonic (TTY only).
-    keyboard_coding_mnemonic: char,
-    /// True when the selected frame is a TTY (no window-system).
-    is_tty_frame: bool,
+    /// The frame-dependent prefix GNU places before the buffer mnemonic.
+    /// A closed enum prevents a TTY context from existing without both coding
+    /// systems and keeps their GNU-defined ordering out of call sites.
+    frame_coding_mnemonics: FrameCodingMnemonics,
     /// EOL type string for `%Z` (`:`, `\`, `/`, or undecided).
     eol_indicator: Option<Value>,
-    /// When `Some(n)`, the walker is running in GNU's
-    /// `MODE_LINE_DISPLAY` mode with a target column width of `n`.
-    /// In that mode, the `%-` percent construct expands to enough
-    /// dashes to fill the remaining row width (GNU
-    /// `xdisp.c:29154-29172`: `lots_of_dashes`). Callers that want
-    /// GNU's `MODE_LINE_STRING` behavior (the Lisp-facing
-    /// `format-mode-line` builtin) leave this `None`, and `%-`
-    /// returns the literal two-dash string `"--"`.
-    ///
-    /// This mirrors GNU's internal `mode_line_target` state: the
-    /// string API `Fformat_mode_line` uses `MODE_LINE_STRING`, while
-    /// `display_mode_line` uses `MODE_LINE_DISPLAY`. The same walker
-    /// serves both; the only difference is the dispatch for `%-`.
-    target_width: Option<usize>,
+    /// GNU's closed `mode_line_target` state.  This controls the target-specific
+    /// `%-` expansion without letting an untyped optional width conflate string
+    /// formatting with direct display formatting.
+    target: ModeLineTarget,
     /// Byte position of THIS window's point, for point-dependent specs (`%l`,
     /// `%c`). GNU sets the buffer's point to `w->pointm` while displaying a
     /// window's mode line, so these reflect that window — not the selected
     /// window's point (which is the live buffer point). `None` falls back to the
     /// buffer point. Set per-window in `build_mode_line_percent_context`.
     window_point: Option<EmacsBytePos>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FrameCodingMnemonics {
+    WindowSystem,
+    Tty { keyboard: char, terminal: char },
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum ModeLineTarget {
+    #[default]
+    String,
+    Display {
+        columns: usize,
+    },
+}
+
+impl FrameCodingMnemonics {
+    /// GNU `decode_mode_spec` emits keyboard, terminal, then buffer coding on a
+    /// non-window-system frame (`src/xdisp.c`, `%z`/`%Z`).
+    fn with_buffer(self, buffer: char) -> String {
+        match self {
+            Self::WindowSystem => buffer.to_string(),
+            Self::Tty { keyboard, terminal } => format!("{keyboard}{terminal}{buffer}"),
+        }
+    }
 }
 
 impl Default for ModeLinePercentContext {
@@ -1643,11 +1676,9 @@ impl Default for ModeLinePercentContext {
             window_end: 0,
             frame_name: None,
             coding_mnemonic: '-',
-            terminal_coding_mnemonic: '\0',
-            keyboard_coding_mnemonic: '\0',
-            is_tty_frame: false,
+            frame_coding_mnemonics: FrameCodingMnemonics::WindowSystem,
             eol_indicator: None,
-            target_width: None,
+            target: ModeLineTarget::String,
             window_point: None,
         }
     }
@@ -1726,41 +1757,49 @@ fn build_mode_line_percent_context(
         ctx.window_end = buf.point_max_char_pos().get();
     }
 
-    // --- TTY detection (GNU: FRAME_WINDOW_P) ---
-    if let Some(frame) = frames.selected_frame() {
-        ctx.is_tty_frame = frame.effective_window_system().is_none();
-    }
-
     // --- Coding system mnemonic (GNU: decode_mode_spec_coding) ---
     let cs_name = context_buffer
         .and_then(|b| b.buffer_local_value("buffer-file-coding-system"))
         .and_then(|v| v.as_symbol_id());
     if let Some(name) = cs_name {
-        ctx.coding_mnemonic = coding_system_mnemonic_char(name);
+        ctx.coding_mnemonic = coding_system_mnemonic_char(coding_systems, name);
         ctx.eol_indicator = coding_system_eol_indicator_value(obarray, name);
     }
 
     // --- Terminal and keyboard coding mnemonics (TTY only) ---
-    // GNU xdisp.c:29494: on TTY, %z outputs 3 chars —
-    // terminal-coding-system mnemonic, keyboard-coding-system mnemonic,
-    // and buffer-file-coding-system mnemonic.
-    if ctx.is_tty_frame {
-        if let Some(coding_systems) = coding_systems {
-            ctx.terminal_coding_mnemonic =
-                coding_system_mnemonic_char(coding_systems.terminal_coding_sym());
-            ctx.keyboard_coding_mnemonic =
-                coding_system_mnemonic_char(coding_systems.keyboard_coding_sym());
+    // GNU `decode_mode_spec` emits keyboard, terminal, then buffer.
+    if frames
+        .selected_frame()
+        .is_some_and(|frame| frame.effective_window_system().is_none())
+    {
+        let (keyboard, terminal) = if let Some(coding_systems) = coding_systems {
+            (
+                coding_system_mnemonic_char(
+                    Some(coding_systems),
+                    coding_systems.keyboard_coding_sym(),
+                ),
+                coding_system_mnemonic_char(
+                    Some(coding_systems),
+                    coding_systems.terminal_coding_sym(),
+                ),
+            )
         } else {
             let term_cs = obarray
                 .symbol_value("terminal-coding-system")
                 .and_then(|v| v.as_symbol_id());
-            ctx.terminal_coding_mnemonic = term_cs.map(coding_system_mnemonic_char).unwrap_or('-');
-
             let kbd_cs = obarray
                 .symbol_value("keyboard-coding-system")
                 .and_then(|v| v.as_symbol_id());
-            ctx.keyboard_coding_mnemonic = kbd_cs.map(coding_system_mnemonic_char).unwrap_or('-');
-        }
+            (
+                kbd_cs
+                    .map(|name| coding_system_mnemonic_char(None, name))
+                    .unwrap_or('-'),
+                term_cs
+                    .map(|name| coding_system_mnemonic_char(None, name))
+                    .unwrap_or('-'),
+            )
+        };
+        ctx.frame_coding_mnemonics = FrameCodingMnemonics::Tty { keyboard, terminal };
     }
 
     ctx
@@ -1806,7 +1845,13 @@ fn resolve_mode_line_window<'a>(
 /// Derive coding system mnemonic character from coding system name.
 ///
 /// Matches GNU `decode_mode_spec_coding` heuristics for common systems.
-fn coding_system_mnemonic_char(cs_name: crate::emacs_core::intern::SymId) -> char {
+fn coding_system_mnemonic_char(
+    coding_systems: Option<&crate::emacs_core::coding::CodingSystemManager>,
+    cs_name: crate::emacs_core::intern::SymId,
+) -> char {
+    if let Some(mnemonic) = coding_systems.and_then(|manager| manager.mode_line_mnemonic(cs_name)) {
+        return mnemonic;
+    }
     let cs_name = crate::emacs_core::intern::resolve_sym(cs_name);
     let base = cs_name
         .strip_suffix("-unix")
@@ -1817,7 +1862,6 @@ fn coding_system_mnemonic_char(cs_name: crate::emacs_core::intern::SymId) -> cha
         "utf-8"
         | "utf-8-emacs"
         | "utf-8-auto"
-        | "prefer-utf-8"
         | "mule-utf-8"
         | "utf-16"
         | "utf-16-be"
@@ -1826,7 +1870,7 @@ fn coding_system_mnemonic_char(cs_name: crate::emacs_core::intern::SymId) -> cha
         | "utf-16le"
         | "utf-16be-with-signature"
         | "utf-16le-with-signature" => 'U',
-        "undecided" => '-',
+        "undecided" | "prefer-utf-8" => '-',
         "raw-text" => '=',
         "no-conversion" | "binary" => '0',
         "us-ascii" | "ascii" => '.',
@@ -2002,6 +2046,23 @@ struct ModeLineRendered {
     text: Vec<u32>,
     text_props: TextPropertyTable,
     source_spans: Vec<ModeLineDisplaySourceSpan>,
+    min_width_transitions: Vec<ModeLineMinWidthTransition>,
+}
+
+/// One `display (min-width WIDTH-SPEC)` run in GNU's direct mode-line
+/// display stream.  `WIDTH-SPEC` identity is deliberately retained: GNU
+/// partitions adjacent runs with `EQ`, not structural equality.
+#[derive(Clone, Debug)]
+struct ModeLineMinWidthRun {
+    width_spec: Value,
+    columns: usize,
+    padding_properties: std::collections::HashMap<Value, Value>,
+}
+
+#[derive(Clone, Debug)]
+struct ModeLineMinWidthTransition {
+    output_start: usize,
+    run: ModeLineMinWidthRun,
 }
 
 /// Decode a `LispString` into its sequence of Emacs character codes. Multibyte
@@ -2063,6 +2124,7 @@ impl ModeLineRendered {
             text: text.into().chars().map(|c| c as u32).collect(),
             text_props: TextPropertyTable::new(),
             source_spans: Vec::new(),
+            min_width_transitions: Vec::new(),
         }
     }
 
@@ -2078,6 +2140,17 @@ impl ModeLineRendered {
                 .copied()
                 .map(|span| span.shifted_output(char_offset)),
         );
+        self.min_width_transitions
+            .extend(
+                other
+                    .min_width_transitions
+                    .iter()
+                    .cloned()
+                    .map(|transition| ModeLineMinWidthTransition {
+                        output_start: transition.output_start.saturating_add(char_offset),
+                        ..transition
+                    }),
+            );
     }
 
     fn record_source_span(
@@ -2213,6 +2286,12 @@ impl ModeLineRendered {
                     ..span
                 })
                 .collect(),
+            min_width_transitions: self
+                .min_width_transitions
+                .iter()
+                .filter(|transition| transition.output_start < precision)
+                .cloned()
+                .collect(),
         }
     }
 
@@ -2224,14 +2303,129 @@ impl ModeLineRendered {
             .extend(std::iter::repeat_n(' ' as u32, padding_chars));
     }
 
-    fn apply_display_min_width(&mut self, props: Value) {
-        let Some(min_width) = mode_line_display_min_width_chars(props) else {
+    fn materialize_display_min_width(&mut self, props: Value) {
+        let Some(min_width) = mode_line_display_min_width(props) else {
             return;
         };
         let current_width = self.char_len();
-        if current_width < min_width {
-            self.pad_plain_spaces(min_width - current_width);
+        if current_width < min_width.columns {
+            self.pad_plain_spaces(min_width.columns - current_width);
         }
+    }
+
+    fn note_display_min_width_transition(&mut self, props: Value) {
+        let Some(mut run) = mode_line_display_min_width(props) else {
+            return;
+        };
+        if self.text.is_empty() {
+            return;
+        }
+
+        // The outer :propertize owns the resulting display property over this
+        // entire subtree, so any nested min-width markers it overwrote are no
+        // longer observable by GNU's iterator.
+        self.min_width_transitions.clear();
+        run.padding_properties = self.text_props.get_properties_at_char_pos(CharPos0::ZERO);
+        self.min_width_transitions.push(ModeLineMinWidthTransition {
+            output_start: 0,
+            run,
+        });
+    }
+
+    fn apply_propertize_properties(&mut self, props: Value, target: ModeLineTarget) {
+        match target {
+            ModeLineTarget::String => {
+                self.materialize_display_min_width(props);
+                self.overlay_properties(props);
+            }
+            ModeLineTarget::Display { .. } => {
+                self.overlay_properties(props);
+                self.note_display_min_width_transition(props);
+            }
+        }
+    }
+
+    /// Reproduce GNU `display_min_width`: an active run is closed only when a
+    /// different min-width identity starts.  Ordinary following strings and
+    /// the end of the flattened mode line do not themselves flush it.
+    fn realize_display_min_width_transitions(&mut self) {
+        let transitions = std::mem::take(&mut self.min_width_transitions);
+        let Some(first) = transitions.first().cloned() else {
+            return;
+        };
+
+        let mut active = first;
+        let mut inserted = 0usize;
+        for next in transitions.into_iter().skip(1) {
+            if next.run.width_spec.bits() == active.run.width_spec.bits() {
+                continue;
+            }
+
+            let mut next_start = next.output_start.saturating_add(inserted);
+            let run_width = next_start.saturating_sub(active.output_start);
+            if run_width < active.run.columns {
+                let padding = active.run.columns - run_width;
+                self.insert_min_width_padding(next_start, padding, &active.run.padding_properties);
+                inserted = inserted.saturating_add(padding);
+                next_start = next_start.saturating_add(padding);
+            }
+            active = ModeLineMinWidthTransition {
+                output_start: next_start,
+                run: next.run,
+            };
+        }
+    }
+
+    fn insert_min_width_padding(
+        &mut self,
+        at: usize,
+        columns: usize,
+        properties: &std::collections::HashMap<Value, Value>,
+    ) {
+        if columns == 0 {
+            return;
+        }
+        let at = at.min(self.text.len());
+        self.text
+            .splice(at..at, std::iter::repeat_n(' ' as u32, columns));
+        self.text_props
+            .adjust_for_insert_at_char_pos(CharPos0::new(at), CharLen::new(columns));
+        for (name, value) in properties {
+            // The synthetic stretch inherits appearance, but it is not itself
+            // another min-width source run.
+            if !name.is_symbol_named("display") {
+                self.text_props.put_property_in_char_range(
+                    display_char_range(at, at.saturating_add(columns)),
+                    *name,
+                    *value,
+                );
+            }
+        }
+
+        let mut shifted = Vec::with_capacity(self.source_spans.len().saturating_add(1));
+        for span in std::mem::take(&mut self.source_spans) {
+            if span.output_end <= at {
+                shifted.push(span);
+            } else if span.output_start >= at {
+                shifted.push(span.shifted_output(columns));
+            } else {
+                // Keep the inserted padding synthetic even in the unlikely
+                // event that a source span crosses a transition boundary.
+                shifted.push(ModeLineDisplaySourceSpan {
+                    output_end: at,
+                    ..span
+                });
+                shifted.push(ModeLineDisplaySourceSpan {
+                    output_start: at.saturating_add(columns),
+                    output_end: span.output_end.saturating_add(columns),
+                    source_start: span
+                        .source_start
+                        .saturating_add(at.saturating_sub(span.output_start)),
+                    ..span
+                });
+            }
+        }
+        self.source_spans = shifted;
     }
 
     fn overlay_properties(&mut self, props: Value) {
@@ -2317,6 +2511,7 @@ impl ModeLineRendered {
     }
 
     fn into_display_output(mut self, face_spec: ModeLineFaceSpec) -> ModeLineDisplayOutput {
+        self.realize_display_min_width_transitions();
         // A multibyte result iff any accumulated character exceeds a single
         // byte; otherwise every code fits in a unibyte byte. Mirrors the old
         // storage path's `decode_storage_char_codes_auto(..).any(> 0xFF)`.
@@ -2345,24 +2540,29 @@ impl ModeLineRendered {
     }
 }
 
-fn mode_line_display_min_width_chars(props: Value) -> Option<usize> {
+fn mode_line_display_min_width(props: Value) -> Option<ModeLineMinWidthRun> {
     let items = list_to_vec(&props)?;
     for chunk in items.chunks(2) {
         if chunk.len() != 2 || !chunk[0].is_symbol_named("display") {
             continue;
         }
-        if let Some(width) = mode_line_display_spec_min_width_chars(chunk[1]) {
-            return Some(width);
+        if let Some(run) = mode_line_display_spec_min_width(chunk[1]) {
+            return Some(run);
         }
     }
     None
 }
 
-fn mode_line_display_spec_min_width_chars(value: Value) -> Option<usize> {
+fn mode_line_display_spec_min_width(value: Value) -> Option<ModeLineMinWidthRun> {
     if !value.is_cons() || !value.cons_car().is_symbol_named("min-width") {
         return None;
     }
-    mode_line_display_width_chars(value.cons_cdr().cons_car())
+    let width_spec = value.cons_cdr().cons_car();
+    Some(ModeLineMinWidthRun {
+        width_spec,
+        columns: mode_line_display_width_chars(width_spec)?,
+        padding_properties: std::collections::HashMap::new(),
+    })
 }
 
 fn mode_line_display_width_chars(value: Value) -> Option<usize> {
@@ -2599,8 +2799,7 @@ fn format_mode_line_recursive(
                     let elt = cdr.cons_car();
                     let mut nested = ModeLineRendered::default();
                     format_mode_line_recursive(eval, pctx, &elt, &mut nested, depth + 1, risky);
-                    nested.apply_display_min_width(cdr.cons_cdr());
-                    nested.overlay_properties(cdr.cons_cdr());
+                    nested.apply_propertize_properties(cdr.cons_cdr(), pctx.target);
                     result.append_rendered(&nested);
                 }
                 return;
@@ -2727,8 +2926,7 @@ fn format_mode_line_recursive_in_state(
                         depth + 1,
                         risky,
                     );
-                    nested.apply_display_min_width(cdr.cons_cdr());
-                    nested.overlay_properties(cdr.cons_cdr());
+                    nested.apply_propertize_properties(cdr.cons_cdr(), pctx.target);
                     result.append_rendered(&nested);
                     return needs_eval;
                 }
@@ -2911,8 +3109,7 @@ fn format_mode_line_recursive_in_state_with_eval(
                         risky,
                         eval_form,
                     )?;
-                    nested.apply_display_min_width(cdr.cons_cdr());
-                    nested.overlay_properties(cdr.cons_cdr());
+                    nested.apply_propertize_properties(cdr.cons_cdr(), pctx.target);
                     result.append_rendered(&nested);
                 }
                 return Ok(());
@@ -3042,7 +3239,7 @@ fn expand_mode_line_percent_in_state(
                 let point_byte = pctx
                     .window_point
                     .unwrap_or_else(|| b.point_emacs_byte_pos());
-                prefix_line_and_column(b, point_byte)
+                prefix_line_and_column(b, b.accessible_emacs_byte_region(), point_byte)
             } else {
                 LineColumn { line: 1, column: 0 }
             }
@@ -3192,11 +3389,9 @@ fn expand_mode_line_percent_in_state(
                 // remaining row width; GNU's caller trims at
                 // `it->last_visible_x`.
                 //
-                // We model this with `pctx.target_width`:
-                //   None    -> MODE_LINE_STRING, emit "--"
-                //   Some(w) -> MODE_LINE_DISPLAY, emit `w - current`
-                //              dashes. The entry point that enables
-                //              display mode is
+                // We model this with `pctx.target`: string mode emits "--";
+                // display mode emits `columns - current` dashes. The entry
+                // point that enables display mode is
                 //              `format_mode_line_for_display` below,
                 //              used by the layout engine for TTY and
                 //              GUI mode-line rendering.
@@ -3206,12 +3401,12 @@ fn expand_mode_line_percent_in_state(
                 // on `result`. Drop the closure here by calling
                 // `append_mode_line_rendered_segment` directly with
                 // the pre-computed dash string.
-                let dash_string: String = match pctx.target_width {
-                    None => "--".to_string(),
-                    Some(target) => {
+                let dash_string: String = match pctx.target {
+                    ModeLineTarget::String => "--".to_string(),
+                    ModeLineTarget::Display { columns } => {
                         let current = result.char_len();
-                        if target > current {
-                            "-".repeat(target - current)
+                        if columns > current {
+                            "-".repeat(columns - current)
                         } else {
                             "--".to_string()
                         }
@@ -3423,26 +3618,14 @@ fn expand_mode_line_percent_in_state(
                 // GNU xdisp.c:29494 — coding system mnemonic without EOL indicator.
                 // On TTY frames GNU includes terminal + keyboard + buffer coding
                 // mnemonics, regardless of MODE_LINE_STRING vs MODE_LINE_DISPLAY.
-                if pctx.is_tty_frame {
-                    append_mode_line_percent_string_spec(
-                        result,
-                        &format!(
-                            "{}{}{}",
-                            pctx.terminal_coding_mnemonic,
-                            pctx.keyboard_coding_mnemonic,
-                            pctx.coding_mnemonic,
-                        ),
-                        &props_at_percent,
-                        field_width,
-                    );
-                } else {
-                    append_mode_line_percent_string_spec(
-                        result,
-                        &pctx.coding_mnemonic.to_string(),
-                        &props_at_percent,
-                        field_width,
-                    );
-                }
+                append_mode_line_percent_string_spec(
+                    result,
+                    &pctx
+                        .frame_coding_mnemonics
+                        .with_buffer(pctx.coding_mnemonic),
+                    &props_at_percent,
+                    field_width,
+                );
                 index += 1;
             }
             Some('@') => {
@@ -3462,16 +3645,10 @@ fn expand_mode_line_percent_in_state(
             }
             Some('Z') => {
                 // GNU xdisp.c:29496 — coding system mnemonic WITH EOL indicator.
-                let mut segment = if pctx.is_tty_frame {
-                    ModeLineRendered::plain(format!(
-                        "{}{}{}",
-                        pctx.terminal_coding_mnemonic,
-                        pctx.keyboard_coding_mnemonic,
-                        pctx.coding_mnemonic,
-                    ))
-                } else {
-                    ModeLineRendered::plain(pctx.coding_mnemonic.to_string())
-                };
+                let mut segment = ModeLineRendered::plain(
+                    pctx.frame_coding_mnemonics
+                        .with_buffer(pctx.coding_mnemonic),
+                );
                 if let Some(eol_indicator) = pctx.eol_indicator {
                     segment.append_string_or_char_value_preserving_props(&eol_indicator);
                 } else {

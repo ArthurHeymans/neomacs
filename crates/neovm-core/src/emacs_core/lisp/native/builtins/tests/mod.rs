@@ -13919,6 +13919,40 @@ fn echo_area_print_after_message_replaces_message_like_gnu() {
 }
 
 #[test]
+fn echo_area_print_appends_the_same_fragment_to_messages_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.set_variable("noninteractive", Value::NIL);
+
+    eval.eval_str(r#"(progn (message "inner") (prin1 "outer" t) nil)"#)
+        .expect("message followed by echo print should evaluate");
+
+    let messages = eval
+        .buffers
+        .find_buffer_by_name("*Messages*")
+        .and_then(|id| eval.buffers.get(id))
+        .expect("echo print should retain the messages buffer");
+    assert_eq!(messages.buffer_string(), "inner\n\"outer\"");
+}
+
+#[test]
+fn clearing_echo_area_terminates_a_pending_print_fragment_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.set_variable("noninteractive", Value::NIL);
+
+    eval.eval_str(r#"(progn (message "inner") (prin1 "outer" t) (message ""))"#)
+        .expect("clearing the echo area should terminate pending printer output");
+
+    let messages = eval
+        .buffers
+        .find_buffer_by_name("*Messages*")
+        .and_then(|id| eval.buffers.get(id))
+        .expect("echo print should retain the messages buffer");
+    assert_eq!(messages.buffer_string(), "inner\n\"outer\"\n");
+}
+
+#[test]
 fn echo_area_print_calls_append_until_next_message_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

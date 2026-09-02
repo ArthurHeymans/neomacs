@@ -1369,6 +1369,23 @@ impl CodingSystemManager {
     pub(crate) fn terminal_coding_sym(&self) -> SymId {
         self.terminal_coding
     }
+
+    /// Return the mnemonic GNU stores in `CODING_ATTR_MNEMONIC` for a coding
+    /// system, including derived EOL variants and aliases.
+    ///
+    /// Redisplay must ask the registry instead of inferring this from a coding
+    /// system's name.  In particular, `prefer-utf-8` has coding type
+    /// `undecided` and deliberately declares `-`, even though its name contains
+    /// `utf-8`.
+    pub(crate) fn mode_line_mnemonic(&self, coding_system: SymId) -> Option<char> {
+        let resolved_name = resolve_runtime_name(self, resolve_sym(coding_system))?;
+        let bucket = runtime_bucket_name(self, &resolved_name)?;
+        let info = self.get(&bucket)?;
+        let mnemonic = default_mnemonic_for_base(strip_eol_suffix(&resolved_name))
+            .unwrap_or(info.mnemonic as i64);
+        u32::try_from(mnemonic).ok().and_then(char::from_u32)
+    }
+
     pub(crate) fn dump_keyboard_coding_sym(&self) -> SymId {
         self.keyboard_coding
     }

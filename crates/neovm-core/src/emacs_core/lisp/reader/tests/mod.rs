@@ -1123,6 +1123,63 @@ fn read_from_minibuffer_initializes_an_unbound_history_before_setup_hooks() {
     );
 }
 
+#[test]
+fn active_minibuffer_is_recorded_at_front_of_its_frame_buffer_list() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char(' '),
+    ))
+    .expect("queue minibuffer exit key");
+    eval.input_rx = Some(rx);
+
+    let result = eval
+        .eval_str(
+            r##"(let ((seen nil)
+                      (map (make-sparse-keymap))
+                      (minibuffer-exit-hook nil))
+                  (define-key map " " #'exit-minibuffer)
+                  (let ((minibuffer-setup-hook
+                         (list
+                          (lambda ()
+                            (setq seen
+                                  (car (mapcar #'buffer-name
+                                               (frame-parameter nil 'buffer-list))))))))
+                    (read-from-minibuffer "Prompt: " nil map))
+                  seen)"##,
+        )
+        .expect("minibuffer setup should observe frame buffer order");
+
+    assert_eq!(format!("{result}"), r#"" *Minibuf-1*""#);
+}
+
+#[test]
+fn exiting_minibuffer_records_the_restored_calling_buffer_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char(' '),
+    ))
+    .expect("queue minibuffer exit key");
+    eval.input_rx = Some(rx);
+
+    let result = eval
+        .eval_str(
+            r##"(let ((map (make-sparse-keymap))
+                       (minibuffer-exit-hook nil))
+                   (define-key map " " #'exit-minibuffer)
+                   (read-from-minibuffer "Prompt: " nil map)
+                   (equal (mapcar #'buffer-name
+                                  (seq-take (frame-parameter nil 'buffer-list) 2))
+                          '("*scratch*" " *Minibuf-1*")))"##,
+        )
+        .expect("minibuffer exit should restore the caller's selection record");
+
+    assert_eq!(result, Value::T);
+}
+
 /// GNU `read_minibuf` binds `minibuffer-default` to the DEFAULT argument for
 /// the whole read (`src/minibuf.c:591`, `specbind (Qminibuffer_default,
 /// defalt)`), and restores the outer value on exit.  Everything that offers the

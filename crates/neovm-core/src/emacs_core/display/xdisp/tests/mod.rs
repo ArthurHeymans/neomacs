@@ -1007,6 +1007,28 @@ fn test_format_mode_line_line_and_column_at_deep_position() {
 }
 
 #[test]
+fn format_mode_line_line_number_starts_at_accessible_buffer_beginning() {
+    // GNU xdisp.c `decode_mode_spec` initializes `%l`'s line counter at
+    // BUF_BEGV, not the full buffer beginning.  Thus narrowing makes the first
+    // accessible line line 1 while `%i` reports the same accessible region.
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    eval.eval_str(
+        r#"(progn
+  (erase-buffer)
+  (insert "zero\none\ntwo\nthree\n")
+  (narrow-to-region 6 20)
+  (goto-char 14))"#,
+    )
+    .expect("create narrowed mode-line fixture");
+
+    let rendered =
+        builtin_format_mode_line_ctx(&mut eval, vec![Value::string("%l|%c|%i")]).expect("specs");
+
+    assert_eq!(rendered, Value::string("3|0|14"));
+}
+
+#[test]
 fn format_mode_line_line_uses_the_target_windows_point_not_the_buffer_point() {
     // A buffer shown in two windows: `%l` for a NON-selected window must reflect
     // THAT window's own point (GNU displays each window's mode line with the
@@ -1324,6 +1346,60 @@ fn test_format_mode_line_tty_z_uses_live_coding_manager_state() {
 }
 
 #[test]
+fn test_format_mode_line_tty_z_uses_prefer_utf8_declared_mnemonic() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buffer_id = eval.buffers.create_buffer("tty-prefer-utf8-coding-test");
+    eval.buffers.set_current(buffer_id);
+    eval.frames
+        .create_frame("tty-coding-frame", 80, 24, buffer_id);
+
+    eval.buffers
+        .set_buffer_local_property(
+            buffer_id,
+            "buffer-file-coding-system",
+            Value::symbol("prefer-utf-8-unix"),
+        )
+        .expect("set coding");
+
+    let rendered =
+        builtin_format_mode_line_ctx(&mut eval, vec![Value::string("%z")]).expect("tty coding z");
+    assert_eq!(rendered, Value::string("UU-"));
+}
+
+#[test]
+fn test_format_mode_line_tty_z_orders_keyboard_before_terminal() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buffer_id = eval.buffers.create_buffer("tty-coding-order-test");
+    eval.buffers.set_current(buffer_id);
+    eval.frames
+        .create_frame("tty-coding-frame", 80, 24, buffer_id);
+
+    crate::emacs_core::coding::builtin_set_keyboard_coding_system(
+        &mut eval.coding_systems,
+        vec![Value::symbol("utf-8-unix")],
+    )
+    .expect("set keyboard coding");
+    crate::emacs_core::coding::builtin_set_terminal_coding_system(
+        &mut eval.coding_systems,
+        vec![Value::symbol("no-conversion")],
+    )
+    .expect("set terminal coding");
+    eval.buffers
+        .set_buffer_local_property(
+            buffer_id,
+            "buffer-file-coding-system",
+            Value::symbol("utf-8-unix"),
+        )
+        .expect("set buffer coding");
+
+    let rendered =
+        builtin_format_mode_line_ctx(&mut eval, vec![Value::string("%z")]).expect("tty coding z");
+    assert_eq!(rendered, Value::string("U=U"));
+}
+
+#[test]
 fn test_format_mode_line_tty_z_reads_visible_buffer_file_coding_value_without_local_flag() {
     crate::test_utils::init_test_tracing();
     let mut eval = interactive_context();
@@ -1396,6 +1472,83 @@ fn test_format_mode_line_propertize_display_min_width_matches_gnu_spacing() {
 
     let rendered = builtin_format_mode_line_ctx(&mut eval, vec![format]).expect("mode-line");
     assert_eq!(rendered, Value::string("All   "));
+}
+
+#[test]
+fn mode_line_display_does_not_flush_a_terminal_min_width_run() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buffer_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("mode-line-min-width", 800, 600, buffer_id);
+    let window_id = eval.frames.get(frame_id).expect("frame").selected_window;
+    let display = Value::list(vec![
+        Value::symbol("min-width"),
+        Value::list(vec![Value::make_float(5.0)]),
+    ]);
+    let format = Value::list(vec![
+        Value::symbol(":propertize"),
+        Value::string("All"),
+        Value::symbol("display"),
+        display,
+    ]);
+
+    let rendered = format_mode_line_for_display(
+        &mut eval,
+        format,
+        Value::make_window(window_id.0),
+        Value::make_buffer(buffer_id),
+        80,
+    );
+
+    assert_eq!(rendered.as_utf8_str(), Some("All"));
+    let properties =
+        get_string_text_properties_table_for_value(rendered).expect("display property retained");
+    assert_eq!(
+        properties.get_property_at_char_pos(CharPos0::ZERO, Value::symbol("display")),
+        Some(display)
+    );
+}
+
+#[test]
+fn mode_line_display_closes_a_min_width_run_when_another_one_starts() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buffer_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("mode-line-min-width-transition", 800, 600, buffer_id);
+    let window_id = eval.frames.get(frame_id).expect("frame").selected_window;
+    let min_width = |columns: f64| {
+        Value::list(vec![
+            Value::symbol("min-width"),
+            Value::list(vec![Value::make_float(columns)]),
+        ])
+    };
+    let propertized = |text: &str, width: f64| {
+        Value::list(vec![
+            Value::symbol(":propertize"),
+            Value::string(text),
+            Value::symbol("display"),
+            min_width(width),
+        ])
+    };
+    let format = Value::list(vec![
+        propertized("All", 5.0),
+        propertized("Y", 4.0),
+        Value::string("XX"),
+    ]);
+
+    let rendered = format_mode_line_for_display(
+        &mut eval,
+        format,
+        Value::make_window(window_id.0),
+        Value::make_buffer(buffer_id),
+        80,
+    );
+
+    assert_eq!(rendered.as_utf8_str(), Some("All  YXX"));
 }
 
 #[test]
@@ -5590,8 +5743,11 @@ fn line_number_anchor_counts_from_recent_line_and_survives_edits_below() {
     let buf = eval.buffers.current_buffer().expect("buffer");
     // First computation seeds the anchor at point's line (5000 chars / 5 = 1000 newlines).
     let p = point_at(&eval, 5000);
-    assert_eq!(super::prefix_line_and_column(buf, p).line, 1001);
-    assert!(buf.line_number_anchor.get().1 > 0, "anchor seeded");
+    assert_eq!(
+        super::prefix_line_and_column(buf, buf.accessible_emacs_byte_region(), p).line,
+        1001
+    );
+    assert!(buf.line_number_anchor.get().is_some(), "anchor seeded");
     // Simulate the accepted-frame ack, then an edit BELOW the anchor: the
     // anchor stays valid and the count stays exact.
     buf.reset_unchanged_region();
@@ -5599,14 +5755,20 @@ fn line_number_anchor_counts_from_recent_line_and_survives_edits_below() {
         .expect("edit below");
     let buf = eval.buffers.current_buffer().expect("buffer");
     let p = point_at(&eval, 5000);
-    assert_eq!(super::prefix_line_and_column(buf, p).line, 1001);
+    assert_eq!(
+        super::prefix_line_and_column(buf, buf.accessible_emacs_byte_region(), p).line,
+        1001
+    );
     // An edit ABOVE the anchor invalidates it: a newline inserted at the
     // start must shift the count, never show a stale number.
     eval.eval_str("(progn (goto-char 1) (insert \"\\n\"))")
         .expect("edit above");
     let buf = eval.buffers.current_buffer().expect("buffer");
     let p = point_at(&eval, 5001);
-    assert_eq!(super::prefix_line_and_column(buf, p).line, 1002);
+    assert_eq!(
+        super::prefix_line_and_column(buf, buf.accessible_emacs_byte_region(), p).line,
+        1002
+    );
 }
 
 /// Build a frame whose single window has a committed redisplay snapshot with

@@ -1395,6 +1395,7 @@ fn write_print_output_to_target(
         // message_buf_print, so the next print starts with a fresh echo buffer;
         // later print calls append to that buffer.
         ValueKind::T | ValueKind::Nil => {
+            ctx.append_to_log_fragment(&text);
             ctx.append_echo_area_print_lisp_string(&text);
             Ok(())
         }
@@ -1440,6 +1441,7 @@ fn write_print_bytes_to_target(
     let ls = crate::heap_types::LispString::from_emacs_bytes(bytes.to_vec());
     match target.kind() {
         ValueKind::T | ValueKind::Nil => {
+            ctx.append_to_log_fragment(&ls);
             ctx.append_echo_area_print_lisp_string(&ls);
             Ok(())
         }

@@ -580,10 +580,17 @@ pub(crate) fn builtin_commandp_interactive(eval: &mut Context, args: &[Value]) -
             .get_property_id(symbol, InteractiveFormSymbol::id())
             .is_some_and(|value| !value.is_nil())
         {
-            return Err(signal(
-                "error",
-                vec![Value::string("Found an 'interactive-form' property!")],
-            ));
+            // GNU's C `error` path formats this literal through `doprnt`, so
+            // its apostrophe follows the effective `text-quoting-style`.
+            // Constructing a Rust string directly would permanently bake in
+            // the straight-quote spelling and bypass that typed policy.
+            let quoting_style =
+                crate::emacs_core::coding::effective_text_quoting_style(&eval.obarray);
+            let message = crate::emacs_core::coding::requote_c_error_message(
+                "Found an 'interactive-form' property!",
+                quoting_style,
+            );
+            return Err(signal("error", vec![Value::string(message)]));
         }
         let Some(next) = crate::emacs_core::builtins::symbols::symbol_function_cell_in_obarray(
             &eval.obarray,
@@ -1075,6 +1082,67 @@ enum InteractiveControlLetter {
     EvalExpression,
     CodingSystemWithPrefix,
     CodingSystem,
+}
+
+/// The four GNU interactive file-name readers.
+///
+/// GNU funnels `D', `f', `F', and `G' through the Lisp-visible
+/// `read-file-name' function (`callint.c::read_file_name'), with only these
+/// typed policy choices differing between letters.  Keeping the six-argument
+/// call shape here prevents the evaluator and VM command paths from silently
+/// growing separate native-reader behavior.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum InteractiveFileNameKind {
+    Directory,
+    Existing,
+    MayNotExist,
+    MayNotExistWithDirectoryDefault,
+}
+
+impl InteractiveFileNameKind {
+    fn from_control_letter(letter: InteractiveControlLetter) -> Option<Self> {
+        match letter {
+            InteractiveControlLetter::DirectoryName => Some(Self::Directory),
+            InteractiveControlLetter::ExistingFile => Some(Self::Existing),
+            InteractiveControlLetter::File => Some(Self::MayNotExist),
+            InteractiveControlLetter::FileWithDirectoryDefault => {
+                Some(Self::MayNotExistWithDirectoryDefault)
+            }
+            _ => None,
+        }
+    }
+
+    /// Call GNU's replaceable Lisp reader with the exact `callint.c'
+    /// argument policy for this interactive control letter.
+    fn read(self, eval: &mut Context, prompt: Value) -> EvalResult {
+        let (default_filename, must_match, initial, predicate) = match self {
+            Self::Directory => (
+                eval.eval_symbol("default-directory")?,
+                Value::symbol("lambda"),
+                Value::NIL,
+                Value::symbol("file-directory-p"),
+            ),
+            Self::Existing => (Value::NIL, Value::symbol("lambda"), Value::NIL, Value::NIL),
+            Self::MayNotExist => (Value::NIL, Value::NIL, Value::NIL, Value::NIL),
+            Self::MayNotExistWithDirectoryDefault => (
+                Value::NIL,
+                Value::NIL,
+                Value::unibyte_string(""),
+                Value::NIL,
+            ),
+        };
+        eval.apply(
+            Value::symbol("read-file-name"),
+            vec![
+                prompt,
+                Value::NIL,
+                default_filename,
+                must_match,
+                initial,
+                predicate,
+            ],
+        )
+    }
 }
 
 impl InteractiveControlLetter {
@@ -1717,13 +1785,14 @@ fn interactive_args_from_string_code_in_vm_runtime(
                 InteractiveControlLetter::Point => {
                     args.push(interactive_point_arg_in_buffers(&shared.buffers)?)
                 }
-                InteractiveControlLetter::DirectoryName => {
-                    let letter_args = [Value::heap_string(prompt.clone())];
-                    args.push(super::minibuffer::finish_read_directory_name_in_vm_runtime(
-                        shared,
-                        &letter_args,
-                    )?);
-                }
+                control @ (InteractiveControlLetter::DirectoryName
+                | InteractiveControlLetter::ExistingFile
+                | InteractiveControlLetter::File
+                | InteractiveControlLetter::FileWithDirectoryDefault) => args.push(
+                    InteractiveFileNameKind::from_control_letter(control)
+                        .expect("file-name control letter must have a typed reader policy")
+                        .read(shared, Value::heap_string(prompt.clone()))?,
+                ),
                 InteractiveControlLetter::InvokingEvent => {
                     if let Some(event) = interactive_next_event_with_parameters_in_state(
                         &shared.obarray,
@@ -1739,26 +1808,6 @@ fn interactive_args_from_string_code_in_vm_runtime(
                             )],
                         ));
                     }
-                }
-                InteractiveControlLetter::ExistingFile => {
-                    let letter_args = [
-                        Value::heap_string(prompt.clone()),
-                        Value::NIL,
-                        Value::NIL,
-                        Value::T,
-                    ];
-                    args.push(super::minibuffer::finish_read_file_name_in_vm_runtime(
-                        shared,
-                        &letter_args,
-                    )?);
-                }
-                InteractiveControlLetter::File
-                | InteractiveControlLetter::FileWithDirectoryDefault => {
-                    let letter_args = [Value::heap_string(prompt.clone())];
-                    args.push(super::minibuffer::finish_read_file_name_in_vm_runtime(
-                        shared,
-                        &letter_args,
-                    )?);
                 }
                 InteractiveControlLetter::Ignore => args.push(Value::NIL),
                 InteractiveControlLetter::KeySequence => {
@@ -2518,12 +2567,14 @@ fn interactive_args_from_string_code(
                     )?)
                 }
                 InteractiveControlLetter::Point => args.push(interactive_point_arg(eval)?),
-                InteractiveControlLetter::DirectoryName => {
-                    args.push(super::minibuffer::builtin_read_directory_name(
-                        eval,
-                        vec![Value::heap_string(prompt)],
-                    )?)
-                }
+                control @ (InteractiveControlLetter::DirectoryName
+                | InteractiveControlLetter::ExistingFile
+                | InteractiveControlLetter::File
+                | InteractiveControlLetter::FileWithDirectoryDefault) => args.push(
+                    InteractiveFileNameKind::from_control_letter(control)
+                        .expect("file-name control letter must have a typed reader policy")
+                        .read(eval, Value::heap_string(prompt))?,
+                ),
                 InteractiveControlLetter::InvokingEvent => {
                     if let Some(event) = interactive_next_event_with_parameters(eval, context) {
                         args.push(event);
@@ -2535,24 +2586,6 @@ fn interactive_args_from_string_code(
                             )],
                         ));
                     }
-                }
-                InteractiveControlLetter::ExistingFile => {
-                    args.push(super::minibuffer::builtin_read_file_name(
-                        eval,
-                        vec![Value::heap_string(prompt), Value::NIL, Value::NIL, Value::T],
-                    )?)
-                }
-                InteractiveControlLetter::File => {
-                    args.push(super::minibuffer::builtin_read_file_name(
-                        eval,
-                        vec![Value::heap_string(prompt)],
-                    )?)
-                }
-                InteractiveControlLetter::FileWithDirectoryDefault => {
-                    args.push(super::minibuffer::builtin_read_file_name(
-                        eval,
-                        vec![Value::heap_string(prompt)],
-                    )?)
                 }
                 InteractiveControlLetter::Ignore => args.push(Value::NIL),
                 InteractiveControlLetter::KeySequence => {

@@ -8791,6 +8791,55 @@ fn recenter_uses_current_buffer_point_for_selected_window() {
     assert_eq!(results[0], "OK (7 4 4)");
 }
 
+#[test]
+fn only_full_frame_recenter_crosses_the_menu_bar_rebuild_boundary() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let buffer = ev.buffers.create_buffer("recenter-menu-boundary");
+    ev.buffers.set_current(buffer);
+    ev.frames.create_frame("F1", 800, 600, buffer);
+    ev.eval_str("(insert \"a\\nb\\nc\\nd\\n\") (goto-char 3)")
+        .expect("prepare recenter buffer");
+
+    let initial = ev.menu_bar_rebuild_generation();
+    ev.eval_str("(recenter 0 t)")
+        .expect("numeric recenter ignores redraw request");
+    assert_eq!(ev.menu_bar_rebuild_generation(), initial);
+
+    ev.eval_str("(let ((recenter-redisplay nil)) (recenter nil t))")
+        .expect("disabled recenter redraw policy");
+    assert_eq!(ev.menu_bar_rebuild_generation(), initial);
+
+    ev.eval_str("(let ((recenter-redisplay t)) (recenter nil t))")
+        .expect("full-frame recenter");
+    assert_ne!(ev.menu_bar_rebuild_generation(), initial);
+}
+
+#[test]
+fn deleting_a_window_crosses_the_menu_bar_rebuild_boundary() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let buffer = ev.buffers.create_buffer("delete-window-menu-boundary");
+    ev.buffers.set_current(buffer);
+    let frame_id = ev.frames.create_frame("F1", 800, 600, buffer);
+    ev.eval_str("(split-window-internal (selected-window) nil nil nil)")
+        .expect("split the selected window");
+    let deleted_window = ev
+        .frames
+        .get(frame_id)
+        .expect("frame")
+        .window_list()
+        .into_iter()
+        .nth(1)
+        .expect("second live window");
+
+    let initial = ev.menu_bar_rebuild_generation();
+    super::builtin_delete_window_internal(&mut ev, vec![super::window_value(deleted_window)])
+        .expect("delete second window");
+
+    assert_ne!(ev.menu_bar_rebuild_generation(), initial);
+}
+
 /// `recenter` walks backward `target_line` screen lines from point. Exercises
 /// the multi-line backward walk and the begv clamp -- the paths the 0-line /
 /// 1-line cases above miss.

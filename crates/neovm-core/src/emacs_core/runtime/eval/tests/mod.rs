@@ -3355,6 +3355,53 @@ fn read_key_sequence_function_translation_receives_prompt() {
     assert_eq!(prompt, Value::string("Prompt> "));
 }
 
+/// GNU keeps `read_key_sequence`'s PROMPT as the original Lisp string in the
+/// kboard's `echo_prompt`.  In particular, `help--help-screen` relies on the
+/// prompt's `face` intervals surviving while it waits for the next help key.
+#[test]
+fn read_key_sequence_prompt_preserves_text_properties_in_echo_area() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.set_variable("noninteractive", Value::NIL);
+    let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    install_global_map_for_test(&mut ev, global_map);
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::fixnum('a' as i64)],
+        Value::symbol("neomacs-test-prompt-command"),
+    )
+    .expect("define prompt test command");
+
+    let face = Value::symbol("help-key-binding");
+    let prompt = Value::string_with_text_properties(
+        "Prompt> ",
+        vec![crate::emacs_core::value::StringTextPropertyRun {
+            start: 0,
+            end: "Prompt> ".len(),
+            plist: Value::list(vec![Value::symbol("face"), face]),
+        }],
+    );
+    ev.command_loop
+        .keyboard
+        .kboard
+        .unread_events
+        .push_back(Value::fixnum('a' as i64));
+
+    ev.read_key_sequence_with_options(crate::keyboard::ReadKeySequenceOptions::new(
+        prompt, false, false, false,
+    ))
+    .expect("read key sequence");
+
+    let message = ev.current_message_value().expect("prompt echo message");
+    let string = message.as_lisp_string().expect("string echo message");
+    assert_eq!(
+        string
+            .intervals()
+            .get_property_at_char_pos(crate::buffer::CharPos0::ZERO, Value::symbol("face")),
+        Some(face)
+    );
+}
+
 #[test]
 fn read_key_sequence_continues_through_pending_suffix_translation_prefix() {
     crate::test_utils::init_test_tracing();
@@ -3407,7 +3454,7 @@ fn read_key_sequence_continues_through_pending_suffix_translation_prefix() {
 }
 
 #[test]
-fn read_key_sequence_prefix_echo_does_not_log_to_messages_buffer() {
+fn fast_read_key_sequence_does_not_publish_or_log_a_prefix_echo() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     ev.set_variable("noninteractive", Value::NIL);
@@ -3443,9 +3490,8 @@ fn read_key_sequence_prefix_echo_does_not_log_to_messages_buffer() {
     let (_keys, binding) = ev.read_key_sequence().expect("read prefixed key sequence");
     assert_eq!(binding, Value::symbol("neomacs-test-prefix-target-command"));
     assert!(
-        ev.current_message_text()
-            .is_some_and(|message| message.contains("C-x")),
-        "prefix echo should still update the echo area"
+        ev.current_message_text().is_none(),
+        "GNU only publishes a prefix after echo-keystrokes elapses without input"
     );
     if let Some(messages_id) = ev.buffers.find_buffer_by_name("*Messages*") {
         let messages = ev.buffers.get(messages_id).expect("*Messages* live");
@@ -3457,7 +3503,7 @@ fn read_key_sequence_prefix_echo_does_not_log_to_messages_buffer() {
 }
 
 #[test]
-fn read_key_sequence_prefix_echo_matches_gnu_dash_and_help_hint() {
+fn prefix_without_a_blocking_input_source_is_not_eagerly_echoed() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     ev.set_variable("noninteractive", Value::NIL);
@@ -3486,14 +3532,11 @@ fn read_key_sequence_prefix_echo_matches_gnu_dash_and_help_hint() {
 
     let _ = ev.read_key_sequence();
 
-    assert_eq!(
-        ev.current_message_text().as_deref(),
-        Some("SPC- (C-h for help)")
-    );
+    assert_eq!(ev.current_message_text(), None);
 }
 
 #[test]
-fn read_key_sequence_help_prefix_echo_matches_gnu_hint() {
+fn help_prefix_without_a_blocking_input_source_is_not_eagerly_echoed() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     ev.set_variable("noninteractive", Value::NIL);
@@ -3520,13 +3563,7 @@ fn read_key_sequence_help_prefix_echo_matches_gnu_hint() {
 
     let _ = ev.read_key_sequence();
 
-    let message = ev
-        .current_message_text()
-        .expect("help prefix should echo pending key");
-    assert!(
-        message.contains("Type ? for further options, C-q for quick help"),
-        "GNU help-prefix echo should include the help hint, got {message:?}"
-    );
+    assert_eq!(ev.current_message_text(), None);
 }
 
 #[test]
@@ -21670,6 +21707,91 @@ fn command_loop_test_context() -> Context {
         "command loop test should have a selected frame"
     );
     ev
+}
+
+/// GNU `command_loop_2' catches an unhandled command signal with `cmd_error',
+/// which delegates to the current buffer's `command-error-function'.  This is
+/// load-bearing in an active minibuffer: `minibuffer-error-initialize' installs
+/// a buffer-local handler that renders the diagnostic as an EOB overlay instead
+/// of replacing the prompt in the echo area.
+#[test]
+fn command_loop_error_uses_buffer_local_command_error_function() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*command-error-function*");
+    ev.buffers.set_current(scratch);
+    let frame = ev.frames.create_frame("F1", 80, 24, scratch);
+    assert!(ev.frames.select_frame(frame), "test needs a selected frame");
+    let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    install_global_map_for_test(&mut ev, global_map);
+
+    fn stop_command_loop_after_error_probe(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
+        assert!(args.is_empty(), "stop helper should not receive arguments");
+        ctx.command_loop.running = false;
+        Ok(Value::NIL)
+    }
+    ev.register_subr(SubrSpec::new(
+        "neo-stop-command-loop-after-error-probe",
+        NativeFn::ContextVec(stop_command_loop_after_error_probe),
+        SubrArity::new(0, Some(0)),
+    ));
+    ev.eval_str(
+        r#"(progn
+             (setq neo-command-error-observation nil)
+             (set (make-local-variable 'command-error-function)
+                  (lambda (data context caller)
+                    (setq neo-command-error-observation
+                          (list data context caller))))
+             (fset 'neo-signaling-command
+                   (lambda () (interactive) (signal 'error '("boom"))))
+             (fset 'neo-stop-after-error-command
+                   (lambda ()
+                     (interactive)
+                     (neo-stop-command-loop-after-error-probe)))
+             (fset 'command-execute
+                   (lambda (cmd &optional _record _keys _special)
+                     (funcall cmd))))"#,
+    )
+    .expect("install command-error dispatch probe");
+
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::symbol("f9")],
+        Value::symbol("neo-signaling-command"),
+    )
+    .expect("define signaling command");
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::fixnum('q' as i64)],
+        Value::symbol("neo-stop-after-error-command"),
+    )
+    .expect("define stop command");
+
+    ev.command_loop
+        .keyboard
+        .kboard
+        .unread_events
+        .push_back(Value::symbol("f9"));
+    ev.command_loop
+        .keyboard
+        .kboard
+        .unread_events
+        .push_back(Value::fixnum('q' as i64));
+    ev.command_loop.running = true;
+
+    ev.recursive_edit_inner()
+        .expect("command loop should recover and run the stop command");
+
+    assert_eq!(
+        ev.eval_symbol("neo-command-error-observation")
+            .expect("command error observation"),
+        Value::list(vec![
+            Value::list(vec![Value::symbol("error"), Value::string("boom")]),
+            Value::string(""),
+            Value::NIL,
+        ]),
+        "GNU cmd_error must dispatch through the current buffer's handler"
+    );
 }
 
 /// One completed command is the public observability seam: input waiting has

@@ -28,19 +28,14 @@ use strum::{EnumString, IntoStaticStr};
 
 /// Global keymap content-mutation epoch.
 ///
-/// Bumped at the `define-key` and `set-keymap-parent` chokepoints so
-/// derived-from-keymaps caches (the TTY/GUI menu-bar item cache) can key on
-/// it and pick up interior mutations IMMEDIATELY -- which is stricter than
-/// GNU, whose frame menu-bar cache only refreshes on
-/// `windows_or_buffers_changed` / `update_mode_lines` /
-/// `window_buffer_changed` (xdisp.c `update_menu_bar`), so a bare
-/// `define-key` there stays stale until the next such trigger.
+/// Bumped at the `define-key` and `set-keymap-parent` chokepoints so caches
+/// whose contract requires immediate keymap-content freshness (for example
+/// the interactive-spec command cache) can reject an old projection.
 ///
 /// Same caveat as `SYNTAX_TABLE_MUTATION_EPOCH`: keymaps are ordinary
-/// conses, so raw `setcdr` surgery bypasses this. GNU's menu-bar cache has
-/// exactly that blind spot too (resolved by its broad triggers, which map
-/// to `Context::redisplay_generation` here), so consumers should key on
-/// BOTH.
+/// conses, so raw `setcdr` surgery bypasses this. Consumers must opt into
+/// this epoch only when their own freshness contract calls for eager mutation
+/// tracking; GNU's frame menu-bar cache intentionally does not.
 static KEYMAP_MUTATION_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Generation of keymap contents observed by a derived-data cache.

@@ -3905,6 +3905,15 @@ pub(crate) fn builtin_delete_window_internal(
     // than laying the surviving windows out afresh.  The Lisp layer is what
     // decides which sibling absorbs the deleted window's space.
     if frames.delete_window_with_resize(fid, wid, DeleteResize::ApplyStaged) {
+        // GNU `Fdelete_window_internal` sets `FRAME_WINDOW_CHANGE` after the
+        // tree mutation (window.c).  `run_window_change_functions` promotes
+        // that frame flag to `windows_or_buffers_changed` before
+        // `update_menu_bar` (xdisp.c), so deleting Calendar's temporary
+        // window rebuilds the menu.  Keep this classified separately from a
+        // selected-window buffer swap: the latter does not cross GNU's menu
+        // boundary, which is why quitting Bookmark List intentionally leaves
+        // its menu stale until a full redraw.
+        eval.request_menu_bar_rebuild(super::eval::MenuBarRebuildReason::WindowsOrBuffersChanged);
         Ok(Value::NIL)
     } else {
         Err(signal("error", vec![Value::string("Deletion failed")]))
@@ -4074,7 +4083,7 @@ fn update_buffer_display_metadata_in_state(
     Ok(Value::NIL)
 }
 
-fn record_buffer_in_state(
+pub(crate) fn record_buffer_in_state(
     frames: &mut FrameManager,
     buffers: &mut BufferManager,
     buffer_id: BufferId,
@@ -5454,6 +5463,7 @@ fn scroll_by_screen_lines(eval: &mut super::eval::Context, lines: i64) -> EvalRe
 /// top (or bottom if ARG is negative).
 pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_max_args("recenter", &args, 2)?;
+    let redraw = RecenterRedraw::from_call(eval, &args);
     let Some((fid, wid, buffer_id, pt, target_line)) = recenter_backward_origin(eval, &args)?
     else {
         return Ok(Value::NIL);
@@ -5501,8 +5511,48 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
         }
     }
 
-    eval.invalidate_redisplay();
+    match redraw {
+        RecenterRedraw::Window => eval.invalidate_redisplay(),
+        RecenterRedraw::FullFrame => {
+            eval.request_menu_bar_rebuild(super::eval::MenuBarRebuildReason::FullFrameRedraw)
+        }
+    }
     Ok(Value::NIL)
+}
+
+/// Physical redraw selected by GNU `Frecenter`'s ARG/REDISPLAY/policy gate.
+///
+/// REDISPLAY alone is not enough: GNU redraws only for a nil ARG, an enabled
+/// `recenter-redisplay`, and (for the special `tty` policy) a terminal frame.
+/// `recenter-top-bottom`'s first `C-l` supplies exactly that combination.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RecenterRedraw {
+    Window,
+    FullFrame,
+}
+
+impl RecenterRedraw {
+    fn from_call(eval: &super::eval::Context, args: &[Value]) -> Self {
+        let centers_without_prefix = args.first().is_none_or(|arg| arg.is_nil());
+        let redisplay_requested = args.get(1).is_some_and(|value| value.is_truthy());
+        if !centers_without_prefix || !redisplay_requested {
+            return Self::Window;
+        }
+
+        let policy = eval.visible_variable_value_or_nil("recenter-redisplay");
+        if policy.is_nil() {
+            return Self::Window;
+        }
+        if policy.as_symbol_name() == Some("tty")
+            && !eval
+                .frames
+                .selected_frame()
+                .is_some_and(|frame| frame.effective_window_system().is_none())
+        {
+            return Self::Window;
+        }
+        Self::FullFrame
+    }
 }
 
 /// Resolve everything `recenter` needs before it moves: the window to restart,

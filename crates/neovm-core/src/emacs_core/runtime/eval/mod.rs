@@ -367,6 +367,28 @@ struct RedisplaySignature {
     frame: Option<RedisplayFrameSignature>,
 }
 
+/// Revision of GNU's frame menu-bar rebuild boundary.
+///
+/// This is intentionally distinct from the broader redisplay generation:
+/// messages and ordinary buffer display changes can require a new frame
+/// without satisfying `update_menu_bar`'s `windows_or_buffers_changed ||
+/// update_mode_lines` predicate.  Keeping the revision opaque prevents a
+/// menu projection from accidentally regressing to that broader cache key.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MenuBarRebuildGeneration(u64);
+
+/// Core events that cross GNU `update_menu_bar`'s rebuild boundary.
+///
+/// Callers cannot invalidate the menu with an unclassified boolean or a
+/// generic redisplay revision: adding another owner requires extending this
+/// enum and choosing its GNU-equivalent event explicitly.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MenuBarRebuildReason {
+    UpdateModeLines,
+    WindowsOrBuffersChanged,
+    FullFrameRedraw,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RedisplayFrameSignature {
     layout: crate::window::FrameLayoutInputState,
@@ -2797,6 +2819,9 @@ pub struct Context {
     /// Explicit redisplay invalidation generation, used for state that GNU
     /// marks with update_mode_lines/window redisplay flags.
     redisplay_generation: u64,
+    /// GNU `update_menu_bar` invalidation boundary.  This is narrower than
+    /// `redisplay_generation`; see [`MenuBarRebuildGeneration`].
+    menu_bar_rebuild_generation: u64,
     /// Which windows' chrome (mode/header/tab line) must be re-generated on
     /// the next redisplay. See [`ChromeDirty`].
     chrome_dirty: crate::emacs_core::chrome_dirty::ChromeDirty,
@@ -3780,6 +3805,7 @@ impl Context {
         ev.face_change_count = 0;
         ev.display_var_change_count = 0;
         ev.redisplay_generation = 0;
+        ev.menu_bar_rebuild_generation = 0;
         ev.media_generation = 0;
         ev.last_redisplay_signature = None;
         ev.depth = 0;
@@ -6343,6 +6369,7 @@ impl Context {
             materialized_face_table_source: None,
             display_var_change_count: 0,
             redisplay_generation: 0,
+            menu_bar_rebuild_generation: 0,
             chrome_dirty: Default::default(),
             context_instance_id: next_context_instance_id(),
             media_generation: 0,
@@ -6543,6 +6570,7 @@ impl Context {
             materialized_face_table_source: None,
             display_var_change_count: 0,
             redisplay_generation: 0,
+            menu_bar_rebuild_generation: 0,
             chrome_dirty: Default::default(),
             context_instance_id: next_context_instance_id(),
             media_generation: 0,
@@ -7443,7 +7471,9 @@ impl Context {
             Err(Flow::Signal(sig)) => {
                 let rendered = super::error::format_signal_data_with_eval(self, &sig);
                 tracing::warn!("command_loop_top_level_1: top-level SIGNALED: {}", rendered);
-                let error_msg = self.display_command_error(&sig);
+                let error_msg = self.command_error_message(&sig);
+                let data = self.signal_error_data_value(&sig);
+                self.report_command_error(data, "")?;
                 if cfg!(test) {
                     let last_phase = self
                         .obarray
@@ -7563,10 +7593,13 @@ impl Context {
                     return Err(flow);
                 }
                 Err(Flow::Signal(sig)) => {
-                    // Error in command loop — display and restart.
-                    // Mirrors cmd_error() in keyboard.c.
+                    // GNU `command_loop_2' is the sole recovery owner:
+                    // `internal_condition_case (command_loop_1, ..., cmd_error)'.
+                    // Keeping reporting here ensures the current buffer's
+                    // buffer-local `command-error-function' decides how the
+                    // error is presented (notably `minibuffer-error-function').
                     let sym_name = format_symbol_name_for_diagnostic(sig.symbol);
-                    let error_msg = self.display_command_error(&sig);
+                    let error_msg = self.command_error_message(&sig);
                     // Render the *condition symbol* and full signal payload, not
                     // just the human message: a bare "peculiar error" (an error
                     // whose condition has no `error-message`) is otherwise
@@ -7580,18 +7613,19 @@ impl Context {
                         .take()
                         .map(|bt| format!("\nLisp backtrace (innermost first):\n{bt}"))
                         .unwrap_or_default();
+                    // GNU `cmd_error' clears both prefix arguments and key
+                    // echoing before calling `cmd_error_internal'.
+                    self.assign("prefix-arg", Value::NIL);
+                    self.assign("last-prefix-arg", Value::NIL);
+                    self.cancel_key_echo_state();
+
+                    let data = self.signal_error_data_value(&sig);
+                    self.report_command_error(data, "")?;
+
                     tracing::error!(
                         condition = %sym_name,
                         "Command loop error: {error_msg} [signal={rendered_signal}]{backtrace_suffix}"
                     );
-
-                    // Clear prefix arg on error (like GNU Emacs)
-                    self.assign("prefix-arg", Value::NIL);
-
-                    // Ring the bell for quit signals
-                    if sig.symbol == quit_symbol() {
-                        let _ = super::builtins::dispatch_builtin(self, "ding", vec![]);
-                    }
 
                     // Restart the command loop.
                     continue;
@@ -7600,19 +7634,19 @@ impl Context {
         }
     }
 
-    fn display_command_error(&mut self, sig: &SignalData) -> String {
+    /// Render a signal for diagnostics without choosing a presentation path.
+    /// Presentation belongs exclusively to `report_command_error', which
+    /// dispatches through Lisp's buffer-local `command-error-function'.
+    fn command_error_message(&mut self, sig: &SignalData) -> String {
         let error_data = make_signal_binding_value(sig);
-        let error_msg =
-            crate::emacs_core::errors::builtin_error_message_string(self, vec![error_data])
-                .ok()
-                .and_then(|value| {
-                    value
-                        .as_lisp_string()
-                        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
-                })
-                .unwrap_or_else(|| format_symbol_name_for_diagnostic(sig.symbol));
-        let _ = super::builtins::dispatch_builtin(self, "message", vec![Value::string(&error_msg)]);
-        error_msg
+        crate::emacs_core::errors::builtin_error_message_string(self, vec![error_data])
+            .ok()
+            .and_then(|value| {
+                value
+                    .as_lisp_string()
+                    .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+            })
+            .unwrap_or_else(|| format_symbol_name_for_diagnostic(sig.symbol))
     }
 
     /// Main command loop — read key sequence, look up binding, execute.
@@ -7926,39 +7960,13 @@ impl Context {
             // aligned before post-command work and redisplay observe state.
             self.sync_current_buffer_to_selected_window();
 
-            if let Err(ref flow) = exec_result {
-                match flow {
-                    Flow::Throw(_) | Flow::ThreadBlocked(_) | Flow::Shutdown(_) => {
-                        return exec_result;
-                    }
-                    Flow::Signal(_)
-                        if self
-                            .command_loop
-                            .keyboard
-                            .kboard
-                            .executing_kbd_macro
-                            .is_some() =>
-                    {
-                        return exec_result;
-                    }
-                    Flow::Signal(sig) => {
-                        let sym_name = format_symbol_name_for_diagnostic(sig.symbol);
-                        let error_msg = self.display_command_error(sig);
-                        // Signal-dispatch-time backtrace (debug tracing only) — see
-                        // `dispatch_signal`. This is the primary command-error path
-                        // (GNU `cmd_error`); the outer `command_loop_2` net logs the
-                        // same way.
-                        let backtrace_suffix = self
-                            .last_uncaught_signal_backtrace
-                            .take()
-                            .map(|bt| format!("\nLisp backtrace (innermost first):\n{bt}"))
-                            .unwrap_or_default();
-                        tracing::warn!(
-                            condition = %sym_name,
-                            "Command error: ({sym_name}): {error_msg}{backtrace_suffix}"
-                        );
-                    }
-                }
+            // GNU does not recover inside `command_loop_1'. Any non-local
+            // result unwinds the unfinished command (so post-command hooks and
+            // history finalization do not run) and lets `command_loop_2' make
+            // the exhaustive Flow decision. In particular, a Signal must not
+            // be flattened into a plain echo-area `message' here.
+            if exec_result.is_err() {
+                return exec_result;
             }
 
             // Run post-command-hook via safe-run-hooks (Finding 7).
@@ -8490,6 +8498,11 @@ impl Context {
         self.redisplay_generation
     }
 
+    /// Generation of GNU `update_menu_bar` rebuild requests.
+    pub fn menu_bar_rebuild_generation(&self) -> MenuBarRebuildGeneration {
+        MenuBarRebuildGeneration(self.menu_bar_rebuild_generation)
+    }
+
     /// See the `context_instance_id` field.
     pub fn context_instance_id(&self) -> u64 {
         self.context_instance_id
@@ -8532,6 +8545,13 @@ impl Context {
         tracing::debug!(target: "neomacs::redisplay_sig", "invalidate_redisplay");
         self.redisplay_generation = self.redisplay_generation.wrapping_add(1);
         self.last_redisplay_signature = None;
+    }
+
+    /// Cross GNU `update_menu_bar`'s rebuild boundary and schedule redisplay.
+    pub(crate) fn request_menu_bar_rebuild(&mut self, reason: MenuBarRebuildReason) {
+        tracing::debug!(?reason, "request menu-bar rebuild");
+        self.menu_bar_rebuild_generation = self.menu_bar_rebuild_generation.wrapping_add(1);
+        self.invalidate_redisplay();
     }
 
     /// Mark redisplay dirty when a display-affecting variable is set.
@@ -10672,6 +10692,22 @@ impl Context {
         self.current_message
             .as_ref()
             .map(|message| crate::emacs_core::emacs_char::to_utf8_lossy(message.as_bytes()))
+    }
+
+    /// Whether redisplay should move the active cursor into an inactive echo
+    /// area while displaying the current message.
+    ///
+    /// GNU's `get_window_cursor_type` reads the dynamically visible value of
+    /// `cursor-in-echo-area`; exposing the semantic request here keeps layout
+    /// from bypassing specbindings through the obarray's global value cell.
+    /// An active minibuffer already owns the live selected-window cursor and
+    /// therefore is not an inactive echo-area redirection.
+    pub fn inactive_echo_area_cursor_requested(&self) -> bool {
+        self.current_message.is_some()
+            && !self.minibuffer_is_active()
+            && self
+                .visible_variable_value_or_nil("cursor-in-echo-area")
+                .is_truthy()
     }
 
     pub fn minibuffer_is_active(&self) -> bool {

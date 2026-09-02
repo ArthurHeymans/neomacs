@@ -2054,6 +2054,19 @@ pub struct AccessibleBufferRegionSnapshot {
     end_emacs_byte: EmacsBytePos,
 }
 
+/// Cached `%l` coordinate inside one particular accessible buffer region.
+///
+/// GNU's `w->base_line_pos` / `w->base_line_number` is relative to BUF_BEGV.
+/// Retaining that origin in the Rust value prevents an anchor created before
+/// narrowing (or under a different restriction) from being reused as though
+/// it still described the same line-number coordinate system.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ModeLineNumberAnchor {
+    pub(crate) accessible_start: EmacsBytePos,
+    pub(crate) line_start: EmacsBytePos,
+    pub(crate) line_number: usize,
+}
+
 impl AccessibleBufferRegionSnapshot {
     fn start_anchor(self) -> TextPositionAnchor {
         TextPositionAnchor::new(self.start_char, self.start_emacs_byte)
@@ -2194,12 +2207,12 @@ pub(crate) struct BufferDumpParts {
 #[derive(Clone)]
 pub struct Buffer {
     /// Mode-line line-number anchor (GNU w->base_line_pos/base_line_number,
-    /// xdisp.c:29486-29620, held per BUFFER here): `(bol_byte, line)` of a
-    /// recently displayed point's line start, so %l counts newlines only
-    /// from the anchor instead of from the buffer start. `line == 0` means
-    /// no anchor. Validity is checked against the unchanged-region
-    /// accumulator (the BEG_UNCHANGED analog) at each use.
-    pub(crate) line_number_anchor: std::cell::Cell<(usize, i64)>,
+    /// xdisp.c:29486-29620, held per BUFFER here): the accessible-region
+    /// origin plus a recently displayed line start, so `%l` counts newlines
+    /// only from the anchor instead of from BUF_BEGV. Validity is checked
+    /// against both the restriction and the unchanged-region accumulator (the
+    /// BEG_UNCHANGED analog) at each use.
+    pub(crate) line_number_anchor: std::cell::Cell<Option<ModeLineNumberAnchor>>,
     /// Unique identifier.
     pub(crate) id: BufferId,
     /// Buffer name (e.g. `"*scratch*"`). Mirrors GNU `struct buffer.name_`.
@@ -2426,7 +2439,7 @@ impl Buffer {
     ) -> Self {
         assert!(name.is_string(), "buffer name must be a Lisp string");
         Self {
-            line_number_anchor: std::cell::Cell::new((0, 0)),
+            line_number_anchor: std::cell::Cell::new(None),
             id,
             name,
             last_name: Value::NIL,
@@ -2474,7 +2487,7 @@ impl Buffer {
     pub(crate) fn from_dump_parts(parts: BufferDumpParts) -> Self {
         assert!(parts.name.is_string(), "buffer name must be a Lisp string");
         Self {
-            line_number_anchor: std::cell::Cell::new((0, 0)),
+            line_number_anchor: std::cell::Cell::new(None),
             id: parts.id,
             name: parts.name,
             last_name: parts.last_name,

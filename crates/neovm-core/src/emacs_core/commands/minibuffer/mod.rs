@@ -18,7 +18,7 @@ use crate::heap_types::LispString;
 use super::error::{EvalResult, Flow, signal};
 use super::hashtab::hash_key_to_visible_value;
 use super::intern::{NIL_SYM_ID, SymId, T_SYM_ID, resolve_sym};
-use super::reader::{KeyboardInputRuntime, MinibufferInputSource};
+use super::reader::KeyboardInputRuntime;
 use super::symbol::Obarray;
 use super::textprop::StickinessProperty;
 use super::value::{Value, ValueKind, VecLikeType};
@@ -946,139 +946,6 @@ fn compute_common_prefix(strings: &[LispString]) -> Option<LispString> {
 // ---------------------------------------------------------------------------
 // Builtin functions for Elisp
 // ---------------------------------------------------------------------------
-
-/// `(read-file-name PROMPT &optional DIR DEFAULT MUSTMATCH INITIAL PREDICATE)`
-///
-/// Read a file name from the minibuffer.
-/// In interactive mode, uses read-from-minibuffer with initial directory context.
-pub(crate) fn builtin_read_file_name(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    builtin_read_file_name_in_runtime(eval, &args)?;
-    finish_read_file_name_in_eval(eval, &args)
-}
-
-/// `(read-directory-name PROMPT &optional DIR DEFAULT MUSTMATCH INITIAL)`
-///
-/// Read a directory name from the minibuffer.
-/// In interactive mode, uses read-from-minibuffer with initial directory context.
-pub(crate) fn builtin_read_directory_name(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    builtin_read_directory_name_in_runtime(eval, &args)?;
-    finish_read_directory_name_in_eval(eval, &args)
-}
-
-fn validate_file_name_reader_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    expect_min_args(name, args, 1)?;
-    expect_max_args(name, args, max)?;
-    let _prompt = expect_lisp_string(&args[0])?;
-    if let Some(dir) = args.get(1)
-        && !dir.is_nil()
-    {
-        let _ = expect_lisp_string(dir)?;
-    }
-    if let Some(default) = args.get(2)
-        && !default.is_nil()
-    {
-        let _ = expect_lisp_string(default)?;
-    }
-    if let Some(initial) = args.get(4)
-        && !initial.is_nil()
-    {
-        let _ = expect_lisp_string(initial)?;
-    }
-    Ok(())
-}
-
-fn file_name_reader_minibuffer_args(args: &[Value]) -> [Value; 6] {
-    let prompt = args[0];
-    let initial = args.get(4).copied().unwrap_or(Value::NIL);
-    let default = args.get(2).copied().unwrap_or(Value::NIL);
-    let effective_initial = if initial.is_nil() {
-        args.get(1).copied().unwrap_or(Value::NIL)
-    } else {
-        initial
-    };
-    [
-        prompt,
-        effective_initial,
-        Value::NIL,
-        Value::NIL,
-        Value::NIL,
-        default,
-    ]
-}
-
-pub(crate) fn builtin_read_file_name_in_runtime(
-    runtime: &impl KeyboardInputRuntime,
-    args: &[Value],
-) -> Result<(), Flow> {
-    validate_file_name_reader_args("read-file-name", args, 6)?;
-    match runtime.minibuffer_input_source() {
-        MinibufferInputSource::CommandLoop => Ok(()),
-        MinibufferInputSource::StandardInput => Err(end_of_file_stdin_error()),
-    }
-}
-
-pub(crate) fn finish_read_file_name_with_minibuffer(
-    args: &[Value],
-    mut read_from_minibuffer: impl FnMut(&[Value]) -> EvalResult,
-) -> EvalResult {
-    let minibuffer_args = file_name_reader_minibuffer_args(args);
-    read_from_minibuffer(&minibuffer_args)
-}
-
-pub(crate) fn finish_read_file_name_in_eval(
-    eval: &mut super::eval::Context,
-    args: &[Value],
-) -> EvalResult {
-    finish_read_file_name_with_minibuffer(args, |minibuffer_args| {
-        super::reader::finish_read_from_minibuffer_in_eval(eval, minibuffer_args)
-    })
-}
-
-pub(crate) fn finish_read_file_name_in_vm_runtime(
-    shared: &mut super::eval::Context,
-    args: &[Value],
-) -> EvalResult {
-    builtin_read_file_name_in_runtime(shared, args)?;
-    finish_read_file_name_with_minibuffer(args, |minibuffer_args| {
-        super::reader::finish_read_from_minibuffer_in_vm_runtime(shared, minibuffer_args)
-    })
-}
-
-pub(crate) fn builtin_read_directory_name_in_runtime(
-    runtime: &impl KeyboardInputRuntime,
-    args: &[Value],
-) -> Result<(), Flow> {
-    validate_file_name_reader_args("read-directory-name", args, 5)?;
-    match runtime.minibuffer_input_source() {
-        MinibufferInputSource::CommandLoop => Ok(()),
-        MinibufferInputSource::StandardInput => Err(end_of_file_stdin_error()),
-    }
-}
-
-pub(crate) fn finish_read_directory_name_in_eval(
-    eval: &mut super::eval::Context,
-    args: &[Value],
-) -> EvalResult {
-    finish_read_file_name_with_minibuffer(args, |minibuffer_args| {
-        super::reader::finish_read_from_minibuffer_in_eval(eval, minibuffer_args)
-    })
-}
-
-pub(crate) fn finish_read_directory_name_in_vm_runtime(
-    shared: &mut super::eval::Context,
-    args: &[Value],
-) -> EvalResult {
-    builtin_read_directory_name_in_runtime(shared, args)?;
-    finish_read_file_name_with_minibuffer(args, |minibuffer_args| {
-        super::reader::finish_read_from_minibuffer_in_vm_runtime(shared, minibuffer_args)
-    })
-}
 
 /// `(read-buffer PROMPT &optional DEFAULT REQUIRE-MATCH PREDICATE)`
 ///
@@ -2905,13 +2772,6 @@ pub(crate) fn builtin_flex_cost_gotoh(
         matches = Value::cons(Value::fixnum(pos), matches);
     }
     Ok(Value::cons(Value::fixnum(best_cost as i64), matches))
-}
-
-fn end_of_file_stdin_error() -> Flow {
-    signal(
-        LispCondition::EndOfFile,
-        vec![Value::string("Error reading from stdin")],
-    )
 }
 
 // ---------------------------------------------------------------------------

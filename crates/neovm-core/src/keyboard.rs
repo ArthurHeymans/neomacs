@@ -1415,7 +1415,11 @@ enum KeyEchoState {
     #[default]
     Inactive,
     Immediate {
-        prompt: Option<String>,
+        /// Original Lisp prompt text, including interval properties.  GNU's
+        /// kboard stores `echo_prompt` as a Lisp string rather than flattening
+        /// it to bytes, so rebuilding a prefix echo must retain faces and
+        /// other display properties.
+        prompt: Option<LispString>,
     },
 }
 
@@ -3293,12 +3297,12 @@ impl crate::emacs_core::eval::Context {
     /// to rebuild it when the next input event arrives.  `set_current_message`
     /// deliberately cancels any previous keyboard ownership, so ownership is
     /// installed only after the new message has been committed.
-    fn publish_key_echo_message(&mut self, events: &[Value], prompt: Option<String>) {
+    fn publish_key_echo_message(&mut self, events: &[Value], prompt: Option<LispString>) {
         let Some(echo) = self.prefix_echo_message(events) else {
             return;
         };
-        let message = match prompt.as_deref() {
-            Some(prompt) => LispString::from_utf8(prompt).concat(&echo),
+        let message = match prompt.as_ref() {
+            Some(prompt) => prompt.concat(&echo),
             None => echo,
         };
         self.set_current_message(Some(message));
@@ -4207,16 +4211,15 @@ impl crate::emacs_core::eval::Context {
         // `describe-key`'s "Describe the following key…" is visible before and
         // while the user types the key to describe (neomacs#187). Show it now
         // and prepend it to the typed-key echo below.
-        let key_sequence_prompt: Option<String> = options
+        let key_sequence_prompt: Option<LispString> = options
             .prompt
             .as_lisp_string()
-            .and_then(|s| s.as_utf8_str())
-            .filter(|s| !s.is_empty())
-            .map(|s| s.to_string());
+            .filter(|prompt| !prompt.is_empty())
+            .cloned();
         if self.keyboard_input_is_interactive()
-            && let Some(prompt) = key_sequence_prompt.as_deref()
+            && let Some(prompt) = key_sequence_prompt.as_ref()
         {
-            self.set_current_message(Some(LispString::from_utf8(prompt)));
+            self.set_current_message(Some(prompt.clone()));
             self.command_loop.keyboard.kboard.key_echo_state = KeyEchoState::Immediate {
                 prompt: key_sequence_prompt.clone(),
             };
@@ -4611,26 +4614,14 @@ impl crate::emacs_core::eval::Context {
                 resolve_prefix_keymap_binding_in_obarray(&self.obarray, &resolved.lookup).is_some();
 
             if is_prefix {
-                // Keyboard audit Finding 6: consult `echo-keystrokes`.
-                // GNU `keyboard.c:2769,10206,10261` only echoes the
-                // pending prefix when `echo-keystrokes` is a
-                // positive number; a zero/nil value suppresses the
-                // echo entirely so fast typists never see a
-                // mid-sequence flash.
-                //
-                // Note: full GNU parity also *delays* the echo by
-                // `echo-keystrokes` seconds of no further input.
-                // neomacs currently echoes immediately when the
-                // variable is positive. The delay path is tracked
-                // separately as future work — the present fix
-                // corrects the "echo regardless of
-                // echo-keystrokes" bug but leaves the deadline
-                // scheduler for a later pass.
-                if self.keyboard_input_is_interactive()
-                    && self.lisp_echo_keystrokes_seconds().is_some_and(|s| s > 0.0)
-                {
-                    self.publish_key_echo_message(&translated_events, key_sequence_prompt.clone());
-                }
+                // GNU doesn't publish a prefix merely because lookup found a
+                // prefix map.  The following unbounded `read_char` owns the
+                // delay: it waits `echo-keystrokes`, verifies that no input or
+                // pre-existing echo-area message intervened, and only then
+                // calls `echo_now` (keyboard.c:2850-2892).  Keeping that
+                // transition solely in `delayed_key_echo_deadline` prevents
+                // fast sequences and a pending startup message from flashing
+                // an eager `C-x- (C-h for help)` prompt.
                 continue;
             }
 

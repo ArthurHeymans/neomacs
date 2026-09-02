@@ -540,6 +540,63 @@ fn activate_minibuffer_window_in_state(
     Some(saved)
 }
 
+/// Record the observable side effects of selecting the active minibuffer.
+///
+/// GNU `read_minibuf` selects the minibuffer through `Fselect_window` with a
+/// nil NORECORD argument (`src/minibuf.c`).  Consequently the minibuffer is
+/// placed at the front of its *owner frame's* buffer list, the window use time
+/// is updated, and `buffer-list-update-hook` runs.  Activation itself remains
+/// an infallible state transition so its unwind action can be installed before
+/// this helper executes arbitrary Lisp from the hook.
+fn record_active_minibuffer_selection(
+    eval: &mut super::eval::Context,
+    active: ActiveMinibufferWindowState,
+    minibuf_id: crate::buffer::BufferId,
+) -> EvalResult {
+    let _ = eval
+        .frames
+        .note_window_selected(active.minibuffer_window_id);
+    super::window_cmds::record_buffer_in_state(
+        &mut eval.frames,
+        &mut eval.buffers,
+        minibuf_id,
+        active.minibuffer_frame.0,
+    )?;
+    if !eval.buffers.buffer_hooks_inhibited(minibuf_id) {
+        super::builtins::run_buffer_list_update_hook(eval)?;
+    }
+    Ok(Value::NIL)
+}
+
+/// Record GNU `read_minibuf_unwind` reselecting the invoking window through
+/// `Fset_frame_selected_window(..., NORECORD=nil)`.
+fn record_restored_calling_window_selection(
+    eval: &mut super::eval::Context,
+    active: ActiveMinibufferWindowState,
+) -> EvalResult {
+    let Some(buffer_id) = eval
+        .frames
+        .get(active.calling_frame.0)
+        .and_then(|frame| frame.find_window(active.calling_selected_window))
+        .and_then(crate::window::Window::buffer_id)
+    else {
+        return Ok(Value::NIL);
+    };
+    let _ = eval
+        .frames
+        .note_window_selected(active.calling_selected_window);
+    super::window_cmds::record_buffer_in_state(
+        &mut eval.frames,
+        &mut eval.buffers,
+        buffer_id,
+        active.calling_frame.0,
+    )?;
+    if !eval.buffers.buffer_hooks_inhibited(buffer_id) {
+        super::builtins::run_buffer_list_update_hook(eval)?;
+    }
+    Ok(Value::NIL)
+}
+
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn activate_minibuffer_window(
     eval: &mut super::eval::Context,
@@ -679,6 +736,7 @@ pub(crate) fn unwind_minibuffer_session(
     shared: &mut super::eval::Context,
     state: MinibufferSessionUnwind,
 ) -> EvalResult {
+    let restored_calling_selection = state.active_window_state;
     let exit_hook_result = match shared.run_hook_if_bound("minibuffer-exit-hook") {
         Ok(value) => Ok(value),
         Err(Flow::Signal(_)) => Ok(Value::NIL),
@@ -730,6 +788,9 @@ pub(crate) fn unwind_minibuffer_session(
     {
         shared.buffers.switch_current(buffer_id);
     }
+    let selection_record_result = restored_calling_selection
+        .map(|active| record_restored_calling_window_selection(shared, active))
+        .unwrap_or(Ok(Value::NIL));
     shared.obarray.set_symbol_value(
         "minibuffer-depth",
         Value::fixnum(shared.minibuffers.depth() as i64),
@@ -760,6 +821,7 @@ pub(crate) fn unwind_minibuffer_session(
 
     exit_hook_result?;
     inactive_mode_result?;
+    selection_record_result?;
     Ok(Value::NIL)
 }
 
@@ -1982,6 +2044,9 @@ fn finish_read_from_minibuffer_in_vm_runtime_interactive(
             state: Box::new(session_unwind),
         },
     );
+    if let Some(active_window_state) = active_window_state {
+        record_active_minibuffer_selection(shared, active_window_state, minibuf_id)?;
+    }
     shared
         .obarray
         .set_symbol_value("minibuffer-history-variable", history_spec.variable_value);

@@ -105,7 +105,18 @@ fn message_log_coalesce(
 
 /// Log a message to the *Messages* buffer, matching GNU Emacs message_dolog
 /// in xdisp.c.  Creates the buffer if it doesn't exist.
-fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispString) {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MessageLogTermination {
+    Fragment,
+    Line,
+    FlushPendingFragment,
+}
+
+fn message_dolog(
+    ctx: &mut super::eval::Context,
+    msg: &crate::heap_types::LispString,
+    termination: MessageLogTermination,
+) {
     // GNU: check message-log-max; if nil, don't log
     let log_max = ctx.visible_variable_value_or_nil("message-log-max");
     if log_max.is_nil() {
@@ -139,7 +150,7 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
     // Save and restore current buffer like GNU does.
     let old_buf = ctx.buffers.current_buffer().map(|b| b.id);
     let _ = ctx.set_current_buffer_unrecorded(buf_id);
-    let Some((old_pt_byte, old_accessible, old_full_end, point_at_end, zv_at_end)) =
+    let Some((old_pt_byte, old_accessible, mut old_full_end, point_at_end, zv_at_end)) =
         ctx.buffers.get(buf_id).map(|buf| {
             let old_pt_byte = buf.point_emacs_byte_pos();
             let old_accessible = buf.accessible_region_snapshot();
@@ -165,13 +176,46 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
             .buffers
             .restore_buffer_emacs_byte_restriction(buf_id, full_range);
     }
+
+    // GNU `log_message` calls `message_log_maybe_newline` before logging a
+    // complete message.  Echo-area printer output deliberately leaves a
+    // fragment open, so the next ordinary message first terminates it.
+    if termination != MessageLogTermination::Fragment {
+        let needs_newline = ctx.buffers.get(buf_id).is_some_and(|buffer| {
+            let full = buffer.full_emacs_byte_range();
+            full.start() < full.end()
+                && buffer.buffer_substring_bytes_range(crate::buffer::EmacsByteRange::new(
+                    full.end()
+                        .saturating_sub_len(crate::buffer::EmacsByteLen::new(1)),
+                    full.end(),
+                )) != b"\n"
+        });
+        if needs_newline {
+            let _ = ctx.buffers.goto_buffer_emacs_byte_pos(buf_id, old_full_end);
+            let _ = ctx.buffers.insert_into_buffer(buf_id, "\n");
+            old_full_end = ctx
+                .buffers
+                .get(buf_id)
+                .map(|buffer| buffer.full_emacs_byte_range().end())
+                .unwrap_or(old_full_end);
+        }
+    }
+
     // GNU `message_dolog` collapses consecutive identical messages into
     // "MSG [N times]" instead of logging a new line each time.
-    let (log_text, delete_from) = message_log_coalesce(ctx, buf_id, msg, old_full_end);
-    if ctx
-        .buffers
-        .goto_buffer_emacs_byte_pos(buf_id, delete_from)
-        .is_some()
+    let (log_text, delete_from) = match termination {
+        MessageLogTermination::Fragment => (msg.clone(), old_full_end),
+        MessageLogTermination::Line => message_log_coalesce(ctx, buf_id, msg, old_full_end),
+        MessageLogTermination::FlushPendingFragment => (
+            crate::heap_types::LispString::from_unibyte(Vec::new()),
+            old_full_end,
+        ),
+    };
+    if termination != MessageLogTermination::FlushPendingFragment
+        && ctx
+            .buffers
+            .goto_buffer_emacs_byte_pos(buf_id, delete_from)
+            .is_some()
     {
         if delete_from.get() < old_full_end.get() {
             let del_range = crate::buffer::EmacsByteRange::new(delete_from, old_full_end);
@@ -193,7 +237,9 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
         let _ = ctx
             .buffers
             .insert_lisp_string_into_buffer(buf_id, &log_text);
-        let _ = ctx.buffers.insert_into_buffer(buf_id, "\n");
+        if termination == MessageLogTermination::Line {
+            let _ = ctx.buffers.insert_into_buffer(buf_id, "\n");
+        }
     }
 
     if let Some(new_full_end) = ctx
@@ -232,7 +278,18 @@ impl super::eval::Context {
     /// and other native subsystems use it for diagnostics that belong in
     /// `*Messages*`, but must not become the current echo-area message.
     pub fn add_to_log(&mut self, message: &str) {
-        message_dolog(self, &crate::heap_types::LispString::from_utf8(message));
+        message_dolog(
+            self,
+            &crate::heap_types::LispString::from_utf8(message),
+            MessageLogTermination::Line,
+        );
+    }
+
+    /// Append printer output to `*Messages*` without terminating its line.
+    /// GNU's `printchar`/`strout` use exactly this form when `standard-output`
+    /// is the interactive echo area.
+    pub(crate) fn append_to_log_fragment(&mut self, message: &crate::heap_types::LispString) {
+        message_dolog(self, message, MessageLogTermination::Fragment);
     }
 }
 
@@ -340,7 +397,7 @@ pub(crate) fn builtin_message(ctx: &mut super::eval::Context, args: Vec<Value>) 
     let side_effects = (|| {
         // GNU xdisp.c `message3` logs to *Messages* (`log_message`) FIRST and
         // unconditionally (independent of `inhibit-message`).
-        message_dolog(ctx, &msg);
+        message_dolog(ctx, &msg, MessageLogTermination::Line);
         tracing::info!(msg = %crate::emacs_core::emacs_char::to_utf8_lossy(msg.as_bytes()));
 
         // GNU xdisp.c `message3_frame_nolog`: when the selected frame is the
@@ -390,6 +447,13 @@ pub(crate) fn builtin_message(ctx: &mut super::eval::Context, args: Vec<Value>) 
 /// `inhibit-message' reach `message3_nolog' -- which in batch is
 /// `message_to_stderr', printing the empty line described above.
 fn clear_echo_area_and_report_to_stderr(ctx: &mut super::eval::Context) {
+    // GNU `message1 (0)` reaches `log_message (Qnil)`, which does not log a
+    // new message but does terminate printer output left as a partial line.
+    message_dolog(
+        ctx,
+        &crate::heap_types::LispString::from_unibyte(Vec::new()),
+        MessageLogTermination::FlushPendingFragment,
+    );
     ctx.clear_echo_area_message();
     if !ctx.noninteractive() {
         return;
@@ -488,7 +552,7 @@ pub(crate) fn builtin_force_mode_line_update(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_max_args("force-mode-line-update", &args, 1)?;
-    ctx.invalidate_redisplay();
+    ctx.request_menu_bar_rebuild(super::eval::MenuBarRebuildReason::UpdateModeLines);
     // GNU `Fforce_mode_line_update` (buffer.c) raises the mode-line dirty
     // flag as well as forcing a redisplay: without ALL it is
     // `bset_update_mode_line` on the current buffer, with ALL it is the

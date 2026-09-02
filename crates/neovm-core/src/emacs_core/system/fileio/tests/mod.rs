@@ -4694,6 +4694,37 @@ fn find_file_ascii_without_newline_keeps_gnu_default_utf8_unix_eol() {
     assert_eq!(format!("{result}"), "(utf-8-unix utf-8-unix 0)");
 }
 
+/// An ASCII `.el` file with LF evidence is decoded as `utf-8-unix`, then GNU's
+/// `after-insert-file-set-coding` preserves the file-alist preference by
+/// publishing `prefer-utf-8-unix` on the visited buffer.  That coding system
+/// deliberately declares the `-` mnemonic despite containing `utf-8` in its
+/// name.
+#[test]
+fn find_file_ascii_elisp_with_newline_publishes_prefer_utf8_unix_coding() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("ascii-with-newline.el");
+    fs::write(&path, b"(message \"ascii\")\n").expect("write ASCII fixture");
+    let path_lisp = path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+    let mut eval = crate::test_utils::runtime_startup_context();
+
+    let result = eval
+        .eval_str(&format!(
+            r##"(progn
+                   (set-language-environment "UTF-8")
+                   (let ((buffer (find-file-noselect "{path_lisp}")))
+                     (with-current-buffer buffer
+                       (list last-coding-system-used
+                             buffer-file-coding-system))))"##
+        ))
+        .expect("visit newline-terminated ASCII file");
+
+    assert_eq!(format!("{result}"), "(prefer-utf-8-unix prefer-utf-8-unix)");
+}
+
 #[cfg(unix)]
 #[test]
 fn builtin_insert_file_contents_handles_raw_unibyte_filename() {

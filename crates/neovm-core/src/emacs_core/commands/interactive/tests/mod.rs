@@ -857,11 +857,31 @@ fn commandp_errors_on_uninterned_interactive_form_property_like_gnu() {
                            (commandp s)
                          (error (list (car e)
                                       (equal (car (cdr e))
-                                             "Found an 'interactive-form' property!"))))
+                                             "Found an ’interactive-form’ property!"))))
                        (interactive-form s)
                        (commandp (symbol-function s))))"#
         ),
         r#"OK ((error t) (interactive "p") nil)"#
+    );
+}
+
+#[test]
+fn commandp_interactive_form_property_error_honors_text_quoting_style() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r##"(let ((s (make-symbol "neo-cmd-prop")))
+                   (fset s (lambda () 1))
+                   (put s 'interactive-form '(interactive "p"))
+                   (list
+                    (let ((text-quoting-style 'curve))
+                      (condition-case e (commandp s) (error (car (cdr e)))))
+                    (let ((text-quoting-style 'straight))
+                      (condition-case e (commandp s) (error (car (cdr e)))))
+                    (let ((text-quoting-style 'grave))
+                      (condition-case e (commandp s) (error (car (cdr e)))))))"##
+        ),
+        r#"OK ("Found an ’interactive-form’ property!" "Found an 'interactive-form' property!" "Found an 'interactive-form' property!")"#
     );
 }
 
@@ -4126,6 +4146,44 @@ fn interactive_lambda_extended_reader_prompt_codes_signal_eof_in_batch() {
     assert_eq!(
         results[0],
         "OK ((end-of-file \"Error reading from stdin\") (end-of-file \"Error reading from stdin\") (end-of-file \"Error reading from stdin\") (end-of-file \"Error reading from stdin\") (end-of-file \"Error reading from stdin\") (end-of-file \"Error reading from stdin\") (end-of-file \"Error reading from stdin\") (end-of-file \"Error reading from stdin\") (end-of-file \"Error reading from stdin\") (end-of-file \"Error reading from stdin\"))"
+    );
+}
+
+/// GNU `callint.c::read_file_name' calls the Lisp-visible
+/// `read-file-name' function.  The indirection is part of the contract:
+/// `minibuffer.el' supplies the default-directory insertion/completion setup,
+/// and callers may replace the function cell.  Its `D', `f', `F', and `G'
+/// cases also define distinct, fixed policies for the optional arguments.
+#[test]
+fn interactive_file_letters_dispatch_through_lisp_read_file_name() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = gnu_simple_command_execute_eval();
+    let results = eval_all_with(
+        &mut ev,
+        r#"(progn
+             (setq interactive-file-reader-args nil)
+             (fset 'read-file-name
+                   (lambda (&rest args)
+                     (setq interactive-file-reader-args
+                           (append interactive-file-reader-args (list args)))
+                     "sentinel"))
+             (let ((default-directory "/tmp/probe/"))
+               (list
+                (call-interactively
+                 (lambda (file) (interactive "DDirectory: ") file))
+                (call-interactively
+                 (lambda (file) (interactive "fExisting: ") file))
+                (call-interactively
+                 (lambda (file) (interactive "FFile: ") file))
+                (call-interactively
+                 (lambda (file) (interactive "GDefault: ") file))
+                interactive-file-reader-args
+                (multibyte-string-p
+                 (nth 4 (nth 3 interactive-file-reader-args))))))"#,
+    );
+    assert_eq!(
+        results[0],
+        "OK (\"sentinel\" \"sentinel\" \"sentinel\" \"sentinel\" ((\"Directory: \" nil \"/tmp/probe/\" lambda nil file-directory-p) (\"Existing: \" nil nil lambda nil nil) (\"File: \" nil nil nil nil nil) (\"Default: \" nil nil nil \"\" nil)) nil)"
     );
 }
 
