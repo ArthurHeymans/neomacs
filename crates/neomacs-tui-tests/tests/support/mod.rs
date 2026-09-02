@@ -237,6 +237,19 @@ pub fn use_deterministic_compilation_exit_time(gnu: &mut TuiSession, neo: &mut T
     eval_expression(gnu, neo, expression);
 }
 
+/// Keep Dired's free-space annotation enabled while fixing its OS observation.
+///
+/// GNU's own Dired tests stub `file-system-info`: free bytes can change between
+/// two editor processes even when both display the same test-owned directory.
+pub fn use_deterministic_file_system_info(gnu: &mut TuiSession, neo: &mut TuiSession) {
+    let expression = r##"(progn
+      (defun neomacs-tui--stable-file-system-info (_original _filename)
+        '(107374182400 53687091200 1073741824))
+      (advice-add 'file-system-info :around
+                  #'neomacs-tui--stable-file-system-info))"##;
+    eval_expression(gnu, neo, expression);
+}
+
 pub fn open_home_file(
     gnu: &mut TuiSession,
     neo: &mut TuiSession,

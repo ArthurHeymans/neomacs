@@ -20,6 +20,12 @@ fn make_shared_dired_fixture(label: &str) -> TuiTempDirectory {
     directory
 }
 
+fn boot_shared_dired_pair() -> (TuiSession, TuiSession) {
+    let (mut gnu, mut neo) = boot_pair("");
+    use_deterministic_file_system_info(&mut gnu, &mut neo);
+    (gnu, neo)
+}
+
 fn open_shared_dired(gnu: &mut TuiSession, neo: &mut TuiSession, dir: &std::path::Path) {
     send_both(gnu, neo, "C-x d");
     let dired_path = format!("{}/", dir.display());
@@ -379,7 +385,7 @@ fn list_directory_via_cx_cd_lists_entries() {
 
 #[test]
 fn dired_open_directory_via_cx_d_lists_entries() {
-    let (mut gnu, mut neo) = boot_pair("");
+    let (mut gnu, mut neo) = boot_shared_dired_pair();
     let dir = make_shared_dired_fixture("open");
 
     open_shared_dired(&mut gnu, &mut neo, &dir);
@@ -389,7 +395,7 @@ fn dired_open_directory_via_cx_d_lists_entries() {
 
 #[test]
 fn dired_mark_flag_and_unmark_current_file() {
-    let (mut gnu, mut neo) = boot_pair("");
+    let (mut gnu, mut neo) = boot_shared_dired_pair();
     let dir = make_shared_dired_fixture("mark");
     let alpha = dir.join("alpha.txt");
     let beta = dir.join("beta.org");
@@ -446,7 +452,7 @@ fn dired_mark_flag_and_unmark_current_file() {
 
 #[test]
 fn dired_find_file_via_ret_visits_current_file() {
-    let (mut gnu, mut neo) = boot_pair("");
+    let (mut gnu, mut neo) = boot_shared_dired_pair();
     let dir = make_shared_dired_fixture("find-file");
     let beta = dir.join("beta.org");
 
@@ -467,7 +473,7 @@ fn dired_find_file_via_ret_visits_current_file() {
 
 #[test]
 fn dired_jump_via_cx_cj_opens_parent_listing_on_current_file() {
-    let (mut gnu, mut neo) = boot_pair("");
+    let (mut gnu, mut neo) = boot_shared_dired_pair();
     let dir = make_shared_dired_fixture("jump");
     let beta = dir.join("beta.org");
 
@@ -515,7 +521,7 @@ fn dired_jump_via_cx_cj_opens_parent_listing_on_current_file() {
 
 #[test]
 fn dired_jump_other_window_via_cx4_cj_keeps_file_and_listing_visible() {
-    let (mut gnu, mut neo) = boot_pair("");
+    let (mut gnu, mut neo) = boot_shared_dired_pair();
     let dir = make_shared_dired_fixture("jump-other-window");
     let beta = dir.join("beta.org");
 
@@ -554,7 +560,7 @@ fn dired_jump_other_window_via_cx4_cj_keeps_file_and_listing_visible() {
 
 #[test]
 fn dired_copy_current_file_via_c_copies_file_and_updates_listing() {
-    let (mut gnu, mut neo) = boot_pair("");
+    let (mut gnu, mut neo) = boot_shared_dired_pair();
     let dir = make_shared_dired_fixture("copy");
     let alpha = dir.join("alpha.txt");
     let alpha_copy = dir.join("alpha-copy.txt");
@@ -601,7 +607,7 @@ fn dired_copy_current_file_via_c_copies_file_and_updates_listing() {
 
 #[test]
 fn dired_rename_current_file_via_r_moves_file_and_updates_listing() {
-    let (mut gnu, mut neo) = boot_pair("");
+    let (mut gnu, mut neo) = boot_shared_dired_pair();
     let dir = make_shared_dired_fixture("rename");
     let beta = dir.join("beta.org");
     let beta_renamed = dir.join("beta-renamed.org");
@@ -648,7 +654,7 @@ fn dired_rename_current_file_via_r_moves_file_and_updates_listing() {
 
 #[test]
 fn dired_delete_current_file_via_d_confirms_and_removes_listing() {
-    let (mut gnu, mut neo) = boot_pair("");
+    let (mut gnu, mut neo) = boot_shared_dired_pair();
     let dir = make_shared_dired_fixture("delete");
     let zeta = dir.join("zeta.log");
 
