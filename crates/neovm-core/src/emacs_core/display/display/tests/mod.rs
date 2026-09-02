@@ -3785,6 +3785,10 @@ fn display_supports_face_attributes_p_uses_live_gui_font_capabilities() {
     let frame_id = eval
         .frames
         .create_frame("gui-face-support", 800, 600, scratch);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("GUI frame")
+        .set_window_system(Some(Value::symbol("neo")));
     eval.frames.select_frame(frame_id);
     eval.set_display_host(Box::new(ItalicCapableDisplayHost));
 
@@ -4279,7 +4283,7 @@ fn x_popup_menu_interactive_menu_bar_right_returns_next_menu_position() {
 /// everything on a tty -- verified against GNU 31 under TERM=screen-256color,
 /// where GNU reports bold and underline supported and italic not.
 #[test]
-fn tty_frame_supports_the_attributes_the_terminal_can_render() {
+fn tty_frame_uses_terminal_capabilities_even_with_a_frontend_host() {
     use neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities;
 
     let mut eval = crate::emacs_core::Context::new();
@@ -4291,6 +4295,10 @@ fn tty_frame_supports_the_attributes_the_terminal_can_render() {
         .id();
     let frame = eval.frames.create_frame("F1", 80, 25, buffer);
     eval.frames.select_frame(frame);
+    // The live `-nw` frontend installs a display host for popup interaction.
+    // That integration object does not turn its frame into a window-system
+    // frame: GNU dispatches this predicate from `is_tty_frame (f)`.
+    eval.set_display_host(Box::new(ItalicCapableDisplayHost));
     // screen-256color: bold, dim, underline and standout, but no `sitm' and no
     // `smxx'.
     crate::emacs_core::terminal::pure::configure_terminal_runtime(
