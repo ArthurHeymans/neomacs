@@ -16,7 +16,10 @@ impl DecoderBackend for UnsupportedDecoder {
         Err("video is unsupported on this platform".into())
     }
 
-    fn drain_events(&mut self) -> Vec<crate::backend::BackendEvent<Self::Frame>> {
+    fn service(
+        &mut self,
+        _timing: crate::VideoServiceTiming,
+    ) -> Vec<crate::backend::BackendEvent<Self::Frame>> {
         Vec::new()
     }
 }

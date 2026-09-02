@@ -22,8 +22,9 @@ use objc2_core_media::{
     kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ,
 };
 use objc2_core_video::{
-    CVImageBufferGetCleanRect, CVImageBufferGetDisplaySize, CVMetalTexture, CVMetalTextureCache,
-    CVMetalTextureGetTexture, CVPixelBuffer, CVPixelBufferGetHeight, CVPixelBufferGetHeightOfPlane,
+    CVGetCurrentHostTime, CVGetHostClockFrequency, CVImageBufferGetCleanRect,
+    CVImageBufferGetDisplaySize, CVMetalTexture, CVMetalTextureCache, CVMetalTextureGetTexture,
+    CVPixelBuffer, CVPixelBufferGetHeight, CVPixelBufferGetHeightOfPlane,
     CVPixelBufferGetPixelFormatType, CVPixelBufferGetPlaneCount, CVPixelBufferGetWidth,
     CVPixelBufferGetWidthOfPlane, kCVImageBufferChromaLocation_Center,
     kCVImageBufferChromaLocation_TopLeft, kCVImageBufferChromaLocationTopFieldKey,
@@ -252,7 +253,7 @@ impl MacDecoder {
         Ok(DecoderReconfiguration::Applied)
     }
 
-    fn poll_sessions(&mut self) {
+    fn poll_sessions(&mut self, timing: crate::VideoServiceTiming) {
         autoreleasepool(|_| {
             let mut events = Vec::new();
             let mut failed = Vec::new();
@@ -295,7 +296,18 @@ impl MacDecoder {
                     continue;
                 };
 
-                let item_time = unsafe { session.item.currentTime() };
+                // AVPlayerItemVideoOutput is a pull API. Ask for the sample
+                // corresponding to the compositor's anticipated presentation
+                // rather than sampling the player's current time and showing
+                // a frame that is already one display interval old.
+                let host_frequency = CVGetHostClockFrequency();
+                let target_host_time = CVGetCurrentHostTime() as f64 / host_frequency
+                    + timing.time_until_presentation().as_secs_f64();
+                let item_time = unsafe {
+                    output
+                        .video_output
+                        .itemTimeForHostTime(target_host_time)
+                };
                 if unsafe { output.video_output.hasNewPixelBufferForItemTime(item_time) } {
                     let mut display_time = item_time;
                     if let Some(pixel_buffer) = unsafe {
@@ -660,8 +672,8 @@ impl DecoderBackend for MacDecoder {
         }
     }
 
-    fn drain_events(&mut self) -> Vec<BackendEvent<Self::Frame>> {
-        self.poll_sessions();
+    fn service(&mut self, timing: crate::VideoServiceTiming) -> Vec<BackendEvent<Self::Frame>> {
+        self.poll_sessions(timing);
         std::mem::take(&mut self.pending)
     }
 

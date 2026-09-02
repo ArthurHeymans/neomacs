@@ -10,6 +10,30 @@ use neomacs_display_protocol::font::{
 #[cfg(feature = "neo-term")]
 use rio_vt::crosswords::style::StyleFlags as CellFlags;
 
+#[cfg(feature = "video")]
+#[test]
+fn video_service_targets_the_fastest_visible_presenter() {
+    let now = std::time::Instant::now();
+
+    let timing = video_service_timing(
+        now,
+        [
+            std::time::Duration::from_millis(16),
+            std::time::Duration::from_millis(8),
+        ],
+    );
+
+    assert_eq!(timing.service_time(), now);
+    assert_eq!(
+        timing.target_presentation_time(),
+        now + std::time::Duration::from_millis(8)
+    );
+    assert_eq!(
+        video_service_timing(now, std::iter::empty()).target_presentation_time(),
+        now
+    );
+}
+
 #[cfg(feature = "neo-term")]
 fn terminal_face_for_flags_and_font(
     flags: CellFlags,

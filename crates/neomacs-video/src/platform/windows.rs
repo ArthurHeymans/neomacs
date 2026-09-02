@@ -824,7 +824,7 @@ impl DecoderBackend for WindowsDecoder {
         }
     }
 
-    fn drain_events(&mut self) -> Vec<BackendEvent<Self::Frame>> {
+    fn service(&mut self, _timing: crate::VideoServiceTiming) -> Vec<BackendEvent<Self::Frame>> {
         self.poll_sessions();
         std::mem::take(&mut self.pending)
     }

@@ -109,7 +109,12 @@ pub(crate) trait DecoderBackend {
     type Frame;
 
     fn command(&mut self, command: VideoCommand) -> Result<(), VideoCommandError>;
-    fn drain_events(&mut self) -> Vec<BackendEvent<Self::Frame>>;
+
+    /// Advance native playback without blocking and return newly available
+    /// events. Pull-based adapters use the presentation target to select the
+    /// frame the compositor is about to show; push-based adapters only drain
+    /// their bounded event bridge.
+    fn service(&mut self, timing: crate::VideoServiceTiming) -> Vec<BackendEvent<Self::Frame>>;
 
     /// Ask the decoder to replace an output representation that the GPU
     /// importer rejected.  Most backends have no in-place fallback; the

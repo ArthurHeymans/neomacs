@@ -1,7 +1,6 @@
 //! Renderer-facing facade over the cross-platform native video subsystem.
 
 use std::collections::{HashMap, HashSet};
-use std::time::Instant;
 
 use neomacs_display_protocol::types::VideoId;
 use neomacs_video::{
@@ -755,7 +754,7 @@ impl VideoCache {
 
     pub fn process_pending(
         &mut self,
-        now: Instant,
+        timing: neomacs_video::VideoServiceTiming,
         presented: &HashSet<VideoId>,
     ) -> &VideoServiceResult {
         let needs_system = self
@@ -779,7 +778,7 @@ impl VideoCache {
             }
         }
 
-        let native_result = system.service(now);
+        let native_result = system.service_for_presentation(timing);
         let mut events = Vec::with_capacity(native_result.events.len());
         for event in native_result.events {
             let native_id = NativeVideoSessionId(event_id(&event));

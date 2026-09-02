@@ -15,9 +15,9 @@ The pipeline is not yet entitled to claim *decoder-to-compositor* zero-copy.
 `AVPlayerItemVideoOutput` returns a `CVPixelBuffer`, but Apple does not promise
 that this is the hardware decoder's original output allocation. Its `copy` name
 expresses Core Foundation ownership, not documented pixel-copy behavior. The
-current conservative `GpuInteropCopy { reported_bytes: None }` classification
-is therefore honest, although it conflates an unknown decoder boundary with a
-known direct Metal import.
+implementation therefore reports the decoder boundary as `Unknown` and the
+independently proven Metal import as `BorrowedNativeSurface`; it no longer
+conflates those two facts into one transfer label.
 
 Replacing AVPlayer with raw VideoToolbox everywhere is not automatically the
 ideal design. AVPlayer owns demuxing, streaming, seeking, timing, and format
@@ -476,6 +476,12 @@ position and epoch, produce one structured diagnostic, and avoid retry loops
 on every frame.
 
 ## Recommended implementation order
+
+Steps 1-3 are implemented on `main`: the model carries independent path
+evidence, native leases retire after submitted GPU work, and AVPlayer output is
+sampled for the compositor's typed target-presentation time. The remaining
+steps are optional negotiated tiers that require representative hardware
+measurement; they should not replace the broad player backends speculatively.
 
 1. Split decoder provenance, compositor import, and presentation path in the
    shared model; keep the existing public `VideoId` session API stable.

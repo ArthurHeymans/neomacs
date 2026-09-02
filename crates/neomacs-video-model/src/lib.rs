@@ -1041,7 +1041,7 @@ pub enum VideoEvent {
         id: VideoId,
         state: VideoSessionState,
     },
-    /// The successfully presented frame selected a different observable path.
+    /// The successfully imported frame selected a different observable path.
     /// Emitted once per transition rather than once per frame.
     FramePathChanged {
         id: VideoId,
@@ -1063,6 +1063,46 @@ pub struct VideoFrameReady {
     pub id: VideoId,
     pub pts: MediaTime,
     pub frame_path: VideoFramePath,
+}
+
+/// The two monotonic instants needed by a native video service pass.
+///
+/// Pull-based adapters sample for `target_presentation_time`; push-based
+/// adapters can use `service_time` for clock and deadline bookkeeping. The
+/// private fields prevent a caller from constructing a target in the past.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VideoServiceTiming {
+    service_time: Instant,
+    target_presentation_time: Instant,
+}
+
+impl VideoServiceTiming {
+    pub fn new(service_time: Instant, target_presentation_time: Instant) -> Self {
+        Self {
+            service_time,
+            target_presentation_time: target_presentation_time.max(service_time),
+        }
+    }
+
+    pub const fn immediate(service_time: Instant) -> Self {
+        Self {
+            service_time,
+            target_presentation_time: service_time,
+        }
+    }
+
+    pub const fn service_time(self) -> Instant {
+        self.service_time
+    }
+
+    pub const fn target_presentation_time(self) -> Instant {
+        self.target_presentation_time
+    }
+
+    pub fn time_until_presentation(self) -> std::time::Duration {
+        self.target_presentation_time
+            .saturating_duration_since(self.service_time)
+    }
 }
 
 /// Work discovered by one non-blocking service pass.

@@ -1,7 +1,8 @@
 use super::{
     FrameImportPolicy, VideoCompositorImport, VideoDecodeResidency, VideoFramePath,
-    VideoPresentationPath,
+    VideoPresentationPath, VideoServiceTiming,
 };
+use std::time::{Duration, Instant};
 
 #[test]
 fn frame_path_keeps_decoder_import_and_presentation_evidence_independent() {
@@ -38,4 +39,16 @@ fn performance_default_never_silently_uploads_video_through_the_cpu() {
     assert!(policy.permits(VideoCompositorImport::BorrowedNativeSurface));
     assert!(policy.permits(VideoCompositorImport::GpuBlit));
     assert!(!policy.permits(VideoCompositorImport::CpuUpload));
+}
+
+#[test]
+fn video_service_timing_cannot_target_an_already_missed_presentation() {
+    let now = Instant::now();
+    let missed_target = now - Duration::from_millis(4);
+
+    let timing = VideoServiceTiming::new(now, missed_target);
+
+    assert_eq!(timing.service_time(), now);
+    assert_eq!(timing.target_presentation_time(), now);
+    assert_eq!(timing.time_until_presentation(), Duration::ZERO);
 }

@@ -15,7 +15,8 @@ use super::{
     FrameImportPolicy, FrameTiming, GpuGeneration, InitialPlayback, MediaTime, PackedVideoFormat,
     PlaybackEpoch, PresentationVisibility, VideoColorimetry, VideoCommand, VideoCompositorImport,
     VideoDecodeResidency, VideoEvent, VideoFrameFormat, VideoFramePath, VideoFrameReady,
-    VideoGeometry, VideoInitError, VideoPresentationPath, VideoSessionState, VideoSource,
+    VideoGeometry, VideoInitError, VideoPresentationPath, VideoServiceTiming, VideoSessionState,
+    VideoSource,
 };
 
 #[test]
@@ -117,7 +118,7 @@ impl DecoderBackend for FakeDecoder {
         Ok(())
     }
 
-    fn drain_events(&mut self) -> Vec<BackendEvent<Self::Frame>> {
+    fn service(&mut self, _timing: VideoServiceTiming) -> Vec<BackendEvent<Self::Frame>> {
         self.events.lock().unwrap().drain(..).collect()
     }
 }
@@ -237,7 +238,7 @@ impl DecoderBackend for RecoveringDecoder {
         Ok(())
     }
 
-    fn drain_events(&mut self) -> Vec<BackendEvent<Self::Frame>> {
+    fn service(&mut self, _timing: VideoServiceTiming) -> Vec<BackendEvent<Self::Frame>> {
         self.events.lock().unwrap().drain(..).collect()
     }
 
@@ -307,7 +308,7 @@ impl DecoderBackend for CloseFailDecoder {
         }
     }
 
-    fn drain_events(&mut self) -> Vec<BackendEvent<Self::Frame>> {
+    fn service(&mut self, _timing: VideoServiceTiming) -> Vec<BackendEvent<Self::Frame>> {
         self.events.lock().unwrap().drain(..).collect()
     }
 }
@@ -885,7 +886,7 @@ impl DecoderBackend for QuiescingDecoder {
         Ok(())
     }
 
-    fn drain_events(&mut self) -> Vec<BackendEvent<Self::Frame>> {
+    fn service(&mut self, _timing: VideoServiceTiming) -> Vec<BackendEvent<Self::Frame>> {
         self.events.lock().unwrap().drain(..).collect()
     }
 }
@@ -1141,7 +1142,7 @@ impl DecoderBackend for RecordingDecoder {
         Ok(())
     }
 
-    fn drain_events(&mut self) -> Vec<BackendEvent<Self::Frame>> {
+    fn service(&mut self, _timing: VideoServiceTiming) -> Vec<BackendEvent<Self::Frame>> {
         Vec::new()
     }
 }
@@ -1154,6 +1155,51 @@ impl Platform for RecordingPlatform {
     type Sampled = u64;
     type Decoder = RecordingDecoder;
     type Importer = FakeImporter;
+}
+
+struct TimingDecoder {
+    observed: Arc<Mutex<Vec<VideoServiceTiming>>>,
+}
+
+impl DecoderBackend for TimingDecoder {
+    type Frame = u64;
+
+    fn command(&mut self, _command: VideoCommand) -> Result<(), super::VideoCommandError> {
+        Ok(())
+    }
+
+    fn service(&mut self, timing: VideoServiceTiming) -> Vec<BackendEvent<Self::Frame>> {
+        self.observed.lock().unwrap().push(timing);
+        Vec::new()
+    }
+}
+
+struct TimingPlatform;
+
+impl Platform for TimingPlatform {
+    const BACKEND: super::VideoDecodeBackend = super::VideoDecodeBackend::AvFoundation;
+    type Frame = u64;
+    type Sampled = u64;
+    type Decoder = TimingDecoder;
+    type Importer = FakeImporter;
+}
+
+#[test]
+fn presentation_target_reaches_the_pull_based_decoder_boundary() {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let mut system = VideoSystemImpl::<TimingPlatform>::new(
+        TimingDecoder {
+            observed: Arc::clone(&observed),
+        },
+        FakeImporter,
+        FrameImportPolicy::RequireDirectSurface,
+    );
+    let now = Instant::now();
+    let timing = VideoServiceTiming::new(now, now + Duration::from_millis(8));
+
+    system.service_for_presentation(timing);
+
+    assert_eq!(*observed.lock().unwrap(), vec![timing]);
 }
 
 #[test]

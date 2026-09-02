@@ -20,6 +20,18 @@ use neomacs_display_protocol::font::{FontSlantKind, ResolvedFont, ResolvedFontId
 #[cfg(feature = "neo-term")]
 use std::collections::HashMap;
 
+#[cfg(feature = "video")]
+fn video_service_timing(
+    now: std::time::Instant,
+    visible_presentation_intervals: impl IntoIterator<Item = std::time::Duration>,
+) -> neomacs_video::VideoServiceTiming {
+    let lead = visible_presentation_intervals
+        .into_iter()
+        .min()
+        .unwrap_or(std::time::Duration::ZERO);
+    neomacs_video::VideoServiceTiming::new(now, now.checked_add(lead).unwrap_or(now))
+}
+
 #[cfg(feature = "neo-term")]
 #[derive(Clone, Copy)]
 struct TerminalPaintTarget {
@@ -405,26 +417,43 @@ impl RenderApp {
     #[cfg(feature = "video")]
     pub(super) fn process_video_frames(&mut self, now: std::time::Instant) {
         tracing::trace!("process_video_frames called");
-        let presented: std::collections::HashSet<_> = self
-            .frame_windows
-            .windows
-            .iter()
-            .filter(|(key, _)| {
-                let native_id = match key {
-                    super::frame_windows::FrameKey::Pending => 0,
-                    super::frame_windows::FrameKey::Adopted(id) => *id,
-                };
-                self.frame_coordinator
-                    .is_eligible(super::frame_sched::NativeWindowId(native_id))
-            })
-            .flat_map(|(_, window)| window.render.presented_video_ids())
-            .collect();
+        let mut presented = std::collections::HashSet::new();
+        let mut fastest_visible_presentation_interval = None;
+        for (key, window) in &self.frame_windows.windows {
+            let native_id = match key {
+                super::frame_windows::FrameKey::Pending => 0,
+                super::frame_windows::FrameKey::Adopted(id) => *id,
+            };
+            if !self
+                .frame_coordinator
+                .is_eligible(super::frame_sched::NativeWindowId(native_id))
+            {
+                continue;
+            }
+            let mut presents_video = false;
+            for video_id in window.render.presented_video_ids() {
+                presents_video = true;
+                presented.insert(video_id);
+            }
+            if presents_video {
+                let interval = std::time::Duration::from_secs_f64(
+                    1.0 / f64::from(Self::window_max_rate(window).get()),
+                );
+                fastest_visible_presentation_interval = Some(
+                    fastest_visible_presentation_interval
+                        .map_or(interval, |fastest| std::cmp::min(fastest, interval)),
+                );
+            }
+        }
+        let timing = video_service_timing(now, fastest_visible_presentation_interval);
         let Some(renderer) = self.renderer.as_mut() else {
             self.frame_coordinator
                 .reconcile_video_service_deadline(None);
             return;
         };
-        let service = renderer.process_pending_videos_at(now, &presented).clone();
+        let service = renderer
+            .process_pending_videos_at(timing, &presented)
+            .clone();
         self.frame_coordinator
             .reconcile_video_service_deadline(service.next_deadline);
         for ready in service.ready_frames {

@@ -16,8 +16,8 @@ use crate::{
     FrameImportPolicy, GpuGeneration, MediaTime, PlaybackAction, PlaybackEpoch, PlaybackRate,
     PresentationVisibility, VideoCommand, VideoCommandError, VideoDiagnostics, VideoEvent,
     VideoFrameFormat, VideoFramePath, VideoFrameReady, VideoImportCounts, VideoInitError,
-    VideoPresentationPath, VideoRecoveryManifest, VideoServiceResult, VideoSessionDiagnostics,
-    VideoSessionRecovery, VideoSessionState, VideoSource,
+    VideoPresentationPath, VideoRecoveryManifest, VideoServiceResult, VideoServiceTiming,
+    VideoSessionDiagnostics, VideoSessionRecovery, VideoSessionState, VideoSource,
 };
 
 /// Cross-thread wake callback invoked after a native adapter publishes new
@@ -264,7 +264,11 @@ impl VideoSystem {
     }
 
     pub fn service(&mut self, now: Instant) -> VideoServiceResult {
-        let result = self.inner.service(now);
+        self.service_for_presentation(VideoServiceTiming::immediate(now))
+    }
+
+    pub fn service_for_presentation(&mut self, timing: VideoServiceTiming) -> VideoServiceResult {
+        let result = self.inner.service_for_presentation(timing);
         self.retire_replaced_frames();
         result
     }
@@ -517,11 +521,20 @@ impl<P: Platform> VideoSystemImpl<P> {
             .and_then(|session| session.sampled.as_ref())
     }
 
+    #[cfg(test)]
     pub(crate) fn service(&mut self, now: Instant) -> VideoServiceResult {
+        self.service_for_presentation(VideoServiceTiming::immediate(now))
+    }
+
+    pub(crate) fn service_for_presentation(
+        &mut self,
+        timing: VideoServiceTiming,
+    ) -> VideoServiceResult {
+        let now = timing.service_time();
         let mut result = VideoServiceResult::default();
         let mut restorations = Vec::new();
         let mut terminal_failures = Vec::new();
-        for event in self.decoder.drain_events() {
+        for event in self.decoder.service(timing) {
             if let BackendEvent::Opened { id, .. } = &event
                 && let Some(restore) = self
                     .sessions
