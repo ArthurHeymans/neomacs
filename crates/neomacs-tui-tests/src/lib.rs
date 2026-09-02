@@ -645,22 +645,112 @@ impl Drop for TuiSession {
 
 // ── Key translation ──────────────────────────────────────────────────
 
+/// A named key whose terminal representation is independent of modifiers.
+///
+/// Keeping these names closed prevents a description such as `M-SPC` from
+/// silently degrading to the first character of `SPC` (`ESC s`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TerminalNamedKey {
+    Return,
+    Tab,
+    Escape,
+    Space,
+    Delete,
+    Backspace,
+}
+
+impl TerminalNamedKey {
+    fn parse(name: &str) -> Option<Self> {
+        match name {
+            "RET" | "Enter" => Some(Self::Return),
+            "TAB" => Some(Self::Tab),
+            "ESC" => Some(Self::Escape),
+            "SPC" => Some(Self::Space),
+            "DEL" => Some(Self::Delete),
+            "BS" => Some(Self::Backspace),
+            _ => None,
+        }
+    }
+
+    const fn terminal_byte(self) -> u8 {
+        match self {
+            Self::Return => b'\r',
+            Self::Tab => b'\t',
+            Self::Escape => 0x1b,
+            Self::Space => b' ',
+            Self::Delete => 0x7f,
+            Self::Backspace => 0x08,
+        }
+    }
+}
+
+/// The two encodings a terminal can use for a Control-modified character.
+///
+/// ASCII only assigns C0 bytes to a small, closed set of keys. Printable
+/// punctuation outside that set must use xterm's `modifyOtherKeys` protocol;
+/// applying the alphabetic control-byte formula to it silently wraps.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TerminalControlEncoding {
+    C0(u8),
+    ModifyOtherKeys(u8),
+}
+
+impl TerminalControlEncoding {
+    fn for_ascii(character: char) -> Option<Self> {
+        let character = character.to_ascii_lowercase();
+        let byte = u8::try_from(character).ok()?;
+        let encoding = match character {
+            '@' => Self::C0(0),
+            'a'..='z' => Self::C0(byte - b'a' + 1),
+            '[' => Self::C0(0x1b),
+            '\\' => Self::C0(0x1c),
+            ']' => Self::C0(0x1d),
+            '^' => Self::C0(0x1e),
+            '_' => Self::C0(0x1f),
+            ' '..='~' => Self::ModifyOtherKeys(byte),
+            _ => return None,
+        };
+        Some(encoding)
+    }
+
+    fn terminal_bytes(self, meta: bool) -> Vec<u8> {
+        match self {
+            Self::C0(byte) => {
+                if meta {
+                    vec![0x1b, byte]
+                } else {
+                    vec![byte]
+                }
+            }
+            Self::ModifyOtherKeys(byte) => {
+                // GNU lisp/term/xterm.el installs this legacy form and CSI-u.
+                // The modifier parameter is 5 for Control, 7 for Control+Meta.
+                format!("\x1b[27;{};{byte}~", if meta { 7 } else { 5 }).into_bytes()
+            }
+        }
+    }
+}
+
+fn single_character(name: &str) -> Option<char> {
+    let mut characters = name.chars();
+    let character = characters.next()?;
+    characters.next().is_none().then_some(character)
+}
+
 /// Translate an Emacs-style key name to the bytes a terminal sends.
 ///
 /// Supports: `C-x`, `M-x`, `C-M-x`, `RET`, `TAB`, `ESC`, `SPC`,
 /// `DEL`, and plain characters.
 pub fn emacs_key(key: &str) -> Vec<u8> {
+    if let Some(named) = TerminalNamedKey::parse(key) {
+        return vec![named.terminal_byte()];
+    }
+
     match key {
-        "RET" | "Enter" => return vec![b'\r'],
-        "TAB" => return vec![b'\t'],
-        "ESC" => return vec![0x1b],
-        "SPC" => return vec![b' '],
         "C-SPC" | "C-@" => return vec![0x00],
         "C-M-SPC" | "C-M-@" => return vec![0x1b, 0x00],
         "C-/" | "C-_" => return vec![0x1f],
         "C-M-/" | "C-M-_" => return vec![0x1b, 0x1f],
-        "DEL" => return vec![0x7f],
-        "BS" => return vec![0x08],
         "F10" | "f10" => return vec![0x1b, b'[', b'2', b'1', b'~'],
         "UP" | "<up>" => return vec![0x1b, b'[', b'A'],
         "DOWN" | "<down>" => return vec![0x1b, b'[', b'B'],
@@ -670,25 +760,32 @@ pub fn emacs_key(key: &str) -> Vec<u8> {
     }
 
     // C-M-x  →  ESC + Ctrl(x)
-    if let Some(ch) = key.strip_prefix("C-M-").and_then(|s| s.chars().next()) {
-        let ctrl = (ch.to_ascii_lowercase() as u8)
-            .wrapping_sub(b'a')
-            .wrapping_add(1);
-        return vec![0x1b, ctrl];
+    if let Some(encoding) = key
+        .strip_prefix("C-M-")
+        .and_then(single_character)
+        .and_then(TerminalControlEncoding::for_ascii)
+    {
+        return encoding.terminal_bytes(true);
     }
     // C-x  →  Ctrl(x)
-    if let Some(ch) = key.strip_prefix("C-").and_then(|s| s.chars().next()) {
-        if ch == '@' {
-            return vec![0x00];
-        }
-        let ctrl = (ch.to_ascii_lowercase() as u8)
-            .wrapping_sub(b'a')
-            .wrapping_add(1);
-        return vec![ctrl];
+    if let Some(encoding) = key
+        .strip_prefix("C-")
+        .and_then(single_character)
+        .and_then(TerminalControlEncoding::for_ascii)
+    {
+        return encoding.terminal_bytes(false);
     }
-    // M-x  →  ESC x
-    if let Some(ch) = key.strip_prefix("M-").and_then(|s| s.chars().next()) {
-        return vec![0x1b, ch as u8];
+    // M-x  →  ESC x. Named keys must be decoded as a complete token;
+    // taking only the first character made M-SPC indistinguishable from M-s.
+    if let Some(base) = key.strip_prefix("M-") {
+        if let Some(named) = TerminalNamedKey::parse(base) {
+            return vec![0x1b, named.terminal_byte()];
+        }
+        if base.chars().count() == 1 {
+            let mut encoded = vec![0x1b];
+            encoded.extend_from_slice(base.as_bytes());
+            return encoded;
+        }
     }
 
     // Plain character or multi-byte
@@ -808,6 +905,16 @@ mod tests {
         assert_eq!(emacs_key("C-_"), vec![0x1f]);
         assert_eq!(emacs_key("C-M-/"), vec![0x1b, 0x1f]);
         assert_eq!(emacs_key("C-M-_"), vec![0x1b, 0x1f]);
+    }
+
+    #[test]
+    fn emacs_key_maps_control_semicolon_to_modify_other_keys() {
+        assert_eq!(emacs_key("C-;"), b"\x1b[27;5;59~".to_vec());
+    }
+
+    #[test]
+    fn emacs_key_maps_meta_space_as_a_complete_named_key() {
+        assert_eq!(emacs_key("M-SPC"), vec![0x1b, b' ']);
     }
 
     #[test]
