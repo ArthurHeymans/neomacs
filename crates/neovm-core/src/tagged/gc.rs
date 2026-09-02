@@ -35,6 +35,7 @@ use crate::emacs_core::bytecode::chunk::GnuByteOffsetMapEntry;
 use crate::emacs_core::intern::SymId;
 use crate::emacs_core::value::{HashKey, HashTableWeakness};
 use crate::heap_types::LispStringStorageKind;
+use crate::tagged::symbol_marks::SymbolMarkBits;
 use malachite::integer::Integer;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::alloc::{self, Layout};
@@ -3307,7 +3308,7 @@ pub struct TaggedHeap {
     /// weak hash tables decide symbol-key survival from the symbol mark bit.
     /// Neomacs stores symbols as immediate `SymId`s, so the collector mirrors
     /// that mark bit here for weak-table semantics.
-    marked_symbols: FxHashSet<SymId>,
+    marked_symbols: SymbolMarkBits,
     /// Weak hash tables discovered during this cycle's mark. Their entries are
     /// NOT traced inline (so a weak key/value does not keep its entry alive);
     /// `mark_and_sweep_weak_tables` instead processes them at the stop-the-world
@@ -3754,7 +3755,7 @@ impl TaggedHeap {
             pace_mark_dur_us: 0,
             pace_lead_bytes: 0,
             gray_queue: Vec::new(),
-            marked_symbols: FxHashSet::default(),
+            marked_symbols: SymbolMarkBits::default(),
             weak_hash_tables: Vec::new(),
             weak_hash_tables_set: rustc_hash::FxHashSet::default(),
             permanent_weak_hash_tables: Vec::new(),
@@ -6397,7 +6398,7 @@ impl TaggedHeap {
     fn is_value_marked(&self, value: TaggedValue) -> bool {
         if let crate::tagged::value::ValueKind::Symbol(id) = value.kind() {
             return crate::emacs_core::intern::is_canonical_id(id)
-                || self.marked_symbols.contains(&id);
+                || self.marked_symbols.contains(id);
         }
         if value.is_cons() {
             let ptr = value.xcons_ptr();
@@ -8496,9 +8497,10 @@ impl TaggedHeap {
     }
 
     fn mark_symbol(&mut self, id: SymId) {
-        if crate::emacs_core::intern::is_canonical_id(id) {
-            return;
-        }
+        // GNU `mark_object` sets the symbol's mark bit and moves on.  Whether
+        // the symbol is interned is a sweep-time question (`is_value_marked`),
+        // not a mark-time one: asking `is_canonical_id` here cost an
+        // epoch-checked thread-local lookup per symbol reference visited.
         self.marked_symbols.insert(id);
     }
 
