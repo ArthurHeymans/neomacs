@@ -1,6 +1,7 @@
 use super::{
-    FrameImportPolicy, VideoCompositorImport, VideoDecodeResidency, VideoEvent, VideoFramePath,
-    VideoPresentationPath, VideoServiceRequest, VideoServiceTiming,
+    FrameImportPolicy, VideoCompositorImport, VideoDecodeBackend, VideoDecodeResidency,
+    VideoDiagnostics, VideoEvent, VideoFramePath, VideoImportCounts, VideoPresentationPath,
+    VideoServiceRequest, VideoServiceTiming, VideoSessionDiagnostics, VideoSessionState,
 };
 use neomacs_display_protocol::types::VideoId;
 use std::time::{Duration, Instant};
@@ -108,4 +109,38 @@ fn video_event_identity_is_remapped_without_rebuilding_its_payload() {
             current,
         }
     );
+}
+
+#[test]
+fn diagnostic_identity_remapping_drops_stale_native_sessions() {
+    let current_native = VideoId::new(41);
+    let stale_native = VideoId::new(42);
+    let editor = VideoId::new(7);
+    let session = |id| VideoSessionDiagnostics {
+        id,
+        backend: VideoDecodeBackend::GStreamer,
+        state: VideoSessionState::Playing,
+        frame_path: None,
+        frame_format: None,
+        colorimetry: None,
+        decoded_frames: 0,
+        replaced_frames: 0,
+        late_dropped_frames: 0,
+        imported_frames: 0,
+        backpressured_frames: 0,
+        output_reconfigurations: 0,
+        import_counts: VideoImportCounts::default(),
+    };
+    let diagnostics = VideoDiagnostics {
+        sessions: vec![session(current_native), session(stale_native)],
+        surface_pools: Vec::new(),
+        gpu_memory_bytes: 4096,
+    };
+
+    let diagnostics =
+        diagnostics.filter_map_session_ids(|id| (id == current_native).then_some(editor));
+
+    assert_eq!(diagnostics.sessions.len(), 1);
+    assert_eq!(diagnostics.sessions[0].id, editor);
+    assert_eq!(diagnostics.gpu_memory_bytes, 4096);
 }

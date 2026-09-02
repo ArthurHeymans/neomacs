@@ -264,6 +264,12 @@ impl WgpuRenderer {
         self.caches.video.close(id);
     }
 
+    /// Snapshot the native video pipeline without exposing renderer handles.
+    #[cfg(feature = "video")]
+    pub fn video_diagnostics(&self) -> Result<neomacs_video::VideoDiagnostics, String> {
+        self.caches.video.diagnostics()
+    }
+
     /// Get video dimensions
     #[cfg(feature = "video")]
     pub fn get_video_size(&self, id: u32) -> Option<(u32, u32)> {

@@ -14,7 +14,12 @@ use super::eval::{Context, VideoResolveRequest, VideoResolveSource};
 use super::value::Value;
 use neomacs_display_protocol::VideoId;
 use neomacs_video_model::{
-    InitialPlayback, LoopMode, PlaybackAction, VideoOpenRequest, VideoSource,
+    BiPlanarVideoFormat, InitialPlayback, LoopMode, PackedVideoFormat, PlaybackAction,
+    VideoChromaLocation, VideoColorPrimaries, VideoColorRange, VideoColorimetry,
+    VideoCompositorImport, VideoDecodeBackend, VideoDecodeResidency, VideoDiagnostics,
+    VideoFrameFormat, VideoFramePath, VideoImportCounts, VideoMatrixCoefficients, VideoOpenRequest,
+    VideoPresentationPath, VideoSessionDiagnostics, VideoSessionState, VideoSource,
+    VideoSurfacePoolDiagnostics, VideoSurfacePoolRole, VideoTransferCharacteristic,
 };
 use std::path::PathBuf;
 
@@ -222,4 +227,305 @@ fn destroy(eval: &mut Context, args: Vec<Value>) -> EvalResult {
         .destroy_video(id)
         .map_err(video_error)?;
     Ok(Value::T)
+}
+
+/// A GC-safe builder for Lisp diagnostic lists.
+///
+/// The Neomacs collector is precise: a `Value` held only in a Rust `Vec` is
+/// invisible to it. Root each nested plist as soon as it crosses this builder
+/// seam, and keep it rooted until the outer list has been allocated.
+struct RootedListBuilder {
+    saved_roots: usize,
+    values: Vec<Value>,
+}
+
+impl RootedListBuilder {
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            saved_roots: super::eval::save_scratch_gc_roots(),
+            values: Vec::with_capacity(capacity),
+        }
+    }
+
+    fn push(&mut self, value: Value) {
+        super::eval::push_scratch_gc_root(value);
+        self.values.push(value);
+    }
+
+    fn field(&mut self, name: &'static str, value: Value) {
+        // Root `value` before interning the key: `value` may itself be a
+        // freshly allocated nested list that otherwise exists only in Rust.
+        super::eval::push_scratch_gc_root(value);
+        let key = Value::keyword(name);
+        self.values.push(key);
+        self.values.push(value);
+    }
+
+    fn finish(mut self) -> Value {
+        Value::list(std::mem::take(&mut self.values))
+    }
+}
+
+impl Drop for RootedListBuilder {
+    fn drop(&mut self) {
+        super::eval::restore_scratch_gc_roots(self.saved_roots);
+    }
+}
+
+fn diagnostic_integer(value: impl ToString) -> Value {
+    Value::make_integer_from_str_or_zero(&value.to_string())
+}
+
+fn diagnostic_symbol(name: &'static str) -> Value {
+    Value::symbol(name)
+}
+
+fn decode_residency_to_lisp(value: VideoDecodeResidency) -> Value {
+    diagnostic_symbol(match value {
+        VideoDecodeResidency::HardwareSharedPool => "hardware-shared-pool",
+        VideoDecodeResidency::HardwareUnverified => "hardware-unverified",
+        VideoDecodeResidency::Software => "software",
+        VideoDecodeResidency::Unknown => "unknown",
+    })
+}
+
+fn compositor_import_to_lisp(value: VideoCompositorImport) -> Value {
+    diagnostic_symbol(match value {
+        VideoCompositorImport::BorrowedNativeSurface => "borrowed-native-surface",
+        VideoCompositorImport::GpuBlit => "gpu-blit",
+        VideoCompositorImport::CpuUpload => "cpu-upload",
+    })
+}
+
+fn presentation_path_to_lisp(value: VideoPresentationPath) -> Value {
+    diagnostic_symbol(match value {
+        VideoPresentationPath::WgpuComposited => "wgpu-composited",
+        VideoPresentationPath::NativeOverlay => "native-overlay",
+    })
+}
+
+fn frame_path_to_lisp(path: VideoFramePath) -> Value {
+    let mut plist = RootedListBuilder::with_capacity(6);
+    plist.field(
+        "decode-residency",
+        decode_residency_to_lisp(path.decode_residency()),
+    );
+    plist.field(
+        "compositor-import",
+        compositor_import_to_lisp(path.compositor_import()),
+    );
+    plist.field(
+        "presentation",
+        presentation_path_to_lisp(path.presentation()),
+    );
+    plist.finish()
+}
+
+fn frame_format_to_lisp(format: VideoFrameFormat) -> Value {
+    diagnostic_symbol(match format {
+        VideoFrameFormat::Packed(PackedVideoFormat::Bgra8) => "bgra8",
+        VideoFrameFormat::Packed(PackedVideoFormat::Rgba8) => "rgba8",
+        VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12) => "nv12",
+        VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::P010) => "p010",
+    })
+}
+
+fn colorimetry_to_lisp(color: VideoColorimetry) -> Value {
+    let mut plist = RootedListBuilder::with_capacity(10);
+    plist.field(
+        "primaries",
+        diagnostic_symbol(match color.primaries {
+            VideoColorPrimaries::Bt601_525 => "bt601-525",
+            VideoColorPrimaries::Bt601_625 => "bt601-625",
+            VideoColorPrimaries::Bt709 => "bt709",
+            VideoColorPrimaries::Bt2020 => "bt2020",
+        }),
+    );
+    plist.field(
+        "transfer",
+        diagnostic_symbol(match color.transfer {
+            VideoTransferCharacteristic::Srgb => "srgb",
+            VideoTransferCharacteristic::Bt709 => "bt709",
+            VideoTransferCharacteristic::Pq => "pq",
+            VideoTransferCharacteristic::Hlg => "hlg",
+        }),
+    );
+    plist.field(
+        "matrix",
+        diagnostic_symbol(match color.matrix {
+            VideoMatrixCoefficients::Identity => "identity",
+            VideoMatrixCoefficients::Bt601 => "bt601",
+            VideoMatrixCoefficients::Bt709 => "bt709",
+            VideoMatrixCoefficients::Bt2020NonConstantLuminance => "bt2020-non-constant-luminance",
+        }),
+    );
+    plist.field(
+        "range",
+        diagnostic_symbol(match color.range {
+            VideoColorRange::Limited => "limited",
+            VideoColorRange::Full => "full",
+        }),
+    );
+    plist.field(
+        "chroma-location",
+        diagnostic_symbol(match color.chroma_location {
+            VideoChromaLocation::Left => "left",
+            VideoChromaLocation::Center => "center",
+            VideoChromaLocation::TopLeft => "top-left",
+        }),
+    );
+    plist.finish()
+}
+
+fn import_counts_to_lisp(counts: VideoImportCounts) -> Value {
+    let mut plist = RootedListBuilder::with_capacity(10);
+    plist.field(
+        "borrowed-native-frames",
+        diagnostic_integer(counts.borrowed_native_frames),
+    );
+    plist.field(
+        "gpu-blit-frames",
+        diagnostic_integer(counts.gpu_blit_frames),
+    );
+    plist.field(
+        "cpu-upload-frames",
+        diagnostic_integer(counts.cpu_upload_frames),
+    );
+    plist.field(
+        "reported-gpu-blit-bytes",
+        diagnostic_integer(counts.reported_gpu_blit_bytes),
+    );
+    plist.field(
+        "cpu-upload-bytes",
+        diagnostic_integer(counts.cpu_upload_bytes),
+    );
+    plist.finish()
+}
+
+fn session_diagnostics_to_lisp(session: VideoSessionDiagnostics) -> Value {
+    let mut plist = RootedListBuilder::with_capacity(28);
+    plist.field("id", diagnostic_integer(session.id.get()));
+    plist.field(
+        "backend",
+        diagnostic_symbol(match session.backend {
+            VideoDecodeBackend::GStreamer => "gstreamer",
+            VideoDecodeBackend::AvFoundation => "avfoundation",
+            VideoDecodeBackend::MediaFoundation => "media-foundation",
+            VideoDecodeBackend::Unsupported => "unsupported",
+        }),
+    );
+    plist.field(
+        "state",
+        diagnostic_symbol(match session.state {
+            VideoSessionState::Opening => "opening",
+            VideoSessionState::Paused => "paused",
+            VideoSessionState::Playing => "playing",
+            VideoSessionState::Ended => "ended",
+            VideoSessionState::Failed => "failed",
+            VideoSessionState::Closed => "closed",
+        }),
+    );
+    plist.field(
+        "frame-path",
+        session.frame_path.map_or(Value::NIL, frame_path_to_lisp),
+    );
+    plist.field(
+        "frame-format",
+        session
+            .frame_format
+            .map_or(Value::NIL, frame_format_to_lisp),
+    );
+    plist.field(
+        "colorimetry",
+        session.colorimetry.map_or(Value::NIL, colorimetry_to_lisp),
+    );
+    plist.field("decoded-frames", diagnostic_integer(session.decoded_frames));
+    plist.field(
+        "replaced-frames",
+        diagnostic_integer(session.replaced_frames),
+    );
+    plist.field(
+        "late-dropped-frames",
+        diagnostic_integer(session.late_dropped_frames),
+    );
+    plist.field(
+        "imported-frames",
+        diagnostic_integer(session.imported_frames),
+    );
+    plist.field(
+        "backpressured-frames",
+        diagnostic_integer(session.backpressured_frames),
+    );
+    plist.field(
+        "output-reconfigurations",
+        diagnostic_integer(session.output_reconfigurations),
+    );
+    plist.field(
+        "import-counts",
+        import_counts_to_lisp(session.import_counts),
+    );
+    plist.finish()
+}
+
+fn surface_pool_diagnostics_to_lisp(pool: VideoSurfacePoolDiagnostics) -> Value {
+    let mut plist = RootedListBuilder::with_capacity(18);
+    plist.field(
+        "role",
+        diagnostic_symbol(match pool.role {
+            VideoSurfacePoolRole::DecoderOutput => "decoder-output",
+            VideoSurfacePoolRole::CompositorImport => "compositor-import",
+        }),
+    );
+    plist.field("capacity", diagnostic_integer(pool.capacity));
+    plist.field("allocated", diagnostic_integer(pool.allocated));
+    plist.field("idle", diagnostic_integer(pool.idle));
+    plist.field("in-flight", diagnostic_integer(pool.in_flight));
+    plist.field("allocations", diagnostic_integer(pool.allocations));
+    plist.field("reuses", diagnostic_integer(pool.reuses));
+    plist.field(
+        "backpressured-acquires",
+        diagnostic_integer(pool.backpressured_acquires),
+    );
+    plist.field(
+        "in-flight-high-water",
+        diagnostic_integer(pool.in_flight_high_water),
+    );
+    plist.finish()
+}
+
+fn diagnostics_to_lisp(snapshot: VideoDiagnostics, filter: Option<VideoId>) -> Value {
+    let mut plist = RootedListBuilder::with_capacity(6);
+    let mut sessions = RootedListBuilder::with_capacity(snapshot.sessions.len());
+    for session in snapshot
+        .sessions
+        .into_iter()
+        .filter(|session| filter.is_none_or(|id| session.id == id))
+    {
+        sessions.push(session_diagnostics_to_lisp(session));
+    }
+    plist.field("sessions", sessions.finish());
+
+    let mut pools = RootedListBuilder::with_capacity(snapshot.surface_pools.len());
+    for pool in snapshot.surface_pools {
+        pools.push(surface_pool_diagnostics_to_lisp(pool));
+    }
+    plist.field("surface-pools", pools.finish());
+    plist.field(
+        "gpu-memory-bytes",
+        diagnostic_integer(snapshot.gpu_memory_bytes),
+    );
+    plist.finish()
+}
+
+/// `(neomacs-video-diagnostics &optional VIDEO)`.
+///
+/// Return a coherent renderer snapshot. With VIDEO, retain only that stable
+/// Lisp session in `:sessions`; shared surface-pool and GPU-memory accounting
+/// remain global because attributing them to one session would double-count.
+fn diagnostics(eval: &mut Context, args: Vec<Value>) -> EvalResult {
+    let filter = args.first().copied().map(video_id).transpose()?;
+    let snapshot = display_host(eval, "neomacs-video-diagnostics")?
+        .video_diagnostics()
+        .map_err(video_error)?;
+    Ok(diagnostics_to_lisp(snapshot, filter))
 }

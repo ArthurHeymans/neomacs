@@ -39,4 +39,9 @@ crate::emacs_core::subr::define_subrs! {
         NativeFn::ContextVec(destroy),
         SubrArity::new(1, Some(1)),
     ),
+    SubrSpec::new(
+        "neomacs-video-diagnostics",
+        NativeFn::ContextVec(diagnostics),
+        SubrArity::new(0, Some(1)),
+    ),
 }

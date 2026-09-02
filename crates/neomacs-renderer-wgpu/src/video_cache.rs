@@ -5,9 +5,9 @@ use std::collections::HashMap;
 use neomacs_display_protocol::types::VideoId;
 use neomacs_video::{
     FrameImportPolicy, GpuGeneration, InitialPlayback, LoopMode, PlaybackAction,
-    PresentationVisibility, VideoCommand, VideoCommandError, VideoEvent, VideoOpenRequest,
-    VideoSamplingResources, VideoServiceResult, VideoSessionState, VideoSource, VideoSystem,
-    VideoWake,
+    PresentationVisibility, VideoCommand, VideoCommandError, VideoDiagnostics, VideoEvent,
+    VideoOpenRequest, VideoSamplingResources, VideoServiceResult, VideoSessionState, VideoSource,
+    VideoSystem, VideoWake,
 };
 
 use neomacs_video::VideoRecoveryManifest as PlaybackRecoveryManifest;
@@ -253,6 +253,19 @@ impl VideoSystemState {
         match self {
             Self::Ready(system) => Some(system),
             Self::Deferred(_) | Self::Unavailable(_) | Self::Taken => None,
+        }
+    }
+
+    fn diagnostics(&self) -> Result<VideoDiagnostics, String> {
+        match self {
+            Self::Ready(system) => Ok(system.diagnostics()),
+            Self::Deferred(_) => Ok(VideoDiagnostics {
+                sessions: Vec::new(),
+                surface_pools: Vec::new(),
+                gpu_memory_bytes: 0,
+            }),
+            Self::Unavailable(message) => Err(message.clone()),
+            Self::Taken => Err("native video diagnostics are temporarily unavailable".to_owned()),
         }
     }
 
@@ -929,6 +942,19 @@ impl VideoCache {
 
     pub fn last_service(&self) -> &VideoServiceResult {
         &self.last_service
+    }
+
+    /// Return native diagnostics in stable editor identity space.
+    ///
+    /// A native decoder incarnation may be replaced after parking or device
+    /// loss. Stale native sessions are therefore filtered instead of leaking
+    /// their private IDs across the renderer seam.
+    pub fn diagnostics(&self) -> Result<VideoDiagnostics, String> {
+        self.system.diagnostics().map(|diagnostics| {
+            diagnostics.filter_map_session_ids(|id| {
+                self.native_to_video.get(&NativeVideoSessionId(id)).copied()
+            })
+        })
     }
 
     pub fn drain_accounting(&mut self) -> Vec<crate::media_budget::MediaAccounting> {

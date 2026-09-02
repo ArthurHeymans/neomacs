@@ -18,7 +18,7 @@ use crate::face::{Face as RuntimeFace, FaceHeight};
 use crate::heap_types::LispString;
 use crate::window::FrameFullscreen;
 use neomacs_display_protocol::{VideoId, WebViewId};
-use neomacs_video_model::{PlaybackAction, VideoOpenRequest};
+use neomacs_video_model::{PlaybackAction, VideoDiagnostics, VideoOpenRequest};
 
 /// Evaluator-owned correlation ID for one asynchronous xwidget script call.
 ///
@@ -417,6 +417,10 @@ pub trait DisplayHost {
     /// Close a Lisp-managed video session and release its renderer resources.
     fn destroy_video(&self, _id: VideoId) -> Result<(), String> {
         Ok(())
+    }
+    /// Return one coherent renderer-owned native-video snapshot.
+    fn video_diagnostics(&self) -> Result<VideoDiagnostics, String> {
+        Err("video diagnostics are unsupported by this display host".to_owned())
     }
     fn request_webkit(
         &self,

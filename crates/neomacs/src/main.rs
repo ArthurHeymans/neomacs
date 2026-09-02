@@ -1024,6 +1024,7 @@ impl EvaluatorExit {
 
 const GUI_EVALUATOR_THREAD_STACK_SIZE: usize = 64 * 1024 * 1024;
 const CLIPBOARD_REPLY_TIMEOUT: Duration = Duration::from_secs(5);
+const VIDEO_DIAGNOSTICS_REPLY_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// FIFO cap for the declarative-surface memo: each resolved entry keeps a
 /// live GPU texture on the render thread, so the memo must not grow without
@@ -2066,6 +2067,26 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             _ => {
                 let _ = id;
                 Ok(())
+            }
+        }
+    }
+
+    fn video_diagnostics(&self) -> Result<neomacs_video_model::VideoDiagnostics, String> {
+        cfg_select! {
+            feature = "video" => {
+                let (reply, received) = crossbeam_channel::bounded(1);
+                self.send_render_command(
+                    RenderCommand::Asset(AssetCommand::Video(
+                        VideoSessionCommand::Diagnostics { reply },
+                    )),
+                    "failed to request video diagnostics",
+                )?;
+                received
+                    .recv_timeout(VIDEO_DIAGNOSTICS_REPLY_TIMEOUT)
+                    .map_err(|error| format!("video diagnostics reply failed: {error}"))?
+            }
+            _ => {
+                Err("native video support is not compiled into this Neomacs build".to_owned())
             }
         }
     }

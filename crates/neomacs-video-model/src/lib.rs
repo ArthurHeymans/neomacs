@@ -914,6 +914,26 @@ pub struct VideoDiagnostics {
     pub gpu_memory_bytes: usize,
 }
 
+impl VideoDiagnostics {
+    /// Rebind native decoder identities to the stable identity domain owned by
+    /// a caller, dropping sessions whose native incarnation is no longer
+    /// current. Pool and GPU totals remain unchanged because they describe the
+    /// shared video subsystem rather than an individual session.
+    pub fn filter_map_session_ids(
+        mut self,
+        mut map: impl FnMut(VideoId) -> Option<VideoId>,
+    ) -> Self {
+        self.sessions.retain_mut(|session| {
+            let Some(id) = map(session.id) else {
+                return false;
+            };
+            session.id = id;
+            true
+        });
+        self
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum VideoInitError {
     #[error("video playback is unsupported on this platform")]

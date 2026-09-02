@@ -225,6 +225,20 @@ impl RenderApp {
                     renderer.close_video(id);
                 }
             }
+            AssetCommand::Video(VideoSessionCommand::Diagnostics { reply }) => {
+                let result = std::cfg_select! {
+                    feature = "video" => {
+                        self.renderer
+                            .as_ref()
+                            .ok_or_else(|| "video renderer is not initialized".to_owned())
+                            .and_then(|renderer| renderer.video_diagnostics())
+                    }
+                    _ => {
+                        Err("native video support is not compiled into this Neomacs build".to_owned())
+                    }
+                };
+                let _ = reply.send(result);
+            }
             AssetCommand::SurfaceCreate {
                 id,
                 source,

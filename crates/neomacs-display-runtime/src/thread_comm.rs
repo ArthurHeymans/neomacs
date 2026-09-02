@@ -18,7 +18,7 @@ pub use neomacs_display_protocol::{
     ImageStateEvent, MenuBarItem, PopupMenuItem, TabBarItem, ToolBarImageSource, ToolBarItem,
     ToolBarItemType, VisualConfig,
 };
-use neomacs_video_model::{PlaybackAction, VideoOpenRequest};
+use neomacs_video_model::{PlaybackAction, VideoDiagnostics, VideoOpenRequest};
 use neovm_core::window::GuiFrameGeometryHints;
 
 /// Native selection owned by the display server.
@@ -381,6 +381,10 @@ pub enum VideoSessionCommand {
     },
     Close {
         id: VideoId,
+    },
+    /// Request one coherent renderer-owned path and pool snapshot.
+    Diagnostics {
+        reply: Sender<Result<VideoDiagnostics, String>>,
     },
 }
 

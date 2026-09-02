@@ -32,6 +32,7 @@
 ;;   `neomacs-video-play' - Start playback
 ;;   `neomacs-video-pause' - Pause playback
 ;;   `neomacs-video-stop' - Stop playback
+;;   `neomacs-video-diagnostics' - Inspect observed path and pool telemetry
 ;;   `neomacs-video-insert' - Insert video display at point
 
 ;;; Code:

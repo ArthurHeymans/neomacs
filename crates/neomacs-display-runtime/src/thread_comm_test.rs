@@ -1386,6 +1386,23 @@ fn render_command_video_lifecycle() {
         }
         other => panic!("expected typed video close, got {other:?}"),
     }
+
+    let (reply, received) = crossbeam_channel::bounded(1);
+    let snapshot = RenderCommand::Asset(AssetCommand::Video(VideoSessionCommand::Diagnostics {
+        reply,
+    }));
+    match snapshot {
+        RenderCommand::Asset(AssetCommand::Video(VideoSessionCommand::Diagnostics { reply })) => {
+            reply
+                .send(Err("diagnostic fixture".to_owned()))
+                .expect("diagnostic receiver remains alive");
+        }
+        other => panic!("expected typed video diagnostics request, got {other:?}"),
+    }
+    assert_eq!(
+        received.recv().expect("diagnostic reply is delivered"),
+        Err("diagnostic fixture".to_owned())
+    );
 }
 
 #[test]

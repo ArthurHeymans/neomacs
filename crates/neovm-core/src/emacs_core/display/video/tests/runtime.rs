@@ -4,7 +4,12 @@ use super::eval::{Context, DisplayHost, GuiFrameHostRequest};
 use super::value::Value;
 use super::video::{VideoDisplayReference, parse_video_display_reference};
 use neomacs_display_protocol::VideoId;
-use neomacs_video_model::{PlaybackAction, VideoOpenRequest};
+use neomacs_video_model::{
+    BiPlanarVideoFormat, PlaybackAction, VideoCompositorImport, VideoDecodeBackend,
+    VideoDecodeResidency, VideoDiagnostics, VideoFrameFormat, VideoFramePath, VideoImportCounts,
+    VideoOpenRequest, VideoPresentationPath, VideoSessionDiagnostics, VideoSessionState,
+    VideoSurfacePoolDiagnostics, VideoSurfacePoolRole,
+};
 use std::sync::{Arc, Mutex};
 
 const STUB_VIDEO_ID: VideoId = VideoId::new(42);
@@ -42,6 +47,45 @@ impl DisplayHost for RecordingVideoDisplayHost {
         self.destroys.lock().expect("video host destroys").push(id);
         Ok(())
     }
+
+    fn video_diagnostics(&self) -> Result<VideoDiagnostics, String> {
+        Ok(VideoDiagnostics {
+            sessions: vec![VideoSessionDiagnostics {
+                id: STUB_VIDEO_ID,
+                backend: VideoDecodeBackend::GStreamer,
+                state: VideoSessionState::Playing,
+                frame_path: Some(VideoFramePath::new(
+                    VideoDecodeResidency::HardwareSharedPool,
+                    VideoCompositorImport::BorrowedNativeSurface,
+                    VideoPresentationPath::WgpuComposited,
+                )),
+                frame_format: Some(VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12)),
+                colorimetry: None,
+                decoded_frames: 9,
+                replaced_frames: 2,
+                late_dropped_frames: 1,
+                imported_frames: 4,
+                backpressured_frames: 1,
+                output_reconfigurations: 2,
+                import_counts: VideoImportCounts {
+                    borrowed_native_frames: 4,
+                    ..VideoImportCounts::default()
+                },
+            }],
+            surface_pools: vec![VideoSurfacePoolDiagnostics {
+                role: VideoSurfacePoolRole::CompositorImport,
+                capacity: 64,
+                allocated: 3,
+                idle: 2,
+                in_flight: 1,
+                allocations: 5,
+                reuses: 7,
+                backpressured_acquires: 1,
+                in_flight_high_water: 3,
+            }],
+            gpu_memory_bytes: 4096,
+        })
+    }
 }
 
 fn video_context() -> (Context, RecordingVideoDisplayHost) {
@@ -68,11 +112,55 @@ fn advertised_video_session_functions_are_bound() {
                      (fboundp 'neomacs-video-pause)
                      (fboundp 'neomacs-video-stop)
                      (fboundp 'neomacs-video-set-loop)
-                     (fboundp 'neomacs-video-destroy))"#,
+                     (fboundp 'neomacs-video-destroy)
+                     (fboundp 'neomacs-video-diagnostics))"#,
         )
         .expect("video function probe should evaluate");
 
     assert!(available.is_truthy());
+}
+
+#[test]
+fn diagnostics_reports_the_observed_end_to_end_path_and_pool_pressure() {
+    crate::test_utils::init_test_tracing();
+    let (mut ctx, _) = video_context();
+    eval(
+        &mut ctx,
+        r#"(setq video-test-handle (neomacs-video-load "movie.mp4"))"#,
+    );
+
+    let rendered = eval(
+        &mut ctx,
+        r#"(prin1-to-string
+             (let* ((snapshot (neomacs-video-diagnostics video-test-handle))
+                    (session (car (plist-get snapshot :sessions)))
+                    (path (plist-get session :frame-path))
+                    (pool (car (plist-get snapshot :surface-pools))))
+               (list (plist-get session :id)
+                     (plist-get session :backend)
+                     (plist-get session :state)
+                     (plist-get path :decode-residency)
+                     (plist-get path :compositor-import)
+                     (plist-get path :presentation)
+                     (plist-get session :frame-format)
+                     (plist-get session :decoded-frames)
+                     (plist-get session :imported-frames)
+                     (plist-get snapshot :gpu-memory-bytes)
+                     (plist-get pool :role)
+                     (plist-get pool :capacity)
+                     (plist-get pool :allocated)
+                     (plist-get pool :idle)
+                     (plist-get pool :in-flight))))"#,
+    );
+    assert_eq!(
+        rendered
+            .as_lisp_string()
+            .and_then(|value| value.as_utf8_str()),
+        Some(
+            "(42 gstreamer playing hardware-shared-pool borrowed-native-surface \
+             wgpu-composited nv12 9 4 4096 compositor-import 64 3 2 1)"
+        )
+    );
 }
 
 #[test]
