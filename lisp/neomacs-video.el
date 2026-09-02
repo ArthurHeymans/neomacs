@@ -22,13 +22,13 @@
 
 ;;; Commentary:
 
-;; This package provides video playback support for Neomacs using GStreamer.
+;; This package provides cross-platform native video playback for Neomacs.
 ;; 
 ;; Basic usage:
 ;;   (neomacs-video-play-file "/path/to/video.mp4")
 ;;
 ;; API functions:
-;;   `neomacs-video-load' - Load a video from URI, returns video ID
+;;   `neomacs-video-load' - Open a video and return an opaque session handle
 ;;   `neomacs-video-play' - Start playback
 ;;   `neomacs-video-pause' - Pause playback
 ;;   `neomacs-video-stop' - Stop playback
@@ -36,50 +36,54 @@
 
 ;;; Code:
 
-(defvar neomacs-video--players (make-hash-table :test 'eq)
-  "Hash table mapping video IDs to their metadata.")
+(defgroup neomacs-video nil
+  "Native video playback in Neomacs."
+  :group 'multimedia)
 
-(defvar neomacs-video--next-handle 1
-  "Next Lisp-side video handle.")
+(defcustom neomacs-video-mode-size '(960 . 540)
+  "Display size used when visiting a video file.
+The value is a cons cell (WIDTH . HEIGHT) in pixels."
+  :type '(cons (integer :tag "Width") (integer :tag "Height"))
+  :group 'neomacs-video)
 
-(defun neomacs-video--source-keyword-and-value (file)
-  "Return the display source keyword/value pair for FILE."
-  (if (string-match-p "^[a-z]+://" file)
-      (list :uri file)
-    (list :file (expand-file-name file))))
+(defvar neomacs-video--players
+  (make-hash-table :test 'eq :weakness 'key)
+  "Weak table mapping live video handles to their UI metadata.
+The table must not own sessions: display properties and callers do.  When the
+last such reference disappears, GC closes the corresponding native session.")
 
-(defun neomacs-video--allocate-handle ()
-  "Allocate a Lisp-side video handle."
-  (prog1 neomacs-video--next-handle
-    (setq neomacs-video--next-handle (1+ neomacs-video--next-handle))))
+(defvar-local neomacs-video--buffer-handle nil
+  "Video handle displayed by the current `neomacs-video-mode' buffer.")
 
+(defun neomacs-video--normalize-source (file)
+  "Return FILE as a URI or an absolute local filename."
+  (if (string-match-p "\\`[[:alpha:]][[:alnum:]+.-]*://" file)
+      file
+    (expand-file-name file)))
+
+;;;###autoload
 (defun neomacs-video-play-file (file)
   "Play video FILE in a new player.
-Returns the video ID on success, nil on failure."
+Return the opaque video-session handle."
   (interactive "fVideo file: ")
-  (let* ((uri (if (string-match-p "^[a-z]+://" file)
-                  file
-                (concat "file://" (expand-file-name file))))
-         (video-id (neomacs-video-insert uri nil nil nil t)))
-    (when video-id
-      (puthash video-id `(:uri ,uri :state playing) neomacs-video--players)
-      (neomacs-video-play video-id)
-      (message "Playing video %d: %s" video-id file))
-    video-id))
+  (let ((handle (neomacs-video-insert file nil nil nil t)))
+    (message "Playing video %S: %s" handle file)
+    handle))
 
-(defun neomacs-video-toggle-pause (video-id)
-  "Toggle pause state of VIDEO-ID."
-  (interactive "nVideo ID: ")
-  (let* ((info (gethash video-id neomacs-video--players))
+(defun neomacs-video-toggle-pause (handle)
+  "Toggle the pause state of video-session HANDLE."
+  (interactive (list (or (neomacs-video-at-point)
+                         (user-error "No video at point"))))
+  (let* ((info (gethash handle neomacs-video--players))
          (state (plist-get info :state)))
     (if (eq state 'playing)
         (progn
-          (neomacs-video-pause video-id)
-          (puthash video-id (plist-put info :state 'paused) neomacs-video--players)
-          (message "Video %d paused" video-id))
-      (neomacs-video-play video-id)
-      (puthash video-id (plist-put info :state 'playing) neomacs-video--players)
-      (message "Video %d playing" video-id))))
+          (neomacs-video-pause handle)
+          (puthash handle (plist-put info :state 'paused) neomacs-video--players)
+          (message "Video %S paused" handle))
+      (neomacs-video-play handle)
+      (puthash handle (plist-put info :state 'playing) neomacs-video--players)
+      (message "Video %S playing" handle))))
 
 (defun neomacs-video-stop-all ()
   "Stop all playing videos."
@@ -96,23 +100,101 @@ WIDTH and HEIGHT default to 640x360 if not specified.
 LOOP-COUNT controls looping: nil or 0 means no loop, -1 means infinite,
 positive N means loop N additional times.
 AUTOPLAY if non-nil starts playback automatically.
-Returns the video ID on success.  Point is left after the video."
+Return the opaque video-session handle.  Point is left after the video."
   (interactive "fVideo file: ")
-  (let* ((source (neomacs-video--source-keyword-and-value file))
-         (video-id (neomacs-video--allocate-handle))
+  (let* ((source (neomacs-video--normalize-source file))
+         (handle (neomacs-video-load source (or loop-count 0) autoplay))
          (w (or width 640))
          (h (or height 360)))
-    (puthash video-id `(:source ,source :state stopped :width ,w :height ,h)
+    (puthash handle `(:source ,source
+                      :state ,(if autoplay 'playing 'paused)
+                      :width ,w :height ,h)
              neomacs-video--players)
     (let ((start (point)))
       (insert " ")
       (put-text-property start (point) 'display
-                         `(video ,@source :width ,w :height ,h
-                                 ,@(when loop-count (list :loop-count loop-count))
-                                 ,@(when autoplay (list :autoplay t))))
-      (put-text-property start (point) 'neomacs-video-id video-id))
-    (message "Inserted video %d" video-id)
-    video-id))
+                         `(video :id ,handle :width ,w :height ,h))
+      (put-text-property start (point) 'neomacs-video-id handle))
+    (message "Inserted video %S" handle)
+    handle))
+
+(defun neomacs-video--release-buffer-session ()
+  "Immediately release the video session owned by the current buffer."
+  (when (and neomacs-video--buffer-handle
+             (neomacs-video-p neomacs-video--buffer-handle))
+    ;; Native destruction is idempotent.  GC remains the fallback if this hook
+    ;; is bypassed (for example by an abnormal unwind).
+    (ignore-errors (neomacs-video-destroy neomacs-video--buffer-handle))
+    (remhash neomacs-video--buffer-handle neomacs-video--players)
+    (setq neomacs-video--buffer-handle nil))
+  (let ((inhibit-read-only t)
+        (buffer-undo-list t)
+        (modified (buffer-modified-p)))
+    (remove-list-of-text-properties
+     (point-min) (point-max)
+     '(display neomacs-video-id read-only front-sticky rear-nonsticky))
+    (set-buffer-modified-p modified)))
+
+(defun neomacs-video--display-visited-file ()
+  "Display `buffer-file-name' as one native video session."
+  (unless (and buffer-file-name (file-readable-p buffer-file-name))
+    (error "Video buffer has no readable local file"))
+  (when (zerop (buffer-size))
+    (error "Cannot display an empty video file"))
+  (neomacs-video--release-buffer-session)
+  (let* ((width (car neomacs-video-mode-size))
+         (height (cdr neomacs-video-mode-size))
+         (handle (neomacs-video-load (expand-file-name buffer-file-name) 0 t))
+         (inhibit-read-only t)
+         (buffer-undo-list t)
+         (modified (buffer-modified-p)))
+    (setq neomacs-video--buffer-handle handle)
+    (puthash handle `(:source ,buffer-file-name :state playing
+                      :width ,width :height ,height)
+             neomacs-video--players)
+    ;; Follow GNU image-mode's file-buffer model: retain the original bytes so
+    ;; saving/copying the buffer remains faithful, and visually replace the
+    ;; complete byte range with one display object.
+    (add-text-properties
+     (point-min) (point-max)
+     `(display (video :id ,handle :width ,width :height ,height)
+               neomacs-video-id ,handle
+               read-only t
+               front-sticky (read-only)
+               rear-nonsticky (display neomacs-video-id)))
+    (set-buffer-modified-p modified)
+    ;; Match image-mode: binary file buffers must not gain a newline or pass
+    ;; through text encoding when saved under a different name.
+    (when (coding-system-equal (coding-system-base buffer-file-coding-system)
+                               'no-conversion)
+      (setq-local find-file-literally t))))
+
+(defvar-keymap neomacs-video-mode-map
+  :doc "Keymap for `neomacs-video-mode'."
+  "SPC" #'neomacs-video-toggle-pause
+  "p" #'neomacs-video-play-at-point
+  "s" #'neomacs-video-stop-at-point)
+
+(put 'neomacs-video-mode 'mode-class 'special)
+
+;;;###autoload
+(define-derived-mode neomacs-video-mode special-mode "Video"
+  "Major mode for visiting video files with native playback.
+Dired's normal file-opening commands enter this mode through
+`auto-mode-alist'.  The original file bytes remain in the buffer underneath a
+single video display property, following the lifecycle used by `image-mode'."
+  (setq cursor-type nil
+        truncate-lines t)
+  (neomacs-video--display-visited-file)
+  (add-hook 'before-revert-hook #'neomacs-video--release-buffer-session nil t)
+  (add-hook 'after-revert-hook #'neomacs-video--display-visited-file nil t)
+  (add-hook 'change-major-mode-hook #'neomacs-video--release-buffer-session nil t)
+  (add-hook 'kill-buffer-hook #'neomacs-video--release-buffer-session nil t))
+
+;;;###autoload
+(add-to-list 'auto-mode-alist
+             '("\\.\\(?:avi\\|m4v\\|mkv\\|mov\\|mp4\\|mpeg\\|mpg\\|ogv\\|webm\\)\\'"
+               . neomacs-video-mode))
 
 (defun neomacs-video-insert-loop (file &optional width height)
   "Insert video FILE with infinite looping and autoplay.
@@ -121,117 +203,109 @@ WIDTH and HEIGHT default to 640x360 if not specified."
   (neomacs-video-insert file width height -1 t))
 
 (defun neomacs-video-at-point ()
-  "Get the video ID at point, or nil if none."
-  (get-text-property (point) 'neomacs-video-id))
+  "Return the video-session handle at point, or nil if none."
+  (or (get-text-property (point) 'neomacs-video-id)
+      neomacs-video--buffer-handle))
 
 (defun neomacs-video-play-at-point ()
   "Start playing the video at point."
   (interactive)
-  (let ((video-id (neomacs-video-at-point)))
-    (if video-id
+  (let ((handle (neomacs-video-at-point)))
+    (if handle
         (progn
-          (neomacs-video-play video-id)
-          (message "Playing video %d" video-id))
+          (neomacs-video-play handle)
+          (message "Playing video %S" handle))
       (message "No video at point"))))
 
 (defun neomacs-video-pause-at-point ()
   "Pause the video at point."
   (interactive)
-  (let ((video-id (neomacs-video-at-point)))
-    (if video-id
+  (let ((handle (neomacs-video-at-point)))
+    (if handle
         (progn
-          (neomacs-video-pause video-id)
-          (message "Paused video %d" video-id))
+          (neomacs-video-pause handle)
+          (message "Paused video %S" handle))
+      (message "No video at point"))))
+
+(defun neomacs-video-stop-at-point ()
+  "Stop the video at point."
+  (interactive)
+  (let ((handle (neomacs-video-at-point)))
+    (if handle
+        (progn
+          (neomacs-video-stop handle)
+          (let ((info (gethash handle neomacs-video--players)))
+            (when info
+              (puthash handle (plist-put info :state 'stopped)
+                       neomacs-video--players)))
+          (message "Stopped video %S" handle))
       (message "No video at point"))))
 
 (defun neomacs-video-show-floating (file &optional x y width height)
   "Show video FILE as a floating layer at X, Y with WIDTH, HEIGHT.
 Defaults: X=50, Y=50, WIDTH=640, HEIGHT=360.
-Returns the video ID on success."
+Return the opaque video-session handle."
   (interactive "fVideo file: ")
-  (let* ((uri (if (string-match-p "^[a-z]+://" file)
-                  file
-                (concat "file://" (expand-file-name file))))
-         (video-id (neomacs-video-load uri))
-         (vx (or x 50))
-         (vy (or y 50))
-         (vw (or width 640))
-         (vh (or height 360)))
-    (when video-id
-      (puthash video-id `(:uri ,uri :state playing :x ,vx :y ,vy :width ,vw :height ,vh)
-               neomacs-video--players)
-      (neomacs-video-floating video-id vx vy vw vh)
-      (neomacs-video-play video-id)
-      (message "Playing video %d as floating at (%d,%d) %dx%d" video-id vx vy vw vh))
-    video-id))
+  (ignore file x y width height)
+  (user-error "Floating video presentation is not implemented; use `neomacs-video-insert'"))
 
-(defun neomacs-video-hide-floating (video-id)
-  "Hide the floating video layer for VIDEO-ID and stop playback."
-  (interactive "nVideo ID: ")
-  (neomacs-video-floating-clear video-id)
-  (neomacs-video-stop video-id)
-  (remhash video-id neomacs-video--players)
-  (message "Video %d floating layer hidden" video-id))
+(defun neomacs-video-hide-floating (handle)
+  "Hide the floating video layer for HANDLE and stop playback."
+  (interactive (list (or (neomacs-video-at-point)
+                         (user-error "No video at point"))))
+  (neomacs-video-stop handle)
+  (remhash handle neomacs-video--players)
+  (message "Video %S stopped" handle))
 
 ;;; Loop Control
 
-(defvar neomacs-video--loop-timers (make-hash-table :test 'eq)
-  "Hash table mapping video IDs to their loop update timers.")
-
-(defun neomacs-video-loop (video-id &optional loop-count)
-  "Enable loop playback for VIDEO-ID.
+(defun neomacs-video-loop (handle &optional loop-count)
+  "Enable loop playback for video-session HANDLE.
 LOOP-COUNT can be:
   nil or t - infinite loop
   0 - no looping (disable loop)
   positive integer - loop that many times
 
 Returns t on success."
-  (interactive "nVideo ID: \nP")
+  (interactive (list (or (neomacs-video-at-point)
+                         (user-error "No video at point"))
+                     current-prefix-arg))
   (let ((count (cond
                 ((null loop-count) -1)  ; Default: infinite
                 ((eq loop-count t) -1)  ; t means infinite
                 ((integerp loop-count) loop-count)
                 (t -1))))               ; Fallback: infinite
-    (when (neomacs-video-set-loop video-id count)
+    (when (neomacs-video-set-loop handle count)
       ;; Update metadata
-      (let ((info (gethash video-id neomacs-video--players)))
+      (let ((info (gethash handle neomacs-video--players)))
         (when info
-          (puthash video-id (plist-put info :loop count) neomacs-video--players)))
-      ;; Set up or cancel the update timer for EOS detection
-      (let ((existing-timer (gethash video-id neomacs-video--loop-timers)))
-        (when existing-timer
-          (cancel-timer existing-timer)
-          (remhash video-id neomacs-video--loop-timers)))
+          (puthash handle (plist-put info :loop count) neomacs-video--players)))
       (if (= count 0)
-          (message "Video %d loop: disabled" video-id)
-        ;; Start timer to call update periodically for EOS detection
-        (let ((timer (run-with-timer 0.2 0.2 
-                       (lambda ()
-                         (when (gethash video-id neomacs-video--players)
-                           (neomacs-video-update video-id))))))
-          (puthash video-id timer neomacs-video--loop-timers))
-        (message "Video %d loop: %s" video-id 
+          (message "Video %S loop: disabled" handle)
+        (message "Video %S loop: %s" handle
                  (if (< count 0) "infinite" (format "%d times" count))))
       t)))
 
-(defun neomacs-video-loop-infinite (video-id)
-  "Enable infinite loop for VIDEO-ID."
-  (interactive "nVideo ID: ")
-  (neomacs-video-loop video-id t))
+(defun neomacs-video-loop-infinite (handle)
+  "Enable infinite looping for video-session HANDLE."
+  (interactive (list (or (neomacs-video-at-point)
+                         (user-error "No video at point"))))
+  (neomacs-video-loop handle t))
 
-(defun neomacs-video-loop-disable (video-id)
-  "Disable loop for VIDEO-ID."
-  (interactive "nVideo ID: ")
-  (neomacs-video-loop video-id 0))
+(defun neomacs-video-loop-disable (handle)
+  "Disable looping for video-session HANDLE."
+  (interactive (list (or (neomacs-video-at-point)
+                         (user-error "No video at point"))))
+  (neomacs-video-loop handle 0))
 
 (defun neomacs-video-show-floating-loop (file &optional x y width height)
   "Show video FILE as floating and loop infinitely.
 Like `neomacs-video-show-floating' but with automatic looping."
   (interactive "fVideo file: ")
-  (let ((video-id (neomacs-video-show-floating file x y width height)))
-    (when video-id
-      (neomacs-video-loop video-id t))
-    video-id))
+  (let ((handle (neomacs-video-show-floating file x y width height)))
+    (when handle
+      (neomacs-video-loop handle t))
+    handle))
 
 (provide 'neomacs-video)
 ;;; neomacs-video.el ends here
