@@ -140,7 +140,7 @@ impl<F, S> Session<F, S> {
             }
             PlaybackAction::Stop => {
                 self.epoch = self.epoch.next();
-                let _ = self.mailbox.take();
+                self.mailbox.clear();
                 self.desired_playing = false;
                 self.last_pts = MediaTime::ZERO;
                 if let Some(clock) = &mut self.clock {
@@ -150,7 +150,7 @@ impl<F, S> Session<F, S> {
             }
             PlaybackAction::Seek(position) => {
                 self.epoch = self.epoch.next();
-                let _ = self.mailbox.take();
+                self.mailbox.clear();
                 if let Some(clock) = &mut self.clock {
                     clock.seek(position, now);
                 }
@@ -453,7 +453,7 @@ impl<P: Platform> VideoSystemImpl<P> {
             // A hidden session must not pin either an imported pool slot or a
             // decoded native lease waiting in the mailbox. Exposure resumes
             // decode and supplies a fresh frame.
-            let _ = session.mailbox.take();
+            session.mailbox.clear();
             if let Some(sampled) = session.sampled.take() {
                 self.retired.push(sampled);
             }
@@ -819,7 +819,7 @@ impl<P: Platform> VideoSystemImpl<P> {
         session.desired_playing = false;
         session.presentation = PresentationVisibility::Hidden;
         session.pending_restore = None;
-        let _ = session.mailbox.take();
+        session.mailbox.clear();
         if let Some(sampled) = session.sampled.take() {
             self.retired.push(sampled);
         }
@@ -930,7 +930,7 @@ impl<P: Platform> VideoSystemImpl<P> {
                 }
                 if frame.timing.epoch > session.epoch {
                     session.epoch = frame.timing.epoch;
-                    let _ = session.mailbox.take();
+                    session.mailbox.clear();
                     if let Some(clock) = &mut session.clock {
                         clock.seek(frame.timing.pts, now);
                     }
@@ -972,7 +972,7 @@ impl<P: Platform> VideoSystemImpl<P> {
                 let session = self.sessions.get_mut(&id)?;
                 session.loop_mode = remaining;
                 session.epoch = session.epoch.next();
-                let _ = session.mailbox.take();
+                session.mailbox.clear();
                 if let Some(clock) = &mut session.clock {
                     clock.seek(MediaTime::ZERO, now);
                 }

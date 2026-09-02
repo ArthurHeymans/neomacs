@@ -38,6 +38,15 @@ impl<F> PresentationFrameQueue<F> {
         self.next = self.newest_successor.take();
         Some(next)
     }
+
+    /// Drop every queued frame at a discontinuity or lifecycle boundary.
+    ///
+    /// This is intentionally distinct from [`Self::take`], which consumes one
+    /// presentation candidate and promotes its successor.
+    pub(crate) fn clear(&mut self) {
+        self.next = None;
+        self.newest_successor = None;
+    }
 }
 
 impl<F> PresentationFrameQueue<DecodedFrame<F>> {

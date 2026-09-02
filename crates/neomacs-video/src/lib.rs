@@ -52,3 +52,7 @@ mod sampling_test;
 #[cfg(test)]
 #[path = "color_test.rs"]
 mod color_test;
+
+#[cfg(test)]
+#[path = "mailbox_test.rs"]
+mod mailbox_test;

@@ -878,6 +878,10 @@ fn close_cleans_local_state_even_if_the_native_decoder_already_failed() {
 }
 
 fn fake_frame(id: VideoId, lease: u64, pts: u64) -> BackendEvent<u64> {
+    fake_frame_with_duration(id, lease, pts, 1)
+}
+
+fn fake_frame_with_duration(id: VideoId, lease: u64, pts: u64, duration: u64) -> BackendEvent<u64> {
     BackendEvent::Frame {
         id,
         frame: DecodedFrame {
@@ -885,7 +889,7 @@ fn fake_frame(id: VideoId, lease: u64, pts: u64) -> BackendEvent<u64> {
             decode_residency: VideoDecodeResidency::Unknown,
             timing: FrameTiming {
                 pts: MediaTime::from_nanos(pts),
-                duration: MediaTime::from_nanos(1),
+                duration: MediaTime::from_nanos(duration),
                 epoch: PlaybackEpoch::INITIAL,
             },
             geometry: VideoGeometry::packed(1, 1),
@@ -1105,6 +1109,47 @@ fn seek_epoch_rejects_a_decoder_frame_from_before_the_discontinuity() {
     let result = system.service(now + Duration::from_nanos(2_000));
 
     assert!(result.ready_frames.is_empty());
+    assert_eq!(system.sampled(id), None);
+}
+
+#[test]
+fn seek_discards_both_queued_frames_from_the_previous_epoch() {
+    let id = VideoId::new(94);
+    let (mut system, control) = fake_system();
+    system
+        .command(VideoCommand::Open {
+            id,
+            source: VideoSource::File("movie.mp4".into()),
+            initial_playback: InitialPlayback::Playing,
+            loop_mode: LoopMode::Off,
+        })
+        .unwrap();
+    let now = Instant::now();
+    control.publish(BackendEvent::Opened {
+        id,
+        width: 1,
+        height: 1,
+        initial_state: VideoSessionState::Playing,
+    });
+    system.service(now);
+    control.publish(fake_frame_with_duration(id, 10, 100, 10_000));
+    control.publish(fake_frame_with_duration(id, 20, 200, 10_000));
+
+    let queued = system.service(now);
+    assert!(queued.ready_frames.is_empty());
+    system
+        .command_at(
+            VideoCommand::Playback {
+                id,
+                action: super::PlaybackAction::Seek(MediaTime::ZERO),
+            },
+            now,
+        )
+        .unwrap();
+
+    let after_seek = system.service(now + Duration::from_nanos(300));
+
+    assert!(after_seek.ready_frames.is_empty());
     assert_eq!(system.sampled(id), None);
 }
 
