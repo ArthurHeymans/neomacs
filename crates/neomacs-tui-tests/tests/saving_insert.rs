@@ -1374,6 +1374,7 @@ fn mx_view_hello_file() {
     // "hello" demo). Content includes "Hello, world!" (English row) plus many
     // other-language greetings.
     let (mut gnu, mut neo) = boot_pair("");
+    use_backend_only_vc_mode_line(&mut gnu, &mut neo);
 
     send_both(&mut gnu, &mut neo, "M-x");
     read_both(&mut gnu, &mut neo, Duration::from_secs(3));
@@ -1436,6 +1437,7 @@ fn mx_view_hello_file() {
 #[test]
 fn mx_view_hello_file_page_scroll_repaints_cleanly() {
     let (mut gnu, mut neo) = boot_pair("");
+    use_backend_only_vc_mode_line(&mut gnu, &mut neo);
 
     send_both(&mut gnu, &mut neo, "M-x");
     read_both(&mut gnu, &mut neo, Duration::from_secs(3));
@@ -1492,6 +1494,7 @@ fn mx_view_hello_file_page_scroll_repaints_cleanly() {
 #[test]
 fn mx_view_hello_file_strict_match() {
     let (mut gnu, mut neo) = boot_pair("");
+    use_backend_only_vc_mode_line(&mut gnu, &mut neo);
 
     send_both(&mut gnu, &mut neo, "M-x");
     read_both(&mut gnu, &mut neo, Duration::from_secs(3));
@@ -1505,7 +1508,7 @@ fn mx_view_hello_file_strict_match() {
     // *scratch*, so a plain substring check can sample too early.
     let wants_hello_vc_mode_line = |rows: &[String]| {
         rows.iter()
-            .any(|r| r.contains("HELLO") && r.contains("Git-"))
+            .any(|r| r.contains("HELLO") && r.contains(" Git "))
     };
     gnu.read_until(Duration::from_secs(8), wants_hello_vc_mode_line);
     neo.read_until(Duration::from_secs(8), wants_hello_vc_mode_line);
@@ -1513,12 +1516,12 @@ fn mx_view_hello_file_strict_match() {
     let gl = gnu.text_grid();
     let nl = neo.text_grid();
     assert!(
-        gl.iter().any(|row| row.contains("Git-")),
-        "GNU HELLO mode line should show VC status"
+        gl.iter().any(|row| row.contains(" Git ")),
+        "GNU HELLO mode line should show the Git backend"
     );
     assert!(
-        nl.iter().any(|row| row.contains("Git-")),
-        "NEO HELLO mode line should show VC status"
+        nl.iter().any(|row| row.contains(" Git ")),
+        "NEO HELLO mode line should show the Git backend"
     );
     assert_pair_exact_display("mx_view_hello_file_strict_match", &gnu, &neo);
 }

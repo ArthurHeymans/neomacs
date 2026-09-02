@@ -206,6 +206,17 @@ pub fn eval_expression_one(session: &mut TuiSession, expression: &str) {
     session.send_key("RET");
 }
 
+/// Keep VC enabled while removing repository-specific state from paired
+/// source-tree fixtures.
+///
+/// GNU `vc-mode-line` displays only the backend name when
+/// `vc-display-status` is nil.  This preserves coverage that the visited file
+/// is recognized as Git-controlled, while making the exact display independent
+/// of the two executables' necessarily different checkout branch/revision.
+pub fn use_backend_only_vc_mode_line(gnu: &mut TuiSession, neo: &mut TuiSession) {
+    eval_expression(gnu, neo, "(setq vc-display-status nil)");
+}
+
 pub fn open_home_file(
     gnu: &mut TuiSession,
     neo: &mut TuiSession,
