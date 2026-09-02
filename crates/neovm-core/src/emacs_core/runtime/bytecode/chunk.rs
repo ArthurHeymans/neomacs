@@ -122,6 +122,59 @@ fn arglist_value_from_params(params: &LambdaParams) -> Value {
     Value::list(elements)
 }
 
+/// One piece of evidence used for structural byte-code equality and hashing.
+///
+/// This is deliberately named a "part", not a GNU closure "slot": Neomacs
+/// keeps some execution state (notably the captured environment) beside the
+/// GNU-compatible slot projection.  Consumers must compare that state too,
+/// because it affects execution even when it has no independently observable
+/// GNU slot.
+#[derive(Clone, Copy, Debug)]
+pub enum ByteCodeStructuralPart<'a> {
+    /// GNU's observable pseudovector size.  Keeping shape in the sequence
+    /// makes it impossible for a consumer to forget the `ASIZE` comparison.
+    ObservableSlotCount(usize),
+    /// A Lisp value compared, hashed and keyed as any other.
+    Value(Value),
+    /// The GNU bytecode string, byte-exact.
+    Bytes(&'a [u8]),
+    /// Decoded instructions of a function with no retained GNU bytes.
+    Ops(&'a [Op]),
+    /// The constants vector, element-wise like a Lisp vector.
+    Values(&'a [Value]),
+    /// A docstring, under GNU string equality: characters, bytes, contents.
+    Text(&'a LispString),
+    /// An optional structural part that is not present.
+    Absent,
+}
+
+/// Allocation-free iterator over a byte-code function's structural evidence.
+pub(crate) struct ByteCodeStructuralParts<'a> {
+    fixed: std::array::IntoIter<ByteCodeStructuralPart<'a>, 8>,
+    extras: std::slice::Iter<'a, Value>,
+}
+
+impl<'a> Iterator for ByteCodeStructuralParts<'a> {
+    type Item = ByteCodeStructuralPart<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.fixed.next().or_else(|| {
+            self.extras
+                .next()
+                .copied()
+                .map(ByteCodeStructuralPart::Value)
+        })
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.fixed.len() + self.extras.len();
+        (remaining, Some(remaining))
+    }
+}
+
+impl ExactSizeIterator for ByteCodeStructuralParts<'_> {}
+impl std::iter::FusedIterator for ByteCodeStructuralParts<'_> {}
+
 /// A compiled bytecode function.
 #[derive(Debug)]
 pub struct ByteCodeFunction {
@@ -614,6 +667,61 @@ impl ByteCodeFunction {
                 .map(|decoded| decoded.byte_offset_map.capacity())
                 .unwrap_or(0),
             None => self.gnu_byte_offset_map.as_ref().map_or(0, Vec::capacity),
+        }
+    }
+
+    /// The structural evidence for this function: GNU's observable shape and
+    /// closure slots, in GNU's order, plus the environment this port keeps
+    /// beside the constants vector.
+    ///
+    /// GNU's `internal_equal_1` compares a `PVEC_CLOSURE` element-wise
+    /// (src/fns.c:2984-2998 in emacs-31.1) and `sxhash_obj` hashes it through
+    /// `sxhash_vector` (:5525-5536); `equal` hash tables therefore key on the
+    /// same elements.  Neomacs stores those elements in typed fields, so
+    /// `equal`, its fallible twin, `sxhash-equal` and the `equal`-table key
+    /// all read THIS sequence rather than each re-deriving the schema:
+    ///
+    /// | part | GNU representation  | Neomacs structural evidence             |
+    /// |------|---------------------|------------------------------------------|
+    /// | 0    | pseudovector ASIZE  | `ObservableSlotCount`                    |
+    /// | 1    | arglist             | `Value`                                  |
+    /// | 2    | bytecode string     | `Bytes`, or `Ops` when none is retained  |
+    /// | 3    | constants vector    | `Values`                                 |
+    /// | 4    | inside constants    | captured `env`: `Value`, else `Absent`   |
+    /// | 5    | max stack depth     | `Value` (a fixnum)                       |
+    /// | 6    | docstring / form    | `Text`, `Value`, or `Absent`             |
+    /// | 7    | interactive spec    | `Value` or `Absent`                      |
+    /// | 8..  | `&rest ELEMENTS`    | `Value` each                             |
+    ///
+    /// `Absent` is distinct from a present `nil`: `Op::MakeClosure` stores
+    /// `Some(lexenv)`, and a closure over no variables has a present, `nil`
+    /// environment that `(aref FN 2)` reports as `nil` rather than as the
+    /// constants vector.  A function with no retained GNU bytes compares its
+    /// decoded instructions instead, so two functions with different code are
+    /// never equal even though GNU's slot 1 would be `nil` for both.
+    pub(crate) fn structural_parts(&self) -> ByteCodeStructuralParts<'_> {
+        use ByteCodeStructuralPart as Part;
+
+        ByteCodeStructuralParts {
+            fixed: [
+                Part::ObservableSlotCount(self.observable_closure_slot_count()),
+                Part::Value(self.arglist),
+                match &self.gnu_bytecode_bytes {
+                    Some(bytes) => Part::Bytes(bytes.as_slice()),
+                    None => Part::Ops(&self.ops),
+                },
+                Part::Values(self.constants.as_slice()),
+                self.env.map_or(Part::Absent, Part::Value),
+                Part::Value(Value::fixnum(i64::from(self.max_stack))),
+                match (self.doc_form, &self.docstring) {
+                    (Some(form), _) => Part::Value(form),
+                    (None, Some(doc)) => Part::Text(doc),
+                    (None, None) => Part::Absent,
+                },
+                self.interactive.map_or(Part::Absent, Part::Value),
+            ]
+            .into_iter(),
+            extras: self.extra_slots.iter(),
         }
     }
 
