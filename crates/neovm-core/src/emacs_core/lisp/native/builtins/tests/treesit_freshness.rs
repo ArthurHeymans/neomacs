@@ -27,16 +27,16 @@ pub(super) fn eval_with_json_parser(text: &str) -> (super::super::eval::Context,
 fn unchanged_root_lookups_do_not_reextract_buffer_source() {
     crate::test_utils::init_test_tracing();
     let (mut eval, parser) = eval_with_json_parser(r##"{"key": 1}"##);
-    reset_treesit_buffer_source_extraction_count();
+    reset_treesit_reparse_count();
 
     builtin_treesit_parser_root_node(&mut eval, vec![parser]).expect("initial parse");
-    assert_eq!(treesit_buffer_source_extraction_count(), 1);
+    assert_eq!(treesit_reparse_count(), 1);
 
     for _ in 0..16 {
         builtin_treesit_parser_root_node(&mut eval, vec![parser]).expect("cached root");
     }
     assert_eq!(
-        treesit_buffer_source_extraction_count(),
+        treesit_reparse_count(),
         1,
         "a clean parser should take GNU's O(1) fast path"
     );
@@ -54,21 +54,17 @@ fn unchanged_root_lookups_do_not_reextract_buffer_source() {
     builtin_treesit_parser_root_node(&mut eval, vec![parser])
         .expect("root after a property-only change");
     assert_eq!(
-        treesit_buffer_source_extraction_count(),
+        treesit_reparse_count(),
         1,
         "text properties are not parser input"
     );
     let parser_id = runtime::parser_id(parser).expect("parser id");
-    assert!(
-        eval.treesit
-            .parser(parser_id)
-            .expect("parser entry")
-            .last_source
-            .as_ref()
-            .expect("parsed source")
-            .intervals()
-            .is_empty(),
-        "the cached parser input must not retain buffer text properties"
+    assert_eq!(
+        parser_input_for_test(&eval, parser_id)
+            .expect("parsed input")
+            .as_bytes(),
+        br##"{"key": 1}"##,
+        "the parser input is the buffer text, never its properties"
     );
 }
 
@@ -76,7 +72,7 @@ fn unchanged_root_lookups_do_not_reextract_buffer_source() {
 fn tracked_character_edit_reparses_once_and_updates_source() {
     crate::test_utils::init_test_tracing();
     let (mut eval, parser) = eval_with_json_parser(r##"{"key": 1}"##);
-    reset_treesit_buffer_source_extraction_count();
+    reset_treesit_reparse_count();
     builtin_treesit_parser_root_node(&mut eval, vec![parser]).expect("initial parse");
 
     crate::emacs_core::buffer::builtin_goto_char(&mut eval, vec![Value::fixnum(10)])
@@ -96,16 +92,14 @@ fn tracked_character_edit_reparses_once_and_updates_source() {
     builtin_treesit_parser_root_node(&mut eval, vec![parser]).expect("incremental reparse");
     let entry = eval.treesit.parser(parser_id).expect("parser entry");
     assert_eq!(
-        entry
-            .last_source
-            .as_ref()
-            .expect("parsed source")
+        parser_input_for_test(&eval, parser_id)
+            .expect("parsed input")
             .as_bytes(),
         br##"{"key": 10}"##
     );
     assert!(matches!(entry.freshness, ParserFreshness::Clean(_)));
     assert_eq!(
-        treesit_buffer_source_extraction_count(),
+        treesit_reparse_count(),
         2,
         "one character edit should materialize one new parser input"
     );
@@ -134,12 +128,8 @@ fn inhibited_modification_hooks_do_not_hide_character_edits_from_parser() {
     ));
     builtin_treesit_parser_root_node(&mut eval, vec![parser]).expect("incremental reparse");
     assert_eq!(
-        eval.treesit
-            .parser(parser_id)
-            .expect("parser entry")
-            .last_source
-            .as_ref()
-            .expect("parsed source")
+        parser_input_for_test(&eval, parser_id)
+            .expect("parsed input")
             .as_bytes(),
         br##"{"key": 10}"##
     );
@@ -149,7 +139,7 @@ fn inhibited_modification_hooks_do_not_hide_character_edits_from_parser() {
 fn untracked_character_edit_forces_safe_full_reparse() {
     crate::test_utils::init_test_tracing();
     let (mut eval, parser) = eval_with_json_parser(r##"{"key": 1}"##);
-    reset_treesit_buffer_source_extraction_count();
+    reset_treesit_reparse_count();
     builtin_treesit_parser_root_node(&mut eval, vec![parser]).expect("initial parse");
 
     // Direct Buffer mutation deliberately bypasses the semantic edit pipeline.
@@ -169,15 +159,13 @@ fn untracked_character_edit_forces_safe_full_reparse() {
     let parser_id = runtime::parser_id(parser).expect("parser id");
     let entry = eval.treesit.parser(parser_id).expect("parser entry");
     assert_eq!(
-        entry
-            .last_source
-            .as_ref()
-            .expect("parsed source")
+        parser_input_for_test(&eval, parser_id)
+            .expect("parsed input")
             .as_bytes(),
         br##"{"key": 1}0"##
     );
     assert!(matches!(entry.freshness, ParserFreshness::Clean(_)));
-    assert_eq!(treesit_buffer_source_extraction_count(), 2);
+    assert_eq!(treesit_reparse_count(), 2);
 }
 
 /// A new restriction is a reason to reparse and to move the tree's window
@@ -209,10 +197,8 @@ fn a_new_restriction_moves_the_parser_window_and_forces_a_reparse() {
         .expect("reparse of the narrowed input");
     let entry = eval.treesit.parser(parser_id).expect("parser entry");
     assert_eq!(
-        entry
-            .last_source
-            .as_ref()
-            .expect("parsed source")
+        parser_input_for_test(&eval, parser_id)
+            .expect("parsed input")
             .as_bytes(),
         br##"{"key": 1}"##
     );
@@ -259,12 +245,8 @@ hidden"##,
         Value::string("(document (object (pair key: (string (string_content)) value: (number))))")
     );
     assert_eq!(
-        eval.treesit
-            .parser(parser_id)
-            .expect("parser entry")
-            .last_source
-            .as_ref()
-            .expect("parsed source")
+        parser_input_for_test(&eval, parser_id)
+            .expect("parsed input")
             .as_bytes(),
         br##"{"key": 10}"##
     );
@@ -309,10 +291,8 @@ fn an_edit_inside_a_temporary_narrowing_keeps_the_tree_and_its_changed_region_sm
 
     let entry = eval.treesit.parser(parser_id).expect("parser entry");
     assert_eq!(
-        entry
-            .last_source
-            .as_ref()
-            .expect("parsed source")
+        parser_input_for_test(&eval, parser_id)
+            .expect("parsed input")
             .as_bytes(),
         br##"{"a": 1, "b": 20, "c": 3}"##
     );

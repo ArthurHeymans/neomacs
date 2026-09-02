@@ -9,7 +9,6 @@ use tree_sitter::{InputEdit, Language, Parser, Point, Query, QueryError, Tree, f
 use super::intern::SymId;
 use super::value::Value;
 use crate::buffer::{Buffer, BufferId, EmacsBytePos, EmacsByteRange};
-use crate::heap_types::LispString;
 
 pub(crate) const TREESIT_PARSER_TAG: &str = "treesit-parser";
 pub(crate) const TREESIT_NODE_TAG: &str = "treesit-node";
@@ -289,7 +288,6 @@ pub(crate) struct ParserEntry {
     pub(crate) tag: Value,
     pub(crate) parser: Parser,
     pub(crate) tree: Option<ParsedTree>,
-    pub(crate) last_source: Option<LispString>,
     pub(crate) freshness: ParserFreshness,
     pub(crate) generation: u64,
     pub(crate) need_to_gc_buffer: bool,
@@ -749,7 +747,6 @@ impl TreeSitterManager {
                 tag,
                 parser,
                 tree: None,
-                last_source: None,
                 freshness: ParserFreshness::Unparsed,
                 generation: 0,
                 need_to_gc_buffer: false,

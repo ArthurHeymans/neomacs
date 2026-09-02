@@ -10,7 +10,6 @@ use tree_sitter_language::LanguageFn;
 
 use crate::buffer::{Buffer, BufferId, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use crate::emacs_core::buffer::expect_buffer_id;
-use crate::emacs_core::emacs_char::byte_to_char_pos;
 use crate::emacs_core::intern::{NIL_SYM_ID, SymId, intern, resolve_sym};
 use crate::emacs_core::treesit::{
     self as runtime, NODE_SLOT_PARSER, PARSER_SLOT_EMBED_LEVEL, PARSER_SLOT_LANGUAGE,
@@ -236,25 +235,62 @@ fn parser_deleted_error(value: Value) -> Flow {
 
 #[cfg(test)]
 thread_local! {
-    static TREESIT_BUFFER_SOURCE_EXTRACTIONS: std::cell::Cell<usize> = const {
-        std::cell::Cell::new(0)
+    static TREESIT_REPARSES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn reset_treesit_reparse_count() {
+    TREESIT_REPARSES.set(0);
+}
+
+#[cfg(test)]
+fn treesit_reparse_count() -> usize {
+    TREESIT_REPARSES.get()
+}
+
+/// GNU `treesit_read_buffer`: hand tree-sitter the buffer bytes in place.
+///
+/// `byte_offset` is relative to the parser's visible window (GNU
+/// `visible_beg`).  The slice runs to the gap or to the window end,
+/// whichever comes first, and is empty at or past the window end, which is
+/// how tree-sitter learns the input is over.  Tree-sitter consumes each
+/// slice before asking for the next, and nothing mutates the buffer while a
+/// parse runs, so the slice only has to outlive one callback.
+///
+/// This replaced copying the whole accessible region into a fresh string
+/// for every reparse (and retaining it for position lookups): on the
+/// rust-lsp-typing workload that was a 250 KB copy per keystroke.
+fn treesit_read_buffer(
+    buffer: &crate::buffer::Buffer,
+    visible: EmacsByteRange,
+    byte_offset: usize,
+) -> &[u8] {
+    let Some(pos) = visible.start().get().checked_add(byte_offset) else {
+        return &[];
     };
+    let end = visible.end().get();
+    if pos >= end {
+        return &[];
+    }
+    let Some((window_start, base, len)) = buffer.contiguous_window_at(pos) else {
+        return &[];
+    };
+    let offset = pos - window_start;
+    let available = (len - offset).min(end - pos);
+    // SAFETY: `contiguous_window_at` returned a physical window containing
+    // logical byte `pos`; `available` stays inside that window and inside
+    // the visible range, and the buffer is not mutated during the parse.
+    unsafe { std::slice::from_raw_parts(base.add(offset), available) }
 }
 
+/// The bytes a parser's tree was built from, re-read from the buffer over
+/// the tree's visible window.
 #[cfg(test)]
-fn reset_treesit_buffer_source_extraction_count() {
-    TREESIT_BUFFER_SOURCE_EXTRACTIONS.set(0);
-}
-
-#[cfg(test)]
-fn treesit_buffer_source_extraction_count() -> usize {
-    TREESIT_BUFFER_SOURCE_EXTRACTIONS.get()
-}
-
-fn treesit_buffer_source(buffer: &crate::buffer::Buffer) -> LispString {
-    #[cfg(test)]
-    TREESIT_BUFFER_SOURCE_EXTRACTIONS.with(|count| count.set(count.get() + 1));
-    buffer.buffer_substring_lisp_string_no_properties_range(buffer.accessible_emacs_byte_range())
+fn parser_input_for_test(eval: &super::eval::Context, parser_id: u64) -> Option<LispString> {
+    let parser = eval.treesit.parser(parser_id)?;
+    let tree = parser.tree.as_ref()?;
+    let buffer = eval.buffers.get(parser.orig_buffer_id)?;
+    Some(buffer.buffer_substring_lisp_string_no_properties_range(tree.visible()))
 }
 
 fn node_outdated_error(value: Value) -> Flow {
@@ -648,16 +684,30 @@ fn validate_treesit_included_range(
     }
 }
 
-fn byte_offset_to_lisp_pos(buf: &Buffer, source: &LispString, byte_offset: usize) -> Value {
-    let char_offset = byte_to_char_pos(source.as_bytes(), byte_offset) as i64;
-    Value::fixnum(buf.accessible_char_region().start_lisp().as_i64() + char_offset)
+/// GNU `treesit_node_start` / `treesit_node_end`: a tree byte offset is
+/// relative to the parser's visible window, and the character position is
+/// read off the live buffer (`buf_bytepos_to_charpos (buffer, byte +
+/// visible_beg)`), never off a retained copy of the parsed text.  A stale
+/// offset past the current end of text clamps there, as GNU's does.
+fn byte_offset_to_lisp_pos(buf: &Buffer, visible_start: EmacsBytePos, byte_offset: usize) -> Value {
+    let byte_pos = visible_start.get().saturating_add(byte_offset);
+    Value::fixnum(
+        buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(byte_pos))
+            .to_lisp()
+            .as_i64(),
+    )
+}
+
+/// The visible-window start a parser's tree offsets are relative to.
+fn parser_visible_start(parser: &runtime::ParserEntry) -> Option<EmacsBytePos> {
+    parser.tree.as_ref().map(|tree| tree.visible().start())
 }
 
 struct ParserReparseRequest {
     parser_value: Value,
+    orig_buffer_id: BufferId,
     current_revision: ParserInputRevision,
     kind: ParserReparseKind,
-    source: LispString,
     /// Buffer byte window the new tree will cover -- GNU's `visible_beg` /
     /// `visible_end` after `treesit_sync_visible_region`.
     visible: EmacsByteRange,
@@ -719,23 +769,20 @@ fn parser_reparse_request(
     let Some(reparse_kind) = reparse_kind else {
         return Ok(None);
     };
-    let (source, visible) = {
+    let visible = {
         let buffer = eval.buffers.get(orig_buffer_id).ok_or_else(|| {
             signal(
                 "error",
                 vec![Value::string("Parser buffer has been killed")],
             )
         })?;
-        (
-            treesit_buffer_source(buffer),
-            buffer.accessible_emacs_byte_range(),
-        )
+        buffer.accessible_emacs_byte_range()
     };
     Ok(Some(ParserReparseRequest {
         parser_value,
+        orig_buffer_id,
         current_revision,
         kind: reparse_kind,
-        source,
         visible,
     }))
 }
@@ -750,6 +797,12 @@ fn ensure_parser_reparsed(
     };
 
     let changed_ranges = {
+        let buffer = eval.buffers.get(request.orig_buffer_id).ok_or_else(|| {
+            signal(
+                "error",
+                vec![Value::string("Parser buffer has been killed")],
+            )
+        })?;
         let parser = eval
             .treesit
             .parser_mut(parser_id)
@@ -761,11 +814,18 @@ fn ensure_parser_reparsed(
             ParserReparseKind::Incremental => parser.tree.as_ref().map(|tree| tree.tree().clone()),
             ParserReparseKind::Full => None,
         };
+        #[cfg(test)]
+        TREESIT_REPARSES.with(|count| count.set(count.get() + 1));
         // Issue #131: feed the parser the exact Emacs bytes so byte offsets
-        // match the buffer and real PUA glyphs / eight-bit bytes survive.
+        // match the buffer and real PUA glyphs / eight-bit bytes survive --
+        // read in place, gap-aware, as GNU's `treesit_read_buffer` does.
+        let visible = request.visible;
+        let mut read_buffer = |byte_offset: usize, _position: Point| {
+            treesit_read_buffer(buffer, visible, byte_offset)
+        };
         let tree = parser
             .parser
-            .parse(request.source.as_bytes(), old_tree.as_ref())
+            .parse_with_options(&mut read_buffer, old_tree.as_ref(), None)
             .ok_or_else(|| treesit_parse_error(request.parser_value))?;
         let changed_ranges = match changed_range_collection {
             ChangedRangeCollection::Ignore => Vec::new(),
@@ -777,18 +837,14 @@ fn ensure_parser_reparsed(
                             runtime::SourceByteRange::new(range.start_byte, range.end_byte)
                         })
                         .collect::<Vec<_>>()
-                } else if request.source.as_bytes().is_empty() {
+                } else if visible.is_empty() {
                     Vec::new()
                 } else {
-                    vec![runtime::SourceByteRange::new(
-                        0,
-                        request.source.as_bytes().len(),
-                    )]
+                    vec![runtime::SourceByteRange::new(0, visible.len().get())]
                 }
             }
         };
         parser.tree = Some(runtime::ParsedTree::new(tree, request.visible));
-        parser.last_source = Some(request.source);
         parser.freshness = ParserFreshness::Clean(request.current_revision);
         parser.generation = parser.generation.saturating_add(1);
         if changed_range_collection == ChangedRangeCollection::Collect {
@@ -913,46 +969,40 @@ fn expand_query_value(caller: &str, query: Value) -> Result<String, Flow> {
     Err(query_type_error(caller, query))
 }
 
+/// Line and column (1-based; the column counts bytes) of `byte_offset`
+/// within the accessible region, advanced from `hint` when it lies at or
+/// before the target -- GNU `treesit_linecol_of_pos`.  Only the bytes
+/// between the hint and the target are read from the buffer.
 fn byte_offset_to_linecol(
-    source: &LispString,
+    buffer: &Buffer,
     byte_offset: usize,
     hint: runtime::LineColCache,
 ) -> runtime::LineColCache {
-    let bytes = source.as_bytes();
-    let target = byte_offset.min(bytes.len());
-    let (mut line, mut col, mut idx) =
-        if hint.bytepos <= target && hint.bytepos <= bytes.len() && hint.line > 0 && hint.col > 0 {
-            (hint.line, hint.col, hint.bytepos)
-        } else {
-            (1, 1, 0)
-        };
-
-    while idx < target {
-        if bytes[idx] == b'\n' {
+    let accessible = buffer.accessible_emacs_byte_range();
+    let target = byte_offset.min(accessible.len().get());
+    let (mut line, mut col, from) = if hint.bytepos <= target && hint.line > 0 && hint.col > 0 {
+        (hint.line, hint.col, hint.bytepos)
+    } else {
+        (1, 1, 0)
+    };
+    let base = accessible.start().get();
+    let span = buffer.buffer_substring_bytes_range(EmacsByteRange::new(
+        EmacsBytePos::new(base + from),
+        EmacsBytePos::new(base + target),
+    ));
+    for byte in span {
+        if byte == b'\n' {
             line += 1;
             col = 1;
         } else {
             col += 1;
         }
-        idx += 1;
     }
 
     runtime::LineColCache {
         line,
         col,
         bytepos: target,
-    }
-}
-
-fn byte_offset_to_point(
-    source: &LispString,
-    byte_offset: usize,
-    hint: runtime::LineColCache,
-) -> Point {
-    let linecol = byte_offset_to_linecol(source, byte_offset, hint);
-    Point {
-        row: linecol.line.saturating_sub(1) as usize,
-        column: linecol.col.saturating_sub(1) as usize,
     }
 }
 
@@ -991,17 +1041,15 @@ fn changed_ranges_to_lisp(
             vec![Value::string("Parser buffer has been killed")],
         )
     })?;
-    let source = parser
-        .last_source
-        .as_ref()
-        .ok_or_else(|| treesit_parse_error(parser.value))?;
+    let visible_start =
+        parser_visible_start(parser).ok_or_else(|| treesit_parse_error(parser.value))?;
     Ok(Value::list(
         changed_ranges
             .iter()
             .map(|range| {
                 Value::cons(
-                    byte_offset_to_lisp_pos(buf, source, range.start()),
-                    byte_offset_to_lisp_pos(buf, source, range.end()),
+                    byte_offset_to_lisp_pos(buf, visible_start, range.start()),
+                    byte_offset_to_lisp_pos(buf, visible_start, range.end()),
                 )
             })
             .collect(),
@@ -1781,12 +1829,9 @@ pub(crate) fn builtin_treesit_node_end(
         .buffers
         .get(parser.orig_buffer_id)
         .ok_or_else(|| node_buffer_killed_error(args[0]))?;
-    let source = parser
-        .last_source
-        .as_ref()
-        .ok_or_else(|| node_outdated_error(args[0]))?;
+    let visible_start = parser_visible_start(parser).ok_or_else(|| node_outdated_error(args[0]))?;
     let node = unsafe { tree_sitter::Node::from_raw(handle.raw) };
-    Ok(byte_offset_to_lisp_pos(buf, source, node.end_byte()))
+    Ok(byte_offset_to_lisp_pos(buf, visible_start, node.end_byte()))
 }
 
 pub(crate) fn builtin_treesit_node_eq(
@@ -1980,12 +2025,13 @@ pub(crate) fn builtin_treesit_node_start(
         .buffers
         .get(parser.orig_buffer_id)
         .ok_or_else(|| node_buffer_killed_error(args[0]))?;
-    let source = parser
-        .last_source
-        .as_ref()
-        .ok_or_else(|| node_outdated_error(args[0]))?;
+    let visible_start = parser_visible_start(parser).ok_or_else(|| node_outdated_error(args[0]))?;
     let node = unsafe { tree_sitter::Node::from_raw(handle.raw) };
-    Ok(byte_offset_to_lisp_pos(buf, source, node.start_byte()))
+    Ok(byte_offset_to_lisp_pos(
+        buf,
+        visible_start,
+        node.start_byte(),
+    ))
 }
 
 pub(crate) fn builtin_treesit_node_string(
@@ -2264,19 +2310,6 @@ pub(crate) fn builtin_treesit_parser_set_included_ranges(
         return Ok(Value::NIL);
     }
 
-    let source = {
-        let parser = eval
-            .treesit
-            .parser(parser_id)
-            .ok_or_else(|| parser_deleted_error(args[0]))?;
-        let buffer = eval.buffers.get(parser.orig_buffer_id).ok_or_else(|| {
-            signal(
-                "error",
-                vec![Value::string("Parser buffer has been killed")],
-            )
-        })?;
-        treesit_buffer_source(buffer)
-    };
     let buffer = {
         let parser = eval
             .treesit
@@ -2300,29 +2333,20 @@ pub(crate) fn builtin_treesit_parser_set_included_ranges(
                 vec![Value::symbol("listp"), args[1]],
             )
         })?;
-        let mut hint = runtime::LineColCache {
-            line: 1,
-            col: 1,
-            bytepos: 0,
-        };
         let mut ranges = Vec::new();
         for value in range_values {
             let (start_pos, end_pos) =
                 validate_treesit_included_range(buffer, value, args[1], &mut last_point)?;
             let start = lisp_pos_to_relative_byte(buffer, start_pos);
             let end = lisp_pos_to_relative_byte(buffer, end_pos);
-            let start_point = byte_offset_to_point(&source, start, hint);
-            let next_hint = byte_offset_to_linecol(&source, end, hint);
-            let end_point = Point {
-                row: next_hint.line.saturating_sub(1) as usize,
-                column: next_hint.col.saturating_sub(1) as usize,
-            };
-            hint = next_hint;
+            // GNU `treesit_make_ts_ranges`: "We don't care about points, put
+            // in dummy values."  Computing real ones meant copying the whole
+            // buffer and scanning it for line breaks on every call.
             ranges.push(TSRange {
                 start_byte: start,
                 end_byte: end,
-                start_point,
-                end_point,
+                start_point: Point { row: 0, column: 0 },
+                end_point: Point { row: 0, column: 0 },
             });
         }
         ranges
@@ -2440,7 +2464,7 @@ fn query_predicate_capture(
 }
 
 fn query_predicate_capture_text(
-    source: &LispString,
+    source: &QueryPredicateSource<'_>,
     query_match: &QueryMatchNodes,
     capture_index: u32,
     capture_names: &[String],
@@ -2452,18 +2476,53 @@ fn query_predicate_capture_text(
         .ok_or_else(|| treesit_query_error("Captured node falls outside the parser source"))
 }
 
+/// The text a predicate compares: the parser's buffer plus the visible-window
+/// start its tree offsets are relative to, read on demand (GNU
+/// `treesit_predicate_capture_text` builds the string from the buffer too).
+struct QueryPredicateSource<'a> {
+    buffer: &'a Buffer,
+    visible_start: EmacsBytePos,
+}
+
+impl QueryPredicateSource<'_> {
+    fn slice(&self, start: usize, end: usize) -> Option<LispString> {
+        let start = self.visible_start.get().checked_add(start)?;
+        let end = self.visible_start.get().checked_add(end)?;
+        if start > end || end > self.buffer.full_emacs_byte_range().end().get() {
+            return None;
+        }
+        Some(
+            self.buffer
+                .buffer_substring_lisp_string_no_properties_range(EmacsByteRange::new(
+                    EmacsBytePos::new(start),
+                    EmacsBytePos::new(end),
+                )),
+        )
+    }
+}
+
 fn query_predicate_parser_source(
     eval: &super::eval::Context,
     parser_id: u64,
-) -> Result<&LispString, Flow> {
-    eval.treesit
+) -> Result<QueryPredicateSource<'_>, Flow> {
+    let parser = eval
+        .treesit
         .parser(parser_id)
-        .and_then(|parser| parser.last_source.as_ref())
-        .ok_or_else(|| treesit_query_error("Missing tree-sitter parser source"))
+        .ok_or_else(|| treesit_query_error("Missing tree-sitter parser source"))?;
+    let visible_start = parser_visible_start(parser)
+        .ok_or_else(|| treesit_query_error("Missing tree-sitter parser source"))?;
+    let buffer = eval
+        .buffers
+        .get(parser.orig_buffer_id)
+        .ok_or_else(|| treesit_query_error("Missing tree-sitter parser source"))?;
+    Ok(QueryPredicateSource {
+        buffer,
+        visible_start,
+    })
 }
 
 fn query_predicate_arg_text(
-    source: &LispString,
+    source: &QueryPredicateSource<'_>,
     query_match: &QueryMatchNodes,
     capture_names: &[String],
     arg: &runtime::QueryPredicateArg,
@@ -2493,8 +2552,8 @@ fn query_predicate_equal(
         ));
     }
     let source = query_predicate_parser_source(eval, parser_id)?;
-    let left = query_predicate_arg_text(source, query_match, capture_names, &args[0])?;
-    let right = query_predicate_arg_text(source, query_match, capture_names, &args[1])?;
+    let left = query_predicate_arg_text(&source, query_match, capture_names, &args[0])?;
+    let right = query_predicate_arg_text(&source, query_match, capture_names, &args[1])?;
     Ok(left.schars() == right.schars()
         && left.sbytes() == right.sbytes()
         && left.as_bytes() == right.as_bytes())
@@ -2724,7 +2783,7 @@ pub(crate) fn builtin_treesit_query_capture(
             .treesit
             .parser(input.parser_id)
             .ok_or_else(|| parser_deleted_error(input.parser_value))?;
-        if parser.last_source.is_none() {
+        if parser.tree.is_none() {
             return Err(treesit_parse_error(input.parser_value));
         }
         let query = eval
@@ -3148,7 +3207,6 @@ pub(crate) fn builtin_treesit_linecol_at(
         .buffers
         .get(buffer_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let source = treesit_buffer_source(buffer);
     let byte_offset = lisp_pos_to_relative_byte(buffer, pos);
     let hint = eval
         .treesit
@@ -3158,7 +3216,7 @@ pub(crate) fn builtin_treesit_linecol_at(
             col: 1,
             bytepos: 0,
         });
-    let linecol = byte_offset_to_linecol(&source, byte_offset, hint);
+    let linecol = byte_offset_to_linecol(buffer, byte_offset, hint);
     Ok(Value::cons(
         Value::fixnum(linecol.line),
         Value::fixnum(linecol.col),
@@ -3204,8 +3262,11 @@ pub(crate) fn builtin_treesit_linecol_cache(
         .buffers
         .get(buffer_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let source = treesit_buffer_source(buffer);
-    let pos = byte_offset_to_lisp_pos(buffer, &source, cache.bytepos);
+    let pos = byte_offset_to_lisp_pos(
+        buffer,
+        buffer.accessible_emacs_byte_range().start(),
+        cache.bytepos,
+    );
     Ok(Value::list(vec![
         Value::keyword(":line"),
         Value::fixnum(cache.line),
@@ -3263,11 +3324,13 @@ mod tests {
             .map(|capture| {
                 let node_value = capture.cons_cdr();
                 let node = ensure_current_node(eval, "test", node_value).expect("current node");
-                let parser = eval.treesit.parser(node.parser_id).expect("node parser");
-                let source = parser.last_source.as_ref().expect("parsed source");
+                let source =
+                    query_predicate_parser_source(eval, node.parser_id).expect("parser source");
                 let raw = unsafe { tree_sitter::Node::from_raw(node.raw) };
-                String::from_utf8_lossy(&source.as_bytes()[raw.start_byte()..raw.end_byte()])
-                    .into_owned()
+                let text = source
+                    .slice(raw.start_byte(), raw.end_byte())
+                    .expect("captured node text");
+                String::from_utf8_lossy(text.as_bytes()).into_owned()
             })
             .collect()
     }
