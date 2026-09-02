@@ -55,10 +55,21 @@ order should be:
 4. Make CPU decode/upload an explicit compatibility policy, never a silent
    consequence of requesting the fast path.
 
-This makes genuine no-pixel-copy playback achievable on both platforms, but
-only as a runtime-negotiated result. Codec support, OS version, GPU/driver,
-resource format, adapter identity, and synchronization support are all part of
-the result; `target_os` alone cannot establish it.
+This makes genuine no-pixel-copy playback achievable on macOS and Windows as
+well as the existing Linux path, but only as a runtime-negotiated result. Codec
+support, OS version, GPU/driver, resource format, adapter identity, and
+synchronization support are all part of the result; `target_os` alone cannot
+establish it.
+
+Linux now has a hardware acceptance gate for the already-implemented direct
+path. On 2026-09-02, a normal release build decoded a 3840x2160 60 fps H.264
+file through GStreamer on an AMD Radeon RX 7900 XTX (RADV), negotiated NV12
+DMA-BUF with an explicit DRM modifier, borrowed two native surfaces into
+Vulkan, and presented them through wgpu. The diagnostic snapshot reported zero
+GPU blits, zero CPU uploads, and a compositor-import pool high-water mark of
+two. Decoder residency remained `Unknown`: the observed DMA-BUF boundary proves
+direct compositor import, but GStreamer's broad player API did not provide the
+independent evidence required to claim the decoder's allocation provenance.
 
 In this document, "direct" means that Neomacs observes the decoder output
 resource itself being sampled by the compositor without an intervening pixel
@@ -387,6 +398,7 @@ The preferred tier order is:
 
 | Platform | Tier 1 | Tier 2 | Tier 3 | Tier 4 |
 | --- | --- | --- | --- | --- |
+| Linux | GStreamer DMA-BUF output imported through Vulkan DRM modifiers | GPU-native conversion/blit | CPU upload | Unsupported |
 | macOS | Verified VideoToolbox shared-pool surface when strict mode justifies the extra playback machinery | AVPlayer output with direct Core Video-to-Metal import and unknown upstream provenance | GPU conversion/blit | CPU upload |
 | Windows | D3D12-aware Media Foundation output on Windows 11 | Decoder-owned D3D11 texture through D3D11On12 | Media Engine `TransferVideoFrame` GPU blit | CPU upload |
 
@@ -478,21 +490,40 @@ on every frame.
 
 ## Recommended implementation order
 
-Steps 1 and 3 are implemented on `main`: the model carries independent path
-evidence, and each AVPlayer output is sampled for that video's earliest typed
-target-presentation time across its eligible windows. A fast window therefore
-cannot move an unrelated video's sampling deadline. Step 2 is correct at the
-queue-completion boundary, but its native objects are still retained by a
-parallel affine lease rather than coupled to the HAL texture drop callback.
-The remaining steps are optional negotiated tiers that require representative
-hardware measurement; they should not replace the broad player backends
-speculatively.
+Steps 1-3 are implemented on `main`: the model carries independent path
+evidence; imported native objects move into an affine retirement token retained
+until `wgpu::Queue::on_submitted_work_done`; and each AVPlayer output is sampled
+for that video's earliest typed target-presentation time across its eligible
+windows. A fast window therefore cannot move an unrelated video's sampling
+deadline. The queue-completion design is shared across platforms, while native
+objects remain private to each importer. A HAL texture drop callback may later
+deepen the macOS implementation, but correctness no longer depends on retaining
+resources for an assumed number of rendered frames.
+
+Linux additionally has a strict release acceptance probe. Building and
+refreshing the matching dump, then running the probe with a caller-supplied
+video, exercises the real decoder, scheduler, native importer, render queue,
+and diagnostics together:
+
+```sh
+cargo build -p neomacs --features video --release
+cargo xtask fresh-build --release --features video --skip-build
+scripts/probe-linux-native-video.sh /path/to/video.mp4
+```
+
+The probe rejects GPU blits, CPU uploads, non-wgpu presentation, session
+failure, missing diagnostics, and timeouts. It writes logs and the explicit
+result channel below `target/neomacs-video-probe/`, so no binary fixture is
+tracked. The remaining steps are optional negotiated tiers that require
+representative hardware measurement; they should not replace the broad player
+backends speculatively.
 
 1. Split decoder provenance, compositor import, and presentation path in the
    shared model; keep the existing public `VideoId` session API stable.
-2. Bind every native lease to actual GPU completion. On macOS, capture retained
-   Core Video/Metal objects in the HAL drop callback. On Windows, carry the
-   Media Foundation/D3D fence handoff in the lease.
+2. Bind every native lease to actual GPU completion with an affine retirement
+   token. A future macOS refinement may capture retained Core Video/Metal
+   objects in the HAL drop callback; Windows must additionally carry the Media
+   Foundation/D3D fence handoff in the lease.
 3. Drive macOS AVPlayer frame selection from the compositor's display deadline
    and keep its currently direct plane import.
 4. Add the decoder-owned D3D11 Source Reader path and recover once to the
@@ -563,3 +594,24 @@ frame. Hardware decode state remains `Unknown` where the broad native player
 API does not report it. CPU/GPU duration, bandwidth, and power still require
 platform profilers and representative hardware gates before any path can be
 promoted as a measured performance tier.
+
+The Linux probe was also the red test for four integration defects that unit
+tests could not expose alone:
+
+- the GStreamer allocation query did not advertise mandatory `GstVideoMeta`,
+  so VA decoders refused DMA-BUF negotiation;
+- caps accepted only legacy linear formats and rejected modern modifier-bearing
+  `DMA_DRM` samples;
+- the one-slot latest-frame mailbox continuously replaced the next future frame
+  at playback cadence, so no frame became presentable;
+- wgpu's logical Vulkan device did not enable
+  `VK_EXT_queue_family_foreign`, even though the physical device supported the
+  extension needed to acquire fixed-function decoder allocations.
+
+The fixes keep those responsibilities at narrow seams: allocation negotiation
+in the Linux decoder adapter, modifier parsing in the typed sample boundary, a
+bounded two-frame presentation queue in the common scheduler, and one shared
+renderer-device factory that conditionally enables the complete Linux external
+memory extension set. The last seam contains the unavoidable wgpu-hal unsafe
+operation and falls back to ordinary device creation so optional video support
+cannot prevent editor startup.
