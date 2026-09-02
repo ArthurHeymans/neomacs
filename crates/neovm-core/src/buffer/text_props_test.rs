@@ -2424,3 +2424,181 @@ fn graft_of_many_runs_balances_once_and_keeps_the_tree_shallow() {
     assert_eq!(get_at_char(&table, 1100, face), Some(bold));
     assert_eq!(get_at_char(&table, 499, face), Some(italic));
 }
+
+// ---- local adjacent-equal merge: GNU `merge_interval_left` at edit boundaries --
+
+fn bold_plist() -> Vec<(Value, Value)> {
+    vec![(Value::symbol("face"), Value::symbol("bold"))]
+}
+
+fn italic_plist() -> Vec<(Value, Value)> {
+    vec![(Value::symbol("face"), Value::symbol("italic"))]
+}
+
+/// Two adjacent `set_chars` with `eq`-equal plists leave two intervals: the
+/// set path does not fuse neighbours, only the post-insert merge does.
+fn two_equal_neighbours() -> TextPropertyTable {
+    let mut table = TextPropertyTable::new();
+    set_chars(&mut table, 0, 10, bold_plist());
+    set_chars(&mut table, 10, 20, bold_plist());
+    assert_eq!(
+        table.interval_plist_runs_for_test().len(),
+        2,
+        "precondition: the set path must leave the equal neighbours apart"
+    );
+    table
+}
+
+/// The reference clears a tree whose every run is property-free; the local
+/// merge leaves such runs in place.  Both mean "no properties", so compare
+/// modulo that representation.
+fn assert_same_partition(actual: &TextPropertyTable, expected: &TextPropertyTable, context: &str) {
+    let actual_runs = actual.interval_plist_runs_for_test();
+    let expected_runs = expected.interval_plist_runs_for_test();
+    if expected_runs.is_empty() {
+        assert!(
+            actual_runs.iter().all(|(_, _, plist)| plist.is_empty()),
+            "{context}: expected no properties, got {actual_runs:?}"
+        );
+        return;
+    }
+    assert_eq!(actual_runs, expected_runs, "{context}");
+}
+
+#[test]
+fn local_merge_matches_the_whole_buffer_reference_on_random_layouts() {
+    let mut rng = 0x6a11_u64;
+    for case in 0..400 {
+        let len = 1 + (lcg(&mut rng) as usize) % 120;
+        let segments = (lcg(&mut rng) as usize) % 10;
+        let mut base = random_table(&mut rng, len, segments);
+        // Plant unmerged equal neighbours, which only the insert path creates
+        // in practice, so the merge has work to do.
+        for _ in 0..(lcg(&mut rng) % 3) {
+            let at = (lcg(&mut rng) as usize) % len;
+            let width = 1 + (lcg(&mut rng) as usize) % 8;
+            let plist = if lcg(&mut rng) % 2 == 0 {
+                bold_plist()
+            } else {
+                italic_plist()
+            };
+            set_chars(&mut base, at, (at + width).min(len), plist.clone());
+            let next = (at + width).min(len);
+            set_chars(&mut base, next, (next + width).min(len + 4), plist);
+        }
+        let a = (lcg(&mut rng) as usize) % (len + 6);
+        let b = (lcg(&mut rng) as usize) % (len + 6);
+        let (a, b) = if a <= b { (a, b) } else { (b, a) };
+        let range = char_range(a, b);
+
+        let mut expected = base.clone();
+        expected.merge_adjacent_equal_properties_around_reference_for_test(range);
+        let mut actual = base.clone();
+        actual.merge_adjacent_equal_properties_around_char_range(range);
+        actual.assert_tree_invariants_for_test();
+        assert_same_partition(
+            &actual,
+            &expected,
+            &format!("case {case}: merge in [{a}, {b}]"),
+        );
+    }
+}
+
+#[test]
+fn merge_at_the_start_boundary_fuses_the_predecessor() {
+    let mut table = two_equal_neighbours();
+    // A zero-length range sitting exactly on the boundary.
+    table.merge_adjacent_equal_properties_around_char_range(char_range(10, 10));
+    table.assert_tree_invariants_for_test();
+    assert_eq!(
+        table.interval_plist_runs_for_test(),
+        vec![(0, 20, bold_plist())]
+    );
+}
+
+#[test]
+fn merge_ignores_boundaries_outside_the_range() {
+    let mut table = TextPropertyTable::new();
+    set_chars(&mut table, 0, 10, bold_plist());
+    set_chars(&mut table, 10, 20, bold_plist());
+    set_chars(&mut table, 20, 30, bold_plist());
+    assert_eq!(table.interval_plist_runs_for_test().len(), 3);
+    // Only the boundary at 20 lies in [20, 25]; the one at 10 stays.
+    table.merge_adjacent_equal_properties_around_char_range(char_range(20, 25));
+    table.assert_tree_invariants_for_test();
+    assert_eq!(
+        table.interval_plist_runs_for_test(),
+        vec![(0, 10, bold_plist()), (10, 30, bold_plist())]
+    );
+}
+
+#[test]
+fn merge_cascades_through_every_boundary_inside_the_range() {
+    let mut table = TextPropertyTable::new();
+    for start in (0..50).step_by(10) {
+        set_chars(&mut table, start, start + 10, bold_plist());
+    }
+    assert_eq!(table.interval_plist_runs_for_test().len(), 5);
+    table.merge_adjacent_equal_properties_around_char_range(char_range(0, 50));
+    table.assert_tree_invariants_for_test();
+    assert_eq!(
+        table.interval_plist_runs_for_test(),
+        vec![(0, 50, bold_plist())]
+    );
+}
+
+#[test]
+fn merge_leaves_property_free_neighbours_apart() {
+    let mut table = TextPropertyTable::new();
+    set_chars(&mut table, 0, 10, bold_plist());
+    set_chars(&mut table, 30, 40, italic_plist());
+    // Explicit default runs between them, on both sides of a boundary at 20.
+    clear_chars(&mut table, 10, 20);
+    clear_chars(&mut table, 20, 30);
+    let before = table.interval_plist_runs_for_test();
+    table.merge_adjacent_equal_properties_around_char_range(char_range(0, 40));
+    table.assert_tree_invariants_for_test();
+    assert_eq!(
+        table.interval_plist_runs_for_test(),
+        before,
+        "nil-plist neighbours keep their shape, as the reference preserved it"
+    );
+}
+
+/// The point of the rewrite: merging at one boundary of a large partition
+/// must not touch the rest of the tree.  The reference rebuilt every node.
+#[test]
+fn merge_touches_only_the_edited_neighbourhood() {
+    let mut table = TextPropertyTable::new();
+    let runs = 2_000;
+    for index in 0..runs {
+        let start = index * 5;
+        let plist = if index % 2 == 0 {
+            bold_plist()
+        } else {
+            italic_plist()
+        };
+        set_chars(&mut table, start, start + 5, plist);
+    }
+    // Plant one unmerged equal pair in the middle: runs 1000 (bold) and a
+    // fresh bold run replacing the italic run 1001.
+    set_chars(&mut table, 5_005, 5_010, bold_plist());
+    let before = table.interval_plist_runs_for_test().len();
+    assert_eq!(before, runs);
+
+    reset_interval_balance_calls_for_test();
+    table.merge_adjacent_equal_properties_around_char_range(char_range(5_005, 5_005));
+    let balance_calls = interval_balance_calls_for_test();
+
+    table.assert_tree_invariants_for_test();
+    assert_eq!(table.interval_plist_runs_for_test().len(), before - 1);
+    assert!(
+        balance_calls <= 48,
+        "a local merge in a {runs}-run tree should rebalance one spine, not rebuild: {balance_calls} balance calls"
+    );
+    assert_eq!(
+        table.raw_plist_at_for_test(char_pos(5_004)),
+        table.raw_plist_at_for_test(char_pos(5_007)),
+        "the fused interval carries the left plist object"
+    );
+}

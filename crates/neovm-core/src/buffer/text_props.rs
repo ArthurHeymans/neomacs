@@ -1660,6 +1660,94 @@ impl IntervalTree {
         }
     }
 
+    /// Fuse every adjacent pair whose shared boundary lies in
+    /// `[range.start, range.end]` and whose plists are `eq`-equal and non-nil,
+    /// each right interval absorbed into its predecessor in place (GNU
+    /// `merge_interval_left`).  Returns whether anything merged.
+    ///
+    /// Only the intervals whose boundary is inside `range` are visited: the
+    /// one containing `range.start` (or the last interval when `range.start`
+    /// is the tree end), its predecessor when `range.start` is itself a
+    /// boundary, then successors while their boundary is at or before
+    /// `range.end`.  A merge widens the left interval, so its new boundary is
+    /// re-examined before moving on — the cascade the whole-buffer restart
+    /// loop used to produce.
+    fn merge_equal_neighbors_in(&mut self, range: CharRange) -> bool {
+        if self.root.is_none() || self.len().is_empty() {
+            return false;
+        }
+        let start = range.start();
+        let end = range.end();
+        let tree_end = CharPos0::ZERO.add_len(self.len());
+        let located = if start < tree_end {
+            self.find_id(start)
+        } else {
+            self.last_interval()
+        };
+        let Some((mut left_start, mut left)) = located else {
+            return false;
+        };
+        let mut merged_any = false;
+        // `start` on a boundary: the pair straddling it qualifies too.
+        if left_start == start
+            && let Some(predecessor) = self.prev_id(left)
+            && self.plists_mergeable(predecessor, left)
+        {
+            let predecessor_start = left_start.saturating_sub_len(self.node_len(predecessor));
+            self.merge_into_predecessor(predecessor, left);
+            left = predecessor;
+            left_start = predecessor_start;
+            merged_any = true;
+        }
+        loop {
+            let boundary = left_start.add_len(self.node_len(left));
+            if boundary > end {
+                break;
+            }
+            let Some(right) = self.next_id(left) else {
+                break;
+            };
+            if self.plists_mergeable(left, right) {
+                self.merge_into_predecessor(left, right);
+                merged_any = true;
+            } else {
+                left_start = boundary;
+                left = right;
+            }
+        }
+        merged_any
+    }
+
+    /// The merge condition: a non-nil left plist `eq`-equal to the right one.
+    /// Two property-free neighbours are deliberately left apart (the
+    /// partition shape is preserved, as `normalize_runs_preserving_shape`
+    /// preserves it).
+    fn plists_mergeable(&self, left: IntervalId, right: IntervalId) -> bool {
+        let left_plist = self.nodes[left.0].plist;
+        if left_plist.is_nil() {
+            return false;
+        }
+        plists_equal_eq(
+            &plist_pairs(left_plist),
+            &plist_pairs(self.nodes[right.0].plist),
+        )
+    }
+
+    /// Absorb `right` into its in-order predecessor `left`: `left` grows by
+    /// `right`'s length, `right` shrinks to zero and is unlinked.  Subtree
+    /// totals stay consistent because both adjustments walk the ancestor
+    /// chain; the unlink may shorten a spine, so balance is restored from the
+    /// unlinked node's former parent.
+    fn merge_into_predecessor(&mut self, left: IntervalId, right: IntervalId) {
+        debug_assert_eq!(self.next_id(left), Some(right));
+        let absorbed = self.node_len(right);
+        let parent = self.nodes[right.0].parent;
+        self.add_length_to_ancestors(Some(left), absorbed.get() as isize);
+        self.add_length_to_ancestors(Some(right), -(absorbed.get() as isize));
+        self.delete_zero_length_interval(right);
+        self.balance_upwards(parent.or(self.root));
+    }
+
     fn delete_zero_length_interval(&mut self, id: IntervalId) {
         debug_assert_eq!(self.node_len(id), CharLen::ZERO);
         let parent = self.nodes[id.0].parent;
@@ -4076,7 +4164,36 @@ impl TextPropertyTable {
         self.merge_adjacent_equal_properties_around(range);
     }
 
+    /// Fuse adjacent intervals with `eq`-equal, non-nil plists whose shared
+    /// boundary lies in `[range.start, range.end]` — GNU `merge_interval_left`
+    /// applied at the boundaries an edit just created.
+    ///
+    /// Runs after every inherited-property insert, so it is on the
+    /// `self-insert-command` path.  It works on the tree in place, touching
+    /// only the intervals whose boundary is inside `range`: O(k log n) for
+    /// the k intervals examined.  The algorithm it replaces
+    /// ([`Self::merge_adjacent_equal_properties_around_reference_for_test`])
+    /// collected every run in the buffer, compared every adjacent pair with
+    /// freshly allocated plist vectors, and rebuilt the balanced tree — a
+    /// per-keystroke cost proportional to the number of property runs in the
+    /// buffer (8% of the Lisp thread on the GUI typing profile of a 258 KB
+    /// fontified file).
     fn merge_adjacent_equal_properties_around(&mut self, range: CharRange) {
+        self.mutation_tick += 1;
+        if range.start() > range.end() {
+            return;
+        }
+        self.intervals.merge_equal_neighbors_in(range);
+    }
+
+    /// The pre-local algorithm, kept as the reference oracle for
+    /// [`Self::merge_adjacent_equal_properties_around`]: the two must leave
+    /// the same interval partition and plist values.
+    #[cfg(test)]
+    pub(crate) fn merge_adjacent_equal_properties_around_reference_for_test(
+        &mut self,
+        range: CharRange,
+    ) {
         self.mutation_tick += 1;
         let mut runs = self.intervals.runs();
         let start = range.start();
