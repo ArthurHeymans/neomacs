@@ -32,6 +32,7 @@ pub mod tty_palette;
 pub mod types;
 pub mod ui_types;
 pub mod visual_config;
+pub mod xterm_palette;
 pub use glyph_matrix::*;
 pub mod tty_capabilities;
 
@@ -57,6 +58,7 @@ pub use tty_palette::{TtyPalette, TtyPaletteEntry};
 pub use types::*;
 pub use ui_types::*;
 pub use visual_config::*;
+pub use xterm_palette::xterm_256_rgb;
 
 #[cfg(test)]
 #[path = "frame_chrome_test.rs"]
@@ -93,6 +95,10 @@ mod sealed_frame_presentation_test;
 #[cfg(test)]
 #[path = "terminal_color_test.rs"]
 mod terminal_color_test;
+
+#[cfg(test)]
+#[path = "xterm_palette_test.rs"]
+mod xterm_palette_test;
 
 #[cfg(test)]
 #[path = "tty_palette_test.rs"]
