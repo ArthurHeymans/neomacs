@@ -1,4 +1,4 @@
-//! GPU cache for shader surfaces (`doc/display-engine/SHADER_SURFACES.md`).
+//! GPU cache for shader surfaces (`docs/display-engine/SHADER_SURFACES.md`).
 //!
 //! Mirrors `VideoCache`'s shape — a `HashMap<u32, CachedShaderSurface>` whose
 //! entries own a texture plus the bind group the inline-media composite phase

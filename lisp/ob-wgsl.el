@@ -25,7 +25,7 @@
 ;; NeoMacs extension (experimental): org-babel support for `wgsl' and
 ;; `glsl' source blocks whose execution renders a live, animated GPU
 ;; surface below the block — literate shader documents.  Built on shader
-;; surfaces (doc/display-engine/SHADER_SURFACES.md); see
+;; surfaces (docs/display-engine/SHADER_SURFACES.md); see
 ;; etc/ob-wgsl-demo.org for a walk-through.
 ;;
 ;;   #+begin_src wgsl :width 480 :height 200 :uniforms '((speed . 1.5))
@@ -337,7 +337,7 @@ result, not signaled (see Commentary)."
 (defun org-babel-execute:wgsl (body params)
   "Execute BODY as a WGSL fragment shader with PARAMS.
 BODY defines `fn mainImage(fragCoord: vec2<f32>) -> vec4<f32>\\=' against
-the shader-surface contract (doc/display-engine/SHADER_SURFACES.md); a
+the shader-surface contract (docs/display-engine/SHADER_SURFACES.md); a
 successful compile renders a live animated surface at the block's
 #+RESULTS.  Called by `org-babel-execute-src-block'."
   (ob-wgsl--execute body params :shader))

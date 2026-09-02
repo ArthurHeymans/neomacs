@@ -1120,7 +1120,7 @@ impl RenderApp {
                             focus_webview = Some(hit.view);
                         }
                     }
-                    // iMouse click state (doc/display-engine/SHADER_SURFACES.md):
+                    // iMouse click state (docs/display-engine/SHADER_SURFACES.md):
                     // a press over a shader-surface glyph routes the press
                     // position into that surface's iMouse.zw — the Surface
                     // mirror of the Xwidget search above. Render-thread

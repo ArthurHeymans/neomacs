@@ -2156,7 +2156,7 @@ pub struct ResolvedWebKit {
 }
 
 /// One named user uniform for a shader surface, in slot order
-/// (`doc/display-engine/SHADER_SURFACES.md`). `components` (1..=4) selects
+/// (`docs/display-engine/SHADER_SURFACES.md`). `components` (1..=4) selects
 /// the WGSL accessor type (f32/vec2/vec3/vec4).
 #[derive(Clone, Debug, PartialEq)]
 pub struct ShaderSurfaceUniformInit {
@@ -2174,7 +2174,7 @@ pub enum ShaderSurfaceLanguage {
 }
 
 /// Which media cache an `iChannel0` binding samples from
-/// (`doc/display-engine/SHADER_SURFACES.md`): another shader surface, a
+/// (`docs/display-engine/SHADER_SURFACES.md`): another shader surface, a
 /// decoded image, or a (playing) video's current frame.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SurfaceChannelKind {

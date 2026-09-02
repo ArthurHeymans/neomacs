@@ -3,7 +3,7 @@
 
 NeoMacs renders =wgsl= and =glsl= org-babel blocks as *live animated GPU
 surfaces* right below the block — a literate shader document.  See
-=doc/display-engine/SHADER_SURFACES.md= for the shader contract and
+=docs/display-engine/SHADER_SURFACES.md= for the shader contract and
 =lisp/ob-wgsl.el= for how results are displayed.
 
 To run this file inside the NeoMacs GUI:

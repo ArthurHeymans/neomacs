@@ -381,7 +381,7 @@ impl MediaSource {
 }
 
 /// Content source for a shader surface
-/// (`doc/display-engine/SHADER_SURFACES.md`).
+/// (`docs/display-engine/SHADER_SURFACES.md`).
 #[derive(Debug)]
 pub enum SurfaceSource {
     /// User shader source (WGSL or Shadertoy-dialect GLSL) defining
@@ -462,7 +462,7 @@ pub enum AssetCommand {
     DebugSimulateDeviceLoss,
     /// Backend-neutral embedded-browser operation.
     WebView(neomacs_webview::WebViewCommand),
-    /// Create a shader surface (doc/display-engine/SHADER_SURFACES.md)
+    /// Create a shader surface (docs/display-engine/SHADER_SURFACES.md)
     SurfaceCreate {
         id: u32,
         source: SurfaceSource,

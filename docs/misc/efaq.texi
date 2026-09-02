@@ -568,7 +568,7 @@ information.  To get a list of these commands, type @samp{?} after
 You can order a printed copy of the Emacs manual from the FSF@.  For
 details see the @uref{https://shop.fsf.org/, FSF on-line store}.
 
-The full Texinfo source for the manual also comes in the @file{doc/emacs}
+The full Texinfo source for the manual also comes in the @file{docs/emacs}
 directory of the Emacs distribution, if you're daring enough to try to
 print out this several-hundred-page manual yourself (@pxref{Printing a Texinfo
 file}).
@@ -734,7 +734,7 @@ Make sure the first line of the Texinfo file looks like this:
 
 You may need to change @samp{texinfo} to the full pathname of the
 @file{texinfo.tex} file, which comes with Emacs as
-@file{doc/misc/texinfo.tex} (or copy or link it into the current directory).
+@file{docs/misc/texinfo.tex} (or copy or link it into the current directory).
 
 @item
 Type @kbd{texi2dvi @var{texinfo-source}}, where @var{texinfo-source} is

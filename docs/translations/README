@@ -26,10 +26,10 @@ See https://www.gnu.org/contact/ for more information.
 *** Texinfo source files
 
 The source files of the translated manuals are located in the
-doc/translations directory, under the sub-directory corresponding to the
+docs/translations directory, under the sub-directory corresponding to the
 translated language.
 
-  E.g., French manual sources are found under doc/translations/fr.
+  E.g., French manual sources are found under docs/translations/fr.
 
 The structure of each language's folder should match that of the English
 manuals (i.e. include misc, man, lispref, lispintro, emacs).

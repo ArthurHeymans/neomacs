@@ -353,7 +353,7 @@ program by Donald Knuth at Stanford University) as well as the
 be obtained from the FSF as part of the @code{texinfo} package.
 To print the Calc manual in one huge tome, you will need the
 Emacs source, which contains the source code to this manual,
-@file{calc.texi}.  Change to the @file{doc/misc} subdirectory of the
+@file{calc.texi}.  Change to the @file{docs/misc} subdirectory of the
 Emacs source distribution, which contains source code for this manual,
 and type @kbd{make calc.pdf}.  (Don't worry if you get some ``overfull
 box'' warnings while @TeX{} runs.)   The result will be this entire

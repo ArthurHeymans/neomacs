@@ -1,7 +1,7 @@
 //! GPU device-loss detection for the render thread.
 //!
 //! A user shader with an infinite loop can hang the GPU
-//! (`doc/display-engine/SHADER_SURFACES.md`: naga guarantees memory safety,
+//! (`docs/display-engine/SHADER_SURFACES.md`: naga guarantees memory safety,
 //! not termination). The driver then resets (TDR) and the wgpu device is
 //! lost. Two signals feed one recovery decision:
 //!

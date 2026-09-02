@@ -1,6 +1,6 @@
 //! Shader-surface WGSL/GLSL composition and validation.
 //!
-//! A shader surface (`doc/display-engine/SHADER_SURFACES.md`) is a texture the
+//! A shader surface (`docs/display-engine/SHADER_SURFACES.md`) is a texture the
 //! compositor renders from a user-supplied fragment shader written against a
 //! Shadertoy-compatible contract. Two source dialects are accepted
 //! ([`SurfaceShaderLanguage`]):

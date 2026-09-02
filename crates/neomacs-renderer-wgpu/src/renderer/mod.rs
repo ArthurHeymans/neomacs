@@ -169,7 +169,7 @@ pub struct WgpuRenderer {
     /// keeps this correct across `set_scale_factor`, which only stores the scale
     /// — `resize` is what pushes it to the GPU.
     pub(super) uniform_screen_size: Option<[f32; 2]>,
-    /// User full-frame post shader (doc/display-engine/SHADER_SURFACES.md).
+    /// User full-frame post shader (docs/display-engine/SHADER_SURFACES.md).
     pub(super) frame_post: Option<crate::frame_post::FramePost>,
     /// Unified media memory accounting + surface eviction (media_budget.rs).
     pub(super) media_budget: crate::media_budget::MediaBudget,

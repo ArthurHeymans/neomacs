@@ -18,8 +18,9 @@ to keep the rewrite honest.
 All Cargo packages have one predictable home: `crates/<package-name>/`. The
 workspace manifest lists those paths explicitly so adding, removing, or renaming
 a package remains visible in review. GNU Emacs-derived runtime trees (`lisp/`,
-`leim/`, `etc/`, `doc/`, and `test/`) stay at the repository root because they
-are application resources rather than Rust packages.
+`leim/`, `etc/`, `docs/`, and `test/`) stay at the repository root because they
+are application resources rather than Rust packages. Project documentation and
+GNU Emacs-derived manuals share the `docs/` tree.
 
 Cargo does not expose a built-in workspace-root environment variable. The
 workspace defines `CARGO_WORKSPACE_DIR` once in `.cargo/config.toml`; code that

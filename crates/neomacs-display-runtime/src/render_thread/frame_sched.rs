@@ -170,7 +170,7 @@ demand_reasons! {
     Video => "video",
     WebKit => "webkit",
     /// Animated shader surfaces visible in a composited frame
-    /// (doc/display-engine/SHADER_SURFACES.md).
+    /// (docs/display-engine/SHADER_SURFACES.md).
     ShaderSurface => "shader_surface",
     /// Installed full-frame post shader whose time uniforms require a fresh
     /// composite even when the editor scene is unchanged.

@@ -86,7 +86,7 @@ impl RenderApp {
         let device = Arc::new(device);
         let queue = Arc::new(queue);
 
-        // Device-loss detection (doc/display-engine/SHADER_SURFACES.md): a
+        // Device-loss detection (docs/display-engine/SHADER_SURFACES.md): a
         // user shader with an infinite loop can hang the GPU; the driver
         // resets (TDR) and this device is lost. Latch the loss and let
         // handle_about_to_wait rebuild the GPU state. The callback may fire

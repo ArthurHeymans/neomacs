@@ -314,7 +314,7 @@ impl WgpuRenderer {
         self.caches.video.get(id)
     }
 
-    // =========== Shader surfaces (doc/display-engine/SHADER_SURFACES.md) ===========
+    // =========== Shader surfaces (docs/display-engine/SHADER_SURFACES.md) ===========
 
     /// Create a shader surface from user WGSL. The composite bind group uses
     /// the image cache's layout/sampler so the inline-media phase can draw it
@@ -540,7 +540,7 @@ impl WgpuRenderer {
         }
     }
 
-    // =========== Frame post shader (doc/display-engine/SHADER_SURFACES.md) ===========
+    // =========== Frame post shader (docs/display-engine/SHADER_SURFACES.md) ===========
 
     /// Install (or replace) the full-frame post shader from an
     /// already-composed WGSL module (the host validates + composes on the

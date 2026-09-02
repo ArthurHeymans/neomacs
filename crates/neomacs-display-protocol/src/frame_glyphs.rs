@@ -261,7 +261,7 @@ pub enum FrameGlyph {
 
     /// Shader-surface glyph (inline in buffer): a texture the compositor
     /// renders from a user-supplied WGSL shader or uploaded pixels
-    /// (`doc/display-engine/SHADER_SURFACES.md`).
+    /// (`docs/display-engine/SHADER_SURFACES.md`).
     Surface {
         window_id: DisplayWindowId,
         row_role: GlyphRowRole,

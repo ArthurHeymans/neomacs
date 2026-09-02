@@ -1,5 +1,5 @@
 //! Full-frame post pass: a user WGSL shader over the composited frame
-//! (`doc/display-engine/SHADER_SURFACES.md`). The Ghostty / Windows Terminal
+//! (`docs/display-engine/SHADER_SURFACES.md`). The Ghostty / Windows Terminal
 //! `custom-shader` feature: CRT, bloom, color grading over the whole editor.
 //!
 //! The pass receives the rendered scene as `iChannel0` and draws into the

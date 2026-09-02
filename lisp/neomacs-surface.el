@@ -23,7 +23,7 @@
 ;;; Commentary:
 
 ;; NeoMacs extension (experimental): compositor-rendered GPU textures as
-;; inline display objects.  See doc/display-engine/SHADER_SURFACES.md.
+;; inline display objects.  See docs/display-engine/SHADER_SURFACES.md.
 ;;
 ;;   (neomacs-surface-create :width W :height H
 ;;                           :shader WGSL &optional :uniforms ALIST :animate BOOL

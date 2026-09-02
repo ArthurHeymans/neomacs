@@ -23,7 +23,7 @@
 ;;; Commentary:
 
 ;; A small collection built on shader surfaces
-;; (doc/display-engine/SHADER_SURFACES.md):
+;; (docs/display-engine/SHADER_SURFACES.md):
 ;;
 ;;   M-x neomacs-shaders-gallery   inline surfaces: raymarched 3D, an
 ;;                                 iMouse toy, Shadertoy GLSL pasted verbatim

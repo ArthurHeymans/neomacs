@@ -23,7 +23,7 @@
 ;;; Commentary:
 
 ;; A Shadertoy-style playground on NeoMacs shader surfaces
-;; (doc/display-engine/SHADER_SURFACES.md): edit WGSL on the left, see the
+;; (docs/display-engine/SHADER_SURFACES.md): edit WGSL on the left, see the
 ;; compositor-rendered result on the right.
 ;;
 ;;   M-x neomacs-shader-playground

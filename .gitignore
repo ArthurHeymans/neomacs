@@ -20,15 +20,11 @@
 
 # Ignore all dot-files except for those under version control.
 .*
-!.clang-format
-!.clangd
 !.config/
 !.config/**
 !.dir-locals.el
 !.gitattributes
 !.gitignore
-!.gitlab-ci.yml
-!.mailmap
 !.github/
 !.github/workflows/
 !.github/workflows/*.yml
@@ -302,9 +298,9 @@ lisp/language/pinyin.el
 *.op
 *.ops
 *.pdf
-!doc/lispintro/cons-*.pdf
-!doc/lispintro/drawers.pdf
-!doc/lispintro/lambda-*.pdf
+!docs/lispintro/cons-*.pdf
+!docs/lispintro/drawers.pdf
+!docs/lispintro/lambda-*.pdf
 !etc/refcards/gnus-logo.pdf
 *.pg
 *.pgs
@@ -320,15 +316,15 @@ lisp/language/pinyin.el
 *.tps
 *.vr
 *.vrs
-doc/*/*.html
-doc/*/*/*.html
-doc/*/*.ps
-doc/*/*/*.ps
-doc/emacs/emacsver.texi
-doc/man/emacs.1
-doc/misc/cc-mode.ss
-doc/misc/modus-themes.texi
-doc/misc/org.texi
+docs/*/*.html
+docs/*/*/*.html
+docs/*/*.ps
+docs/*/*/*.ps
+docs/emacs/emacsver.texi
+docs/man/emacs.1
+docs/misc/cc-mode.ss
+docs/misc/modus-themes.texi
+docs/misc/org.texi
 etc/DOC
 etc/refcards/emacsver.tex
 gnustmp*

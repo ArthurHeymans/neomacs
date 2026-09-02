@@ -408,7 +408,7 @@ pub(crate) struct DisplayXwidgetLayout {
 
 /// Parsed `(surface :id N [:width W] [:height H])` display spec. The id is a
 /// host-allocated shader-surface handle from `neomacs-surface-create`; layout
-/// needs no host round-trip (`doc/display-engine/SHADER_SURFACES.md`).
+/// needs no host round-trip (`docs/display-engine/SHADER_SURFACES.md`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplaySurfaceLayout {
     pub(crate) surface_id: u32,

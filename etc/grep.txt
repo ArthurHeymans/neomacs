@@ -39,7 +39,7 @@ grep -nH --color=always -e "INFO tree" ../info/*
 
 * GNU grep 2.5.1 on lines starting with a number and colon
 
-grep -nH --color=always -e "Universal Time" ../doc/lispref/*
+grep -nH --color=always -e "Universal Time" ../docs/lispref/*
 ../lispref/os.texi:1010:0:00 January 1, 1970 UTC (Coordinated [01;31mUniversal Time[00m)
 
 * GNU grep 2.5.1 with context lines

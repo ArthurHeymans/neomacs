@@ -1,4 +1,4 @@
-//! Elisp builtins for shader surfaces (`doc/display-engine/SHADER_SURFACES.md`).
+//! Elisp builtins for shader surfaces (`docs/display-engine/SHADER_SURFACES.md`).
 //!
 //! `neomacs-surface-create` allocates a compositor-rendered GPU texture from
 //! user WGSL (or raw RGBA8 pixels) and returns a GC-managed surface handle;
