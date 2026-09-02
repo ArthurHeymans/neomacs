@@ -1008,6 +1008,30 @@ fn materialize_places_right_margin_glyphs_in_their_structural_area() {
 }
 
 #[test]
+fn mode_line_reserves_the_final_window_cell_for_a_right_border() {
+    // GNU `build_frame_matrix_from_leaf_window` installs a vertical border in
+    // LAST_AREA for every enabled row, including mode lines.  Window-wide
+    // chrome therefore needs a structural LAST_AREA origin even though it does
+    // not use the buffer text area's left/right margins.
+    let mut state = FrameDisplayState::new(5, 1, 8.0, 16.0);
+    let entry = WindowMatrixEntry {
+        window_id: DisplayWindowId::new(1),
+        matrix: GlyphMatrix::new(1, 5),
+        pixel_bounds: Rect::new(0.0, 0.0, 40.0, 16.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 40.0, 16.0),
+        text_clip_bounds: None,
+        selected: true,
+    };
+    state.window_matrices.push(entry);
+
+    let layout = state.glyph_row_area_layout(&state.window_matrices[0], GlyphRowRole::ModeLine);
+    let GlyphAreaPlacement::Structural(right) = layout.placement(GlyphArea::RightMargin) else {
+        panic!("window-wide rows must publish a structural right-border cell");
+    };
+    assert_eq!(right.bounds(), Rect::new(32.0, 0.0, 8.0, 16.0));
+}
+
+#[test]
 fn materialize_emits_tab_line_row_at_window_top() {
     // Regression guard for the GUI "empty tab-line" bug: a window with a
     // tab-line (row 0, role TabLine) above its text (row 1, role Text) must

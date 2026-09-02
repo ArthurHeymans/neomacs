@@ -16,7 +16,6 @@ use crate::neovm_bridge::ResolvedFace;
 use crate::output::builder::DisplayOutputBuilder;
 use crate::output::row_request::{DisplayWindowRowMutation, DisplayWindowRowsMutation};
 use neomacs_display_protocol::face::BasicFaceId;
-use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::FaceId;
 
@@ -181,7 +180,6 @@ fn render_right_edge_marker_source(
         &mut source_state,
         matrix_cols,
         char_width,
-        GlyphRowRole::Text,
         face_id,
         base_face,
         start_col,
@@ -309,7 +307,6 @@ fn render_right_border_text(
         &mut source_state,
         request.matrix_cols,
         request.char_width,
-        GlyphRowRole::Text,
         request.face_id,
         request.base_face,
         request.start_col,

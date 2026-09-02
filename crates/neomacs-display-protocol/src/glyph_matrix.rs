@@ -162,9 +162,9 @@ impl GlyphAreaGeometry {
 ///
 /// Real window margins are structural areas with independent GNU
 /// `window_box_left_offset` origins. `FollowingPreviousArea` is retained only
-/// for unpartitioned chrome rows. Window text rows always give the right area a
-/// structural origin: a configured margin when present, otherwise the final
-/// matrix cell GNU reserves for a TTY vertical-border glyph.
+/// for genuinely unpartitioned frame chrome. Every window row gives the right
+/// area a structural origin: a configured margin when present, otherwise the
+/// final matrix cell GNU reserves for a TTY vertical-border glyph.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum GlyphAreaPlacement {
     FollowingPreviousArea,
@@ -192,6 +192,31 @@ impl GlyphRowAreaLayout {
         }
     }
 
+    fn final_cell(bounds: Rect, char_width: f32) -> Rect {
+        Rect::new(
+            (bounds.right() - char_width).max(bounds.x),
+            bounds.y,
+            char_width.min(bounds.width),
+            bounds.height,
+        )
+    }
+
+    /// Window-wide chrome has no text-area margins, but GNU still reserves the
+    /// last matrix cell as LAST_AREA for a vertical separator.  Publishing that
+    /// cell structurally keeps all consumers from advancing the border past the
+    /// window edge when the right-margin glyph is present.
+    fn window_wide(bounds: Rect, clip: Rect, char_width: f32) -> Self {
+        let right_border = Self::final_cell(bounds, char_width);
+        Self {
+            left_margin: GlyphAreaPlacement::FollowingPreviousArea,
+            text: GlyphAreaPlacement::Structural(GlyphAreaGeometry::new(bounds, clip)),
+            right_margin: GlyphAreaPlacement::Structural(GlyphAreaGeometry::new(
+                right_border,
+                clip,
+            )),
+        }
+    }
+
     fn window_text(
         text_bounds: Rect,
         text_clip: Rect,
@@ -199,12 +224,7 @@ impl GlyphRowAreaLayout {
         right_margin: Option<Rect>,
         char_width: f32,
     ) -> Self {
-        let synthetic_right_border = Rect::new(
-            (text_bounds.right() - char_width).max(text_bounds.x),
-            text_bounds.y,
-            char_width.min(text_bounds.width),
-            text_bounds.height,
-        );
+        let synthetic_right_border = Self::final_cell(text_bounds, char_width);
         Self {
             left_margin: left_margin
                 .map(|bounds| {
@@ -1802,7 +1822,7 @@ impl FrameDisplayState {
     /// Window rows store glyphs by semantic area, while consumers need backend-
     /// specific pixel/cell coordinates. This is the single boundary that joins
     /// those two models. A configured margin receives its own structural origin;
-    /// unpartitioned rows preserve their historical single-band flow.
+    /// window-wide chrome reserves only GNU's final LAST_AREA cell.
     pub fn glyph_row_area_layout(
         &self,
         entry: &WindowMatrixEntry,
@@ -1814,8 +1834,13 @@ impl FrameDisplayState {
         } else {
             row_bounds
         };
+        let char_width = if entry.matrix.ncols > 0 {
+            row_bounds.width / entry.matrix.ncols as f32
+        } else {
+            self.char_width
+        };
         if role != GlyphRowRole::Text {
-            return GlyphRowAreaLayout::unpartitioned(row_bounds, row_clip);
+            return GlyphRowAreaLayout::window_wide(row_bounds, row_clip, char_width);
         }
 
         let regions = self.window_infos.iter().find_map(|info| {
@@ -1827,11 +1852,6 @@ impl FrameDisplayState {
                 PresentedWindowGeometry::Skipped { .. } => None,
             }
         });
-        let char_width = if entry.matrix.ncols > 0 {
-            row_bounds.width / entry.matrix.ncols as f32
-        } else {
-            self.char_width
-        };
         let Some(regions) = regions else {
             return GlyphRowAreaLayout::window_text(row_bounds, row_clip, None, None, char_width);
         };

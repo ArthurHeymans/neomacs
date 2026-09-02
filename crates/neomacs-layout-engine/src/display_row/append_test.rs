@@ -8074,6 +8074,44 @@ fn buffer_text_window_terminal_right_border_request_installs_face_and_border() {
 }
 
 #[test]
+fn terminal_right_border_decoration_preserves_the_rows_semantic_role() {
+    // GNU `build_frame_matrix_from_leaf_window` replaces only the reserved
+    // LAST_AREA glyph with the vertical-border glyph.  It does not turn a
+    // mode-line row into a text row; that role still selects window-wide
+    // bounds and keeps the row outside the body-text clip.
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
+    builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::ModeLine);
+    write_char_to_current_row_with_width(&mut builder, '-', FaceId::new(1), 0, 8.0);
+    builder.end_row();
+    builder.end_window();
+
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(10);
+    let mut font_metrics = None;
+    TextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
+        TextWindowOutputTarget::from_builder(&mut builder),
+        crate::display_status_line::ChromeRowRenderServices::new(
+            &mut font_metrics,
+            &face_resolver,
+            &mut face_ids,
+        ),
+    );
+
+    let state = builder.finish(5, 1, 8.0, 16.0);
+    let row = &state.window_matrices[0].matrix.rows[0];
+    assert_eq!(row.role, GlyphRowRole::ModeLine);
+    assert_eq!(
+        row.glyphs[GlyphArea::RightMargin.index()]
+            .last()
+            .map(|glyph| glyph.glyph_type.clone()),
+        Some(GlyphType::Char { ch: '|' }),
+        "GNU installs the vertical border in every enabled window row"
+    );
+}
+
+#[test]
 fn terminal_right_border_face_id_comes_from_the_shared_frame_allocator() {
     // Slice 10 B / GNU `face_cache->used` (xfaces.c `lookup_face`): the TTY right
     // border must draw its realized face id from the single per-frame allocator,

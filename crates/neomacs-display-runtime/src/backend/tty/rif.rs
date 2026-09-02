@@ -11,12 +11,12 @@ use neomacs_display_protocol::TerminalColor;
 use neomacs_display_protocol::face::UnderlineStyle;
 use neomacs_display_protocol::face::{Face, FaceAttributes};
 use neomacs_display_protocol::frame_chrome::FrameChromeContent;
-use neomacs_display_protocol::frame_glyphs::CursorStyle;
+use neomacs_display_protocol::frame_glyphs::{CursorStyle, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::*;
 use neomacs_display_protocol::tty_capabilities::{
     ColorGround, TtyAttributeCapabilities, TtyAttributeExit, TtyFaceAppearance, TtyItalicRendition,
 };
-use neomacs_display_protocol::types::FaceId;
+use neomacs_display_protocol::types::{DisplayWindowId, FaceId, Rect};
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
@@ -107,6 +107,97 @@ pub enum CellMaterialization {
     Erased,
     /// A glyph (including an ordinary space glyph) was written here.
     Written,
+}
+
+/// The frame-matrix owner whose row is currently being projected.
+///
+/// GNU composes leaf matrices in tree order, so a blank cell belongs to the
+/// leaf that writes it; it never inherits a face from an earlier overlapping
+/// leaf.  Keeping frame chrome and leaf windows as disjoint variants prevents
+/// callers from accidentally using a window-owned face fill for frame chrome.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TtyGlyphRowOwner {
+    FrameChrome,
+    Window(DisplayWindowId),
+}
+
+/// A half-open rectangle in terminal-cell coordinates.
+///
+/// The display protocol deliberately remains pixel-based because GUI and TTY
+/// consume the same sealed presentation.  Projecting bounds and clips once
+/// into this type makes it impossible to compare a cell coordinate directly
+/// with an unprojected pixel coordinate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TtyCellRect {
+    left: i64,
+    top: i64,
+    right: i64,
+    bottom: i64,
+}
+
+impl TtyCellRect {
+    fn project(bounds: Rect, char_width: f32, char_height: f32) -> Self {
+        let char_width = char_width.max(1.0);
+        let char_height = char_height.max(1.0);
+        let left = (bounds.x / char_width).round() as i64;
+        let top = (bounds.y / char_height).round() as i64;
+        let width = (bounds.width / char_width).ceil().max(0.0) as i64;
+        let height = (bounds.height / char_height).ceil().max(0.0) as i64;
+        Self {
+            left,
+            top,
+            right: left.saturating_add(width),
+            bottom: top.saturating_add(height),
+        }
+    }
+
+    fn intersection(self, other: Self) -> Option<Self> {
+        let intersection = Self {
+            left: self.left.max(other.left),
+            top: self.top.max(other.top),
+            right: self.right.min(other.right),
+            bottom: self.bottom.min(other.bottom),
+        };
+        (intersection.left < intersection.right && intersection.top < intersection.bottom)
+            .then_some(intersection)
+    }
+
+    fn translated(self, col: i64, row: i64) -> Self {
+        Self {
+            left: self.left.saturating_add(col),
+            top: self.top.saturating_add(row),
+            right: self.right.saturating_add(col),
+            bottom: self.bottom.saturating_add(row),
+        }
+    }
+
+    fn contains(self, col: i64, row: i64) -> bool {
+        col >= self.left && col < self.right && row >= self.top && row < self.bottom
+    }
+
+    fn contains_row(self, row: i64) -> bool {
+        row >= self.top && row < self.bottom
+    }
+
+    fn width(self) -> usize {
+        usize::try_from(self.right.saturating_sub(self.left)).unwrap_or(usize::MAX)
+    }
+
+    fn height(self) -> usize {
+        usize::try_from(self.bottom.saturating_sub(self.top)).unwrap_or(usize::MAX)
+    }
+}
+
+fn projected_face_fill_rect(
+    fill: &FaceFillItem,
+    char_width: f32,
+    char_height: f32,
+) -> Option<TtyCellRect> {
+    let bounds = TtyCellRect::project(fill.bounds, char_width, char_height);
+    match fill.clip_rect {
+        Some(clip) => bounds.intersection(TtyCellRect::project(clip, char_width, char_height)),
+        None => (bounds.left < bounds.right && bounds.top < bounds.bottom).then_some(bounds),
+    }
 }
 
 impl Default for TtyCell {
@@ -785,7 +876,10 @@ impl TtyRif {
             match band.content() {
                 FrameChromeContent::DisplayRow(content) => {
                     self.rasterize_glyph_row(
+                        state,
+                        TtyGlyphRowOwner::FrameChrome,
                         origin_col,
+                        origin_row,
                         band_col,
                         band_row,
                         content.row(),
@@ -866,7 +960,10 @@ impl TtyRif {
                     }
                 }
                 self.rasterize_glyph_row(
+                    state,
+                    TtyGlyphRowOwner::Window(entry.window_id),
                     origin_col,
+                    origin_row,
                     row_col,
                     grid_row,
                     glyph_row,
@@ -1711,17 +1808,17 @@ impl TtyRif {
     ) {
         let char_w = state.char_width.max(1.0);
         let char_h = state.char_height.max(1.0);
-        let start_col = origin_col + (fill.bounds.x / char_w).round().max(0.0) as i64;
-        let start_row = origin_row + (fill.bounds.y / char_h).round().max(0.0) as i64;
-        let width_cols = (fill.bounds.width / char_w).ceil().max(0.0) as usize;
-        let height_rows = (fill.bounds.height / char_h).ceil().max(0.0) as usize;
-        if width_cols == 0 || height_rows == 0 {
+        let Some(cell_rect) = projected_face_fill_rect(fill, char_w, char_h)
+            .map(|rect| rect.translated(origin_col, origin_row))
+        else {
             return;
-        }
+        };
 
         let attrs = self.resolve_attrs(fill.face_id);
-        let visible_rows = visible_cell_range(start_row, height_rows, self.desired.height);
-        let visible_cols = visible_cell_range(start_col, width_cols, self.desired.width);
+        let visible_rows =
+            visible_cell_range(cell_rect.top, cell_rect.height(), self.desired.height);
+        let visible_cols =
+            visible_cell_range(cell_rect.left, cell_rect.width(), self.desired.width);
         for row in visible_rows {
             for col in visible_cols.clone() {
                 self.desired.set(row, col, ' ', attrs, false);
@@ -1729,9 +1826,42 @@ impl TtyRif {
         }
     }
 
+    /// Resolve the background face of an implicit blank from its semantic
+    /// owner, never from whatever an earlier matrix happened to paint into the
+    /// shared desired grid.
+    fn blank_cell_attrs(
+        &self,
+        state: &FrameDisplayState,
+        owner: TtyGlyphRowOwner,
+        role: GlyphRowRole,
+        local_col: i64,
+        local_row: i64,
+    ) -> CellAttrs {
+        let TtyGlyphRowOwner::Window(window_id) = owner else {
+            return self.resolve_attrs(FaceId::new(0));
+        };
+        state
+            .face_fills
+            .iter()
+            .rev()
+            .find(|fill| {
+                fill.window_id == window_id
+                    && fill.row_role == role
+                    && projected_face_fill_rect(fill, state.char_width, state.char_height)
+                        .is_some_and(|rect| rect.contains(local_col, local_row))
+            })
+            .map_or_else(
+                || self.resolve_attrs(FaceId::new(0)),
+                |fill| self.resolve_attrs(fill.face_id),
+            )
+    }
+
     fn rasterize_glyph_row(
         &mut self,
+        state: &FrameDisplayState,
+        owner: TtyGlyphRowOwner,
         frame_origin_col: i64,
+        frame_origin_row: i64,
         screen_col_start: i64,
         screen_row: i64,
         glyph_row: &GlyphRow,
@@ -1742,6 +1872,22 @@ impl TtyRif {
             return;
         };
         if !glyph_row.enabled {
+            return;
+        }
+
+        // The protocol may carry surplus matrix rows for GUI partial-row
+        // rasterization.  GNU's TTY matrices are exactly WINDOW_TOTAL_LINES;
+        // project the row's explicit clip before touching any glyph area so a
+        // surplus text row (including its reserved right border) cannot escape
+        // into the next leaf window.
+        let local_row = i64::try_from(screen_row)
+            .unwrap_or(i64::MAX)
+            .saturating_sub(frame_origin_row);
+        if let GlyphAreaPlacement::Structural(text_geometry) =
+            area_layout.placement(GlyphArea::Text)
+            && !TtyCellRect::project(text_geometry.clip(), char_width, state.char_height)
+                .contains_row(local_row)
+        {
             return;
         }
 
@@ -1968,11 +2114,21 @@ impl TtyRif {
                     while col < right_edge && col < screen_width {
                         if let Some(col) = visible_cell(col, self.desired.width) {
                             // A published FaceFillItem owns the resolved
-                            // background behind this matrix slot. GNU's
-                            // default-like line filler materializes that slot;
-                            // it does not erase the fill's background.
-                            let attrs =
-                                self.desired.cells[screen_row * self.desired.width + col].attrs;
+                            // background behind this matrix slot. Resolve it
+                            // by semantic window/row ownership: sampling the
+                            // shared desired grid would inherit a previous
+                            // overlapping leaf's face, which GNU's frame-matrix
+                            // copy never does.
+                            let local_col = i64::try_from(col)
+                                .unwrap_or(i64::MAX)
+                                .saturating_sub(frame_origin_col);
+                            let attrs = self.blank_cell_attrs(
+                                state,
+                                owner,
+                                glyph_row.role,
+                                local_col,
+                                local_row,
+                            );
                             self.set_desired_glyph_cell(
                                 screen_row,
                                 col,

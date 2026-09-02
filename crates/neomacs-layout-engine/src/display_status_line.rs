@@ -290,13 +290,17 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
         source_state: &mut DisplayRowSourceState,
         matrix_cols: usize,
         char_width: f32,
-        role: neomacs_display_protocol::frame_glyphs::GlyphRowRole,
         face_id: FaceId,
         base_face: &ResolvedFace,
         start_col: usize,
         max_col: usize,
         area: GlyphArea,
     ) -> Option<DisplayRowRenderIntoRowResult> {
+        // An in-place fragment extends the semantic row it was given.  Derive
+        // the role here instead of accepting an independent value so callers
+        // cannot accidentally turn mode/header/tab rows into text rows while
+        // installing a decoration such as a terminal right border.
+        let role = row.role;
         let request = crate::display_row::DisplayRowSourceFragmentFrame::from_glyph_row_columns(
             row,
             matrix_cols,

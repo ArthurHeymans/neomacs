@@ -458,6 +458,129 @@ fn rasterize_anchors_a_synthetic_right_border_after_short_text() {
 }
 
 #[test]
+fn rasterize_places_a_mode_line_right_border_in_the_final_window_cell() {
+    // GNU installs a vertical-border glyph in LAST_AREA on mode-line rows as
+    // well as body-text rows.  The row stays window-wide, but the right-margin
+    // glyph must use the structurally reserved final cell rather than flowing
+    // one cell past the window edge.
+    let mut state = FrameDisplayState::new(5, 1, 1.0, 1.0);
+    let mut matrix = GlyphMatrix::new(1, 5);
+    let row = neomacs_display_protocol::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
+    row.enabled = true;
+    row.role = GlyphRowRole::ModeLine;
+    for _ in 0..4 {
+        row.glyphs[GlyphArea::Text.index()].push(Glyph::char('-', FaceId::new(0), 0));
+    }
+    row.glyphs[GlyphArea::RightMargin.index()].push(Glyph::char('|', FaceId::new(0), 0));
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: DisplayWindowId::new(1),
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 5.0, 1.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 5.0, 1.0),
+        text_clip_bounds: None,
+        selected: true,
+    });
+
+    let mut rif = TtyRif::new(5, 1);
+    rif.rasterize(&state);
+
+    assert_eq!(rif.dump_desired(), vec!["----|".to_owned()]);
+}
+
+#[test]
+fn later_window_blank_rows_do_not_inherit_an_overlapped_windows_face() {
+    // GNU `build_frame_matrix_from_window_tree` copies each leaf matrix into
+    // the frame matrix from left to right/top to bottom.  A later leaf owns
+    // every cell in its slice, including default-face blanks; those blanks do
+    // not inherit the face of a glyph copied earlier at the same frame cell.
+    //
+    // This is the split-window + full-width-minibuffer shape from
+    // `quit_describe_bindings_via_q`: a surplus row in the left matrix first
+    // places its reserved right-border cell on the minibuffer row.  The
+    // minibuffer's empty row must replace both the glyph and its face.
+    let mut state = FrameDisplayState::new(5, 3, 1.0, 1.0);
+    let mut overlapped_face = Face::new(FaceId::new(2));
+    overlapped_face.use_default_foreground = false;
+    overlapped_face.use_default_background = false;
+    overlapped_face.terminal_foreground = Some(TerminalColor::Direct {
+        r: 204,
+        g: 204,
+        b: 204,
+    });
+    overlapped_face.terminal_background = Some(TerminalColor::Direct {
+        r: 77,
+        g: 77,
+        b: 77,
+    });
+    state.faces.insert(FaceId::new(2), overlapped_face);
+
+    let mut left_matrix = GlyphMatrix::new(3, 5);
+    let overflow =
+        neomacs_display_protocol::glyph_matrix::MatrixRow::make_mut(&mut left_matrix.rows[2]);
+    overflow.enabled = true;
+    overflow.glyphs[GlyphArea::RightMargin.index()].push(Glyph::char('|', FaceId::new(2), 0));
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: DisplayWindowId::new(1),
+        matrix: left_matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 5.0, 2.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 5.0, 2.0),
+        text_clip_bounds: Some(Rect::new(0.0, 0.0, 5.0, 1.0)),
+        selected: true,
+    });
+
+    let mut minibuffer_matrix = GlyphMatrix::new(1, 5);
+    let minibuffer_row =
+        neomacs_display_protocol::glyph_matrix::MatrixRow::make_mut(&mut minibuffer_matrix.rows[0]);
+    minibuffer_row.enabled = true;
+    minibuffer_row.ends_at_zv = true;
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: DisplayWindowId::new(2),
+        matrix: minibuffer_matrix,
+        pixel_bounds: Rect::new(0.0, 2.0, 5.0, 1.0),
+        text_pixel_bounds: Rect::new(0.0, 2.0, 5.0, 1.0),
+        text_clip_bounds: Some(Rect::new(0.0, 2.0, 5.0, 1.0)),
+        selected: false,
+    });
+
+    let mut rif = TtyRif::new(5, 3);
+    rif.rasterize(&state);
+
+    let cell = &rif.desired.cells[2 * rif.width() + 4];
+    assert_eq!(cell.ch, ' ');
+    assert_eq!(cell.attrs, CellAttrs::default());
+    assert_eq!(cell.blank_erase, BlankErase::DefaultFace);
+}
+
+#[test]
+fn rasterize_clips_text_glyphs_and_reserved_border_to_the_text_band() {
+    // Window-system matrices may reserve surplus rows for partially visible
+    // glyphs, while GNU's TTY matrix is exactly WINDOW_TOTAL_LINES.  The
+    // shared display protocol therefore carries an explicit text clip: a TTY
+    // projection must honor it for every glyph area, including the synthetic
+    // right-border cell, so no surplus row can escape into another window.
+    let mut state = FrameDisplayState::new(5, 3, 1.0, 1.0);
+    let mut matrix = GlyphMatrix::new(3, 5);
+    let overflow = neomacs_display_protocol::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[2]);
+    overflow.enabled = true;
+    overflow.glyphs[GlyphArea::Text.index()].push(Glyph::char('X', FaceId::new(0), 0));
+    overflow.glyphs[GlyphArea::RightMargin.index()].push(Glyph::char('|', FaceId::new(0), 0));
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: DisplayWindowId::new(1),
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 5.0, 2.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 5.0, 2.0),
+        text_clip_bounds: Some(Rect::new(0.0, 0.0, 5.0, 1.0)),
+        selected: true,
+    });
+
+    let mut rif = TtyRif::new(5, 3);
+    rif.rasterize(&state);
+
+    assert_eq!(desired_char(&rif, 2, 0), ' ');
+    assert_eq!(desired_char(&rif, 2, 4), ' ');
+}
+
+#[test]
 fn tty_line_end_filler_with_default_sgr_still_preserves_nondefault_face_identity() {
     let mut state = FrameDisplayState::new(5, 1, 1.0, 1.0);
     let mut comment = Face::new(FaceId::new(1));
