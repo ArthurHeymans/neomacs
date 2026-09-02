@@ -1147,12 +1147,13 @@ impl RetainedWindowMatrix {
         // First dirty row = first body row whose OLD extent reaches the widened
         // source dependency. Rows above it have unchanged positions and box
         // terminals.
+        // An edit on the window's FIRST row leaves nothing above to reuse, but
+        // the rows below still reuse shifted (GNU `try_window_id` regenerates
+        // from the first row and syncs up with the rest the same way); only
+        // the above-only fallback at the end has nothing to offer then.
         let first_dirty_by_charpos = body
             .iter()
             .position(|(_, row)| row.end_charpos as i64 >= topology_dirty_start)?;
-        if first_dirty_by_charpos == 0 {
-            return None;
-        }
         // A row's CHARPOS is unchanged above the edit, but its pointer
         // identities (mouse-face source ranges, display-replacement anchors)
         // carry the RANGE's positions, and a range reaching the edit point is
@@ -1180,9 +1181,6 @@ impl RetainedWindowMatrix {
             .take_while(|(_, row)| row_pointers_stable(row))
             .count();
         let first_dirty = first_dirty_by_charpos.min(stable_prefix);
-        if first_dirty == 0 {
-            return None;
-        }
         let pointer_shrunk_prefix = first_dirty < first_dirty_by_charpos;
         let cursor_style = body
             .iter()
@@ -1455,6 +1453,11 @@ impl RetainedWindowMatrix {
             }
         }
 
+        // Above-only reuse with no row above the edit is a full walk in
+        // disguise; let the plain rebuild own that frame.
+        if reused_rows.is_empty() {
+            return None;
+        }
         Some(ScrollReplay {
             dvpos: 0.0,
             reused_rows,
@@ -1896,6 +1899,41 @@ mod scroll_classifier_tests {
         curr.buffer_size = 1001;
         curr.display_line_numbers = mode;
         curr
+    }
+
+    /// An edit on the window's first row has no rows above to reuse, but the
+    /// rows below still reuse shifted; without below-reuse there is nothing
+    /// to replay and the plain rebuild owns the frame.
+    #[test]
+    fn edit_replay_on_the_first_row_reuses_the_rows_below() {
+        use neomacs_display_protocol::glyph_matrix::Glyph;
+        let mut m = synthetic_matrix(0, 5); // rows start at 0,10,20,30,40
+        for c in 0..10 {
+            let mut g = Glyph::char('a', FaceId::new(0), c as usize);
+            g.pixel_width = 8.0;
+            MatrixRow::make_mut(&mut m.matrix.rows[0]).glyphs[GlyphArea::Text.index()].push(g);
+        }
+        let mut curr = synthetic_key(0, 5);
+        curr.chars_modified_tick = 6;
+        curr.buffer_size = 1001;
+        let r = m
+            .edit_replay(&curr, EditDamage::new(5, 6, 1, 0), true)
+            .expect("a first-row edit reuses the rows below");
+        assert_eq!(r.exposed_row_base, 0, "the walk starts at the first row");
+        assert_eq!(r.exposed_row_count, 1, "only the edited row is walked");
+        assert!(r.bound_walk);
+        assert_eq!(
+            r.reused_rows.iter().map(|(i, _)| *i).collect::<Vec<_>>(),
+            vec![1, 2, 3, 4],
+            "every row below the edit is reused shifted"
+        );
+        let below1 = r.reused_rows.iter().find(|(i, _)| *i == 1).unwrap();
+        assert_eq!(below1.1.start_charpos, 11, "row 1 start 10 -> 11");
+        assert!(
+            m.edit_replay(&curr, EditDamage::new(5, 6, 1, 0), false)
+                .is_none(),
+            "with no row above and no below-reuse there is nothing to replay"
+        );
     }
 
     /// GNU `try_window_id` keeps going under absolute `display-line-numbers`

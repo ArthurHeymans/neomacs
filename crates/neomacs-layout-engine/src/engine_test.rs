@@ -3854,10 +3854,12 @@ fn phase1_inactive_cursor_replay_retains_exact_presented_geometry() {
 }
 
 /// Phase 1 — a `put-text-property` (face/display/invisible) co-moving with the
-/// cursor MUST bail: the props tick moved (the soundness hazard of spec §3, where
-/// a non-fontify text-property write would otherwise be invisible to redisplay).
+/// cursor MUST bail out of the cursor-only path: the props tick moved (the
+/// soundness hazard of spec §3, where a non-fontify text-property write would
+/// otherwise be invisible to redisplay). Since Phase 3 the props change takes
+/// the localized-edit replay instead, which relays the changed span.
 #[test]
-fn phase1_put_text_property_bails_to_full() {
+fn phase1_put_text_property_bails_out_of_cursor_only() {
     let text = "(defun f (a b) (+ a b))\n".repeat(40);
     let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(&text, 800, 600);
     let mut engine = LayoutEngine::new();
@@ -3873,8 +3875,9 @@ fn phase1_put_text_property_bails_to_full() {
         m.stats
     );
     assert_eq!(
-        m.stats.reused_rows, 0,
-        "text-property change forces a full rebuild"
+        m.stats.edit_windows, 1,
+        "a text-property change relays through the localized-edit replay (got {:?})",
+        m.stats
     );
 }
 
@@ -4095,13 +4098,14 @@ fn phase2_partial_row_scroll_bails_to_full() {
     assert_eq!(m.stats.reused_shifted_rows, 0);
 }
 
-/// Phase 0a baseline — SINGLE-CHAR INSERT in a FONT-LOCKED buffer. The
+/// SINGLE-CHAR INSERT in a FONT-LOCKED buffer, on the window's first row. The
 /// `fontification-functions` hook re-applies `font-lock-face` over the edited
-/// region during layout (a `put-text-property` that bumps NO tick today — the
-/// soundness hazard of spec §3). Phase 0a relays everything; Phase 3 (gated on
-/// per-span fontify reporting, §0b) is what narrows this.
+/// region during layout. Phase 0a relaid everything; Phase 3 relays only the
+/// damaged span (the edited line plus the refontified region) and reuses the
+/// rows below shifted — including when the edit sits on the first row, where
+/// there is nothing above to reuse.
 #[test]
-fn phase0a_baseline_fontlocked_edit_is_full_rebuild() {
+fn phase3_fontlocked_first_row_edit_relays_only_the_span() {
     let text = "alpha beta gamma delta epsilon zeta\n".repeat(30);
     let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(&text, 480, 400);
     eval.eval_str(
@@ -4124,22 +4128,34 @@ fn phase0a_baseline_fontlocked_edit_is_full_rebuild() {
     });
     assert!(m.total_body_rows > 0, "expected body rows laid out");
     assert_eq!(
-        m.stats.relaid_body_rows, m.total_body_rows,
-        "Phase 0a: font-locked edit is a full rebuild (got {:?})",
+        m.stats.edit_windows, 1,
+        "a font-locked first-row edit takes the localized-edit replay (got {:?})",
         m.stats
     );
-    assert_eq!(m.stats.edit_windows, 0, "no localized-edit fast path yet");
+    assert!(
+        m.stats.relaid_body_rows < m.total_body_rows,
+        "only the damaged span is relaid (got {:?})",
+        m.stats
+    );
+    assert_eq!(
+        m.stats.relaid_body_rows + m.stats.reused_rows,
+        m.total_body_rows,
+        "every body row is either relaid or reused (got {:?})",
+        m.stats
+    );
     // Ordinary characters are measured independently, matching GNU's
     // IT_CHARACTER path, so a full redisplay need not invoke the contextual
     // run shaper when the concrete character advances are already cached.
 }
 
-/// Phase 0a baseline — MULTI-WINDOW SAME BUFFER. Two windows on one buffer; an
-/// edit relays BOTH fully today. This is the case the multi-window race fix
-/// (spec §4.2) must keep sound once the fast paths land: each window diffs from
-/// its own retained tick. Phase 0a just pins that both are `Full`.
+/// MULTI-WINDOW SAME BUFFER. Two windows on one buffer; an edit in the
+/// selected window. This is the case the multi-window race fix (spec §4.2)
+/// must keep sound: each window diffs from its own retained tick. The selected
+/// window takes the localized-edit replay; the non-selected window on the same
+/// buffer saw its chars tick move and is not eligible for any fast path, so it
+/// rebuilds in full.
 #[test]
-fn phase0a_baseline_multi_window_same_buffer_is_full_rebuild() {
+fn phase3_multi_window_same_buffer_reuses_only_the_selected_window() {
     let text = "(defun f (a b) (+ a b))\n".repeat(40);
     let (mut eval, frame_id, buf_id, selected_window) = incr_editing_frame(&text, 800, 600);
     eval.frame_manager_mut()
@@ -4158,16 +4174,20 @@ fn phase0a_baseline_multi_window_same_buffer_is_full_rebuild() {
         buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10));
         buffer.insert("z");
     });
-    assert!(
-        m.stats.full_windows >= 2,
-        "both same-buffer windows full-rebuild in Phase 0a (got {:?})",
+    assert_eq!(
+        m.stats.edit_windows, 1,
+        "the selected window takes the localized-edit replay (got {:?})",
         m.stats
     );
-    assert_eq!(m.stats.reused_rows, 0, "no reuse machinery yet");
+    assert!(
+        m.stats.full_windows >= 1,
+        "the non-selected same-buffer window rebuilds in full (got {:?})",
+        m.stats
+    );
     assert_eq!(
-        m.stats.total_windows(),
-        m.stats.full_windows,
-        "every window is classified Full in Phase 0a (got {:?})",
+        m.stats.cursor_only_windows + m.stats.scroll_windows,
+        0,
+        "a window whose buffer text changed never takes a text-preserving path (got {:?})",
         m.stats
     );
     let _ = m.total_chrome_rows; // tracked for later phases (chrome always re-walked)
@@ -30750,6 +30770,11 @@ fn p52_buffer_modification_re_evaluates_the_mode_line() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.set_buffer_local("mode-line-format", Value::string("ML"));
+        // The harness fills the buffer by inserting, which leaves it modified.
+        // Start unmodified so the edit below is the modified-star flip this
+        // contract cites (an edit on an already-starred buffer is the settled
+        // case pinned by `p52_in_line_edit_reuses_chrome_only_after_the_modified_star_has_settled`).
+        buf.set_modified(false);
     }
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
@@ -31354,6 +31379,9 @@ fn p52_header_and_tab_lines_are_evaluated_with_the_mode_line() {
         buf.set_buffer_local("mode-line-format", Value::string("ML"));
         buf.set_buffer_local("header-line-format", Value::string("HL"));
         buf.set_buffer_local("tab-line-format", Value::string("TL"));
+        // Start unmodified so the edit below is the modified-star flip that
+        // regenerates all three chrome lines (see the mode-line contract).
+        buf.set_modified(false);
     }
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
