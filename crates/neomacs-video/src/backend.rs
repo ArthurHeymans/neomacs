@@ -74,6 +74,11 @@ pub(crate) enum BackendEvent<F> {
         id: VideoId,
         count: u64,
     },
+    /// Decoder output caps moved once to a lower, explicitly constrained tier.
+    #[cfg(any(target_os = "linux", test))]
+    OutputReconfigured {
+        id: VideoId,
+    },
     StateChanged {
         id: VideoId,
         state: VideoSessionState,
@@ -102,7 +107,7 @@ impl<F> BackendEvent<F> {
             | Self::Ended { id }
             | Self::Failed { id, .. } => *id,
             #[cfg(any(target_os = "linux", test))]
-            Self::FramesReplaced { id, .. } => *id,
+            Self::FramesReplaced { id, .. } | Self::OutputReconfigured { id } => *id,
         }
     }
 }

@@ -1,7 +1,8 @@
 use super::{
-    DmaBufMemoryLayout, NativeVideoFormatSupport, ParsedDrmFormat, PipelineDrmIdentity,
-    PipelineDrmTopology, advertise_required_video_meta, classify_pipeline_error,
-    dma_buf_compositor_import, frame_format_from_fourcc, missing_video_plugin, preferred_sink_caps,
+    DmaBufMemoryLayout, DmaDrmNegotiation, NativeVideoFormatSupport, ParsedDrmFormat,
+    PipelineDrmIdentity, PipelineDrmTopology, advertise_required_video_meta,
+    classify_pipeline_error, dma_buf_compositor_import, frame_format_from_fourcc,
+    missing_video_plugin, preferred_sink_caps, rejected_dma_drm_format,
     retain_unready_decoder_writes, rotation_from_gstreamer_tag,
 };
 use crate::sampling::LinuxDrmDevice;
@@ -117,6 +118,7 @@ fn packed_dmabuf_fallback_retains_its_srgb_contract() {
             nv12: true,
             p010: true,
         },
+        DmaDrmNegotiation::Preferred,
     );
 
     assert_eq!(caps.size(), 4);
@@ -151,9 +153,17 @@ fn sink_caps_accept_modifier_bearing_dma_drm_then_validate_the_sample() {
             nv12: true,
             p010: false,
         },
+        DmaDrmNegotiation::Preferred,
+    );
+    assert_eq!(
+        caps.structure(0)
+            .unwrap()
+            .get::<String>("format")
+            .unwrap(),
+        "DMA_DRM"
     );
     let legacy_formats = caps
-        .structure(0)
+        .structure(1)
         .unwrap()
         .get::<gstreamer::List>("format")
         .unwrap();
@@ -163,7 +173,22 @@ fn sink_caps_accept_modifier_bearing_dma_drm_then_validate_the_sample() {
         .collect();
 
     assert_eq!(legacy_formats, ["NV12"]);
-    assert_eq!(caps.size(), 2);
+    assert_eq!(caps.size(), 3);
+
+    let fallback_caps = preferred_sink_caps(
+        FrameImportPolicy::AllowGpuBlit,
+        NativeVideoFormatSupport {
+            nv12: true,
+            p010: false,
+        },
+        DmaDrmNegotiation::LinearFallback,
+    );
+    assert_eq!(fallback_caps.size(), 2);
+    assert!(
+        fallback_caps
+            .iter()
+            .all(|structure| structure.get::<String>("format").as_deref() != Ok("DMA_DRM"))
+    );
 
     let all_native_formats = preferred_sink_caps(
         FrameImportPolicy::AllowGpuBlit,
@@ -171,6 +196,7 @@ fn sink_caps_accept_modifier_bearing_dma_drm_then_validate_the_sample() {
             nv12: true,
             p010: true,
         },
+        DmaDrmNegotiation::Preferred,
     );
     assert_eq!(
         all_native_formats
@@ -195,6 +221,7 @@ fn sink_caps_accept_modifier_bearing_dma_drm_then_validate_the_sample() {
             nv12: false,
             p010: false,
         },
+        DmaDrmNegotiation::Preferred,
     );
     assert_eq!(packed_only.size(), 1);
     assert_eq!(
@@ -204,6 +231,35 @@ fn sink_caps_accept_modifier_bearing_dma_drm_then_validate_the_sample() {
             .get::<String>("colorimetry")
             .unwrap(),
         "sRGB"
+    );
+}
+
+#[test]
+fn modifier_caps_reject_unsupported_fourcc_for_one_bounded_renegotiation() {
+    gstreamer::init().unwrap();
+    let caps = |drm_format: &str| {
+        gstreamer::Caps::builder("video/x-raw")
+            .features(["memory:DMABuf"])
+            .field("format", "DMA_DRM")
+            .field("drm-format", drm_format)
+            .build()
+    };
+    let nv12_only = NativeVideoFormatSupport {
+        nv12: true,
+        p010: false,
+    };
+
+    assert_eq!(
+        rejected_dma_drm_format(&caps("NV12:0x0100000000000002"), nv12_only).unwrap(),
+        None
+    );
+    assert_eq!(
+        rejected_dma_drm_format(&caps("P010:0x0100000000000002"), nv12_only).unwrap(),
+        Some("P010:0x0100000000000002".to_owned())
+    );
+    assert_eq!(
+        rejected_dma_drm_format(&caps("YUYV:0x0100000000000002"), nv12_only).unwrap(),
+        Some("YUYV:0x0100000000000002".to_owned())
     );
 }
 

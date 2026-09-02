@@ -950,6 +950,15 @@ impl<P: Platform> VideoSystemImpl<P> {
                     session.diagnostics.replaced_frames.saturating_add(count);
                 None
             }
+            #[cfg(any(target_os = "linux", test))]
+            BackendEvent::OutputReconfigured { id } => {
+                let session = self.sessions.get_mut(&id)?;
+                session.diagnostics.output_reconfigurations = session
+                    .diagnostics
+                    .output_reconfigurations
+                    .saturating_add(1);
+                None
+            }
             BackendEvent::StateChanged { id, state } => {
                 let session = self.sessions.get_mut(&id)?;
                 session.state = state;

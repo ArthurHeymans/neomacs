@@ -42,6 +42,19 @@ impl NativeVideoFormatSupport {
     pub(super) const fn new(nv12: bool, p010: bool) -> Self {
         Self { nv12, p010 }
     }
+
+    const fn any(self) -> bool {
+        self.nv12 || self.p010
+    }
+}
+
+/// Bounded state machine for modifier-bearing output negotiation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DmaDrmNegotiation {
+    /// Try the modern modifier-bearing form, validating the chosen fourcc.
+    Preferred,
+    /// A modern sample was not importable; advertise only explicit formats.
+    LinearFallback,
 }
 
 enum WorkerCommand {
@@ -261,7 +274,8 @@ fn run_worker_inner(
         native_formats,
     } = startup;
     let uri = source_uri(source)?;
-    let caps = preferred_sink_caps(import_policy, native_formats);
+    let mut dma_drm_negotiation = DmaDrmNegotiation::Preferred;
+    let caps = preferred_sink_caps(import_policy, native_formats, dma_drm_negotiation);
     let appsink = gst_app::AppSink::builder()
         .caps(&caps)
         .max_buffers(2)
@@ -410,8 +424,36 @@ fn run_worker_inner(
         } else {
             appsink.try_pull_sample(gst::ClockTime::from_mseconds(10))
         };
-        if let Some(sample) = sample
-            && let Some(frame) = decode_sample(
+        if let Some(sample) = sample {
+            let caps = sample
+                .caps()
+                .ok_or_else(|| "decoded video sample has no caps".to_owned())?;
+            if let Some(rejected) = rejected_dma_drm_format(caps, native_formats)? {
+                if dma_drm_negotiation == DmaDrmNegotiation::LinearFallback {
+                    return Err(format!(
+                        "GStreamer kept unsupported DMA_DRM format {rejected:?} after fallback renegotiation"
+                    )
+                    .into());
+                }
+                dma_drm_negotiation = DmaDrmNegotiation::LinearFallback;
+                let fallback_caps =
+                    preferred_sink_caps(import_policy, native_formats, dma_drm_negotiation);
+                appsink.set_caps(Some(&fallback_caps));
+                if !sink_pad.push_event(gst::event::Reconfigure::new()) {
+                    return Err(format!(
+                        "GStreamer rejected fallback renegotiation after unsupported DMA_DRM format {rejected:?}"
+                    )
+                    .into());
+                }
+                output.event(BackendEvent::OutputReconfigured { id });
+                tracing::warn!(
+                    video_id = id.get(),
+                    drm_format = rejected,
+                    "renegotiating unsupported modifier-bearing video output to an explicit DMA-BUF format"
+                );
+                continue;
+            }
+            let Some(frame) = decode_sample(
                 sample,
                 shutting_down,
                 epoch,
@@ -420,7 +462,9 @@ fn run_worker_inner(
                 renderer_drm_device,
                 pipeline_drm_identity(&pipeline),
             )?
-        {
+            else {
+                continue;
+            };
             if !announced {
                 output.event(BackendEvent::Opened {
                     id,
@@ -618,20 +662,18 @@ fn source_uri(source: VideoSource) -> Result<String, String> {
 fn preferred_sink_caps(
     policy: FrameImportPolicy,
     native_formats: NativeVideoFormatSupport,
+    dma_drm_negotiation: DmaDrmNegotiation,
 ) -> gst::Caps {
     let mut builder = gst::Caps::builder_full();
     // Modern GStreamer includes a hardware/driver-specific modifier in the
     // `drm-format` string. Caps cannot express "these fourccs with any
-    // modifier", so the generic DMA_DRM form is safe only when the renderer
-    // accepts every native decoder format Neomacs supports. Otherwise a
-    // decoder can select the unsupported member and fail before the packed
-    // DMA-BUF fallback gets a chance to negotiate.
+    // modifier", so the generic form is followed by validation of the actual
+    // negotiated sample. An unsupported fourcc causes exactly one transition
+    // to the explicitly constrained linear/packed caps below.
     //
     // Requiring a bare "NV12" or "P010" drm-format would exclude the real
-    // modifier-bearing output advertised by VA decoders. Adapters supporting
-    // only one native format therefore use the explicit legacy linear form
-    // below until modifier capabilities can be enumerated end to end.
-    if native_formats.nv12 && native_formats.p010 {
+    // modifier-bearing output advertised by VA decoders.
+    if native_formats.any() && dma_drm_negotiation == DmaDrmNegotiation::Preferred {
         builder = builder.structure_with_features(
             gst::Structure::builder("video/x-raw")
                 .field("format", "DMA_DRM")
@@ -684,6 +726,34 @@ fn preferred_sink_caps(
     } else {
         builder.build()
     }
+}
+
+/// Return the modern DRM format that requires bounded fallback negotiation.
+///
+/// `None` means either legacy caps or a format the renderer can import. A
+/// syntactically valid but unknown fourcc is a negotiation miss rather than a
+/// terminal parser error, because the explicit lower tier may still play it.
+fn rejected_dma_drm_format(
+    caps: &gst::CapsRef,
+    native_formats: NativeVideoFormatSupport,
+) -> Result<Option<String>, String> {
+    let Some(structure) = caps.structure(0) else {
+        return Err("decoded video caps have no structure".to_owned());
+    };
+    if structure.get::<String>("format").as_deref() != Ok("DMA_DRM") {
+        return Ok(None);
+    }
+    let drm_format = structure
+        .get::<String>("drm-format")
+        .map_err(|error| format!("DMA_DRM caps have no drm-format: {error}"))?;
+    let parsed = ParsedDrmFormat::parse_unvalidated(&drm_format)?;
+    let supported = match frame_format_from_fourcc(parsed.fourcc) {
+        Ok(VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12)) => native_formats.nv12,
+        Ok(VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::P010)) => native_formats.p010,
+        Ok(VideoFrameFormat::Packed(_)) => true,
+        Err(_) => false,
+    };
+    Ok((!supported).then_some(drm_format))
 }
 
 /// Tell hardware decoders that downstream preserves per-plane video layout.
@@ -854,6 +924,14 @@ struct ParsedDrmFormat {
 
 impl ParsedDrmFormat {
     fn parse(value: &str) -> Result<Self, String> {
+        let parsed = Self::parse_unvalidated(value)?;
+        // Reject unknown layouts before constructing a VideoInfo whose plane
+        // contract the importer cannot uphold.
+        frame_format_from_fourcc(parsed.fourcc)?;
+        Ok(parsed)
+    }
+
+    fn parse_unvalidated(value: &str) -> Result<Self, String> {
         let (fourcc, modifier) = match value.split_once(':') {
             Some((fourcc, modifier)) => {
                 let modifier = modifier.strip_prefix("0x").unwrap_or(modifier);
@@ -867,14 +945,10 @@ impl ParsedDrmFormat {
             .as_bytes()
             .try_into()
             .map_err(|_| format!("invalid DRM fourcc in {value:?}"))?;
-        let parsed = Self {
+        Ok(Self {
             fourcc: u32::from_le_bytes(bytes),
             modifier,
-        };
-        // Reject unknown layouts before constructing a VideoInfo whose plane
-        // contract the importer cannot uphold.
-        frame_format_from_fourcc(parsed.fourcc)?;
-        Ok(parsed)
+        })
     }
 
     fn gstreamer_format(self) -> &'static str {
