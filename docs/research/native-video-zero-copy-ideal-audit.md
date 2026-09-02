@@ -449,8 +449,12 @@ fact and must only change when Media Foundation exposes evidence for it.
 The frame's typed semantic descriptor must also retain coded/visible size,
 crop, chroma siting, bit depth, range, matrix, primaries, transfer function,
 HDR metadata, presentation timestamp, duration, and playback epoch. Native
-handles stay inside platform modules. This prevents a “zero-copy” optimization
-from silently producing the wrong color, crop, frame after seek, or lifetime.
+handles stay inside platform modules. Decoder output also carries a distinct
+generation token: playback epochs reject frames from before a seek or loop,
+while output generations reject frames produced under superseded native caps
+or surface contracts. This prevents a “zero-copy” optimization from silently
+producing the wrong color, crop, frame after seek, negotiated representation,
+or lifetime.
 
 ### Direct YUV sampling
 
@@ -521,6 +525,17 @@ result channel below `target/neomacs-video-probe/`, so no binary fixture is
 tracked. The remaining steps are optional negotiated tiers that require
 representative hardware measurement; they should not replace the broad player
 backends speculatively.
+
+Decoder-output recovery is now a shared generation-checked protocol. An
+importer rejection identifies the exact frame format and output generation;
+the decoder may install only the immediate successor. The common scheduler
+then clears queued candidates, preserves the last successfully sampled frame,
+and drops late frames from the superseded generation before import or path
+accounting. The first successor frame completes the transition. Duplicate old
+requests are harmless, while a skipped generation or rejection of the final
+tier is terminal. This protects the macOS and Windows fallback adapters from
+the same asynchronous-output race as Linux without exposing native handles in
+the common system.
 
 1. Split decoder provenance, compositor import, and presentation path in the
    shared model; keep the existing public `VideoId` session API stable.
@@ -597,7 +612,10 @@ GPU bytes. Renderer-owned counters separately prove that a sampled frame was
 included in a submitted command buffer and that its swapchain image was handed
 to the window system. A failed native incarnation leaves a stable, typed
 diagnostic tombstone with its last path evidence and terminal
-`VideoCommandError`, even after its platform resources are closed. CPU upload
+`VideoCommandError`, even after its platform resources are closed. A live
+native incarnation and a detached tombstone are mutually exclusive under the
+stable `VideoId`, so a synchronous command error cannot manufacture duplicate
+session diagnostics. CPU upload
 compatibility use is additionally warned for every frame. Hardware decode
 state remains `Unknown` where the broad native player API does not report it.
 CPU/GPU duration, bandwidth, and power still require platform profilers and
@@ -624,8 +642,11 @@ renderer-device factory that conditionally enables the complete Linux external
 memory extension set. Modifier-bearing `DMA_DRM` is initially negotiated when
 a native YUV route exists, then the fixed sample format is validated before
 import. An incompatible fourcc triggers one typed, bounded renegotiation to
-explicit linear YUV/packed DMA-BUF caps and an upstream `RECONFIGURE`; a second
-incompatibility is terminal instead of becoming a per-frame retry loop. The
-device-factory seam contains the unavoidable wgpu-hal unsafe operation and
-falls back to ordinary device creation so optional video support cannot prevent
-editor startup.
+explicit linear YUV/packed DMA-BUF caps and an upstream `RECONFIGURE`. An
+actual Vulkan import rejection enters the same single transition. GStreamer
+buffers already queued under the old `DMA_DRM` caps are treated as superseded
+output instead of consuming the only retry; failure of the successor tier or
+expiry of its bounded negotiation window is terminal instead of becoming a
+per-frame retry loop. The device-factory seam contains the unavoidable
+wgpu-hal unsafe operation and falls back to ordinary device creation so
+optional video support cannot prevent editor startup.
