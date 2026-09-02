@@ -310,6 +310,21 @@ fn composition_display_text_treats_tabs_as_padding_markers() {
 }
 
 #[test]
+fn composition_display_text_treats_string_tabs_as_padding_markers() {
+    crate::test_utils::init_test_tracing();
+    // `describe-char-padded-string` passes the fourth `compose-string`
+    // argument as the string "\tA\t".  GNU registers its characters as the
+    // same static component vector as the explicit vector form, so both input
+    // representations must share one display-component decoder.
+    let components = Value::string("\tA\t");
+    let property = Value::cons(Value::cons(Value::fixnum(1), components), Value::NIL);
+
+    let display = composition_display_text_for_property(property).expect("valid composition");
+    assert_eq!(display.text(), "A");
+    assert_eq!(display.char_len(), 1);
+}
+
+#[test]
 fn find_composition_internal_returns_nil_when_no_composition() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();

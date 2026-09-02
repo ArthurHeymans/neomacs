@@ -329,10 +329,29 @@ impl CompositionDisplayComponent {
     }
 }
 
+fn composition_chars_display_text(chars: impl IntoIterator<Item = char>) -> String {
+    let mut text = String::new();
+    for ch in chars {
+        let component = if ch == '\t' {
+            CompositionDisplayComponent::PaddingMarker
+        } else {
+            CompositionDisplayComponent::Glyph(ch)
+        };
+        component.append_visible_text(&mut text);
+    }
+    text
+}
+
 fn composition_components_display_text(components: Value, relative_p: bool) -> Option<String> {
     match components.kind() {
-        ValueKind::Fixnum(code) => composition_char_from_code(code).map(|ch| ch.to_string()),
-        ValueKind::String => components.as_runtime_string_owned(),
+        ValueKind::Fixnum(code) => CompositionDisplayComponent::from_code(code).map(|component| {
+            let mut text = String::new();
+            component.append_visible_text(&mut text);
+            text
+        }),
+        ValueKind::String => components
+            .as_runtime_string_owned()
+            .map(|components| composition_chars_display_text(components.chars())),
         ValueKind::Cons => {
             let items = list_to_vec(&components)?;
             composition_items_display_text(&items, relative_p)
