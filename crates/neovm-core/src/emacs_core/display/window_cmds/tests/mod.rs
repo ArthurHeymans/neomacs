@@ -8840,6 +8840,30 @@ fn deleting_a_window_crosses_the_menu_bar_rebuild_boundary() {
     assert_ne!(ev.menu_bar_rebuild_generation(), initial);
 }
 
+#[test]
+fn only_nonselected_window_redisplay_crosses_the_menu_bar_rebuild_boundary() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let buffer = ev.buffers.create_buffer("window-redisplay-menu-boundary");
+    ev.buffers.set_current(buffer);
+    let frame_id = ev.frames.create_frame("F1", 800, 600, buffer);
+    ev.eval_str("(split-window-internal (selected-window) nil nil nil)")
+        .expect("split the selected window");
+    let windows = ev.frames.get(frame_id).expect("frame").window_list();
+    let selected = ev.frames.get(frame_id).expect("frame").selected_window;
+    let nonselected = windows
+        .into_iter()
+        .find(|window| *window != selected)
+        .expect("nonselected live window");
+
+    let initial = ev.menu_bar_rebuild_generation();
+    ev.mark_chrome_dirty_window(selected);
+    assert_eq!(ev.menu_bar_rebuild_generation(), initial);
+
+    ev.mark_chrome_dirty_window(nonselected);
+    assert_ne!(ev.menu_bar_rebuild_generation(), initial);
+}
+
 /// `recenter` walks backward `target_line` screen lines from point. Exercises
 /// the multi-line backward walk and the begv clamp -- the paths the 0-line /
 /// 1-line cases above miss.

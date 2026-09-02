@@ -8525,6 +8525,19 @@ impl Context {
     /// GNU `wset_update_mode_line`: a window-scoped event.
     pub fn mark_chrome_dirty_window(&mut self, window: WindowId) {
         self.chrome_dirty.mark_window(window);
+        // `wset_update_mode_line` ends in GNU `wset_redisplay`.  That helper
+        // raises `windows_or_buffers_changed` exactly when W is not the
+        // globally selected window (xdisp.c), which also makes
+        // `update_menu_bar` rebuild.  Preserve that selected/nonselected
+        // distinction here instead of making every window-local chrome event
+        // a broad menu invalidation.
+        let selected = self
+            .frames
+            .selected_frame()
+            .is_some_and(|frame| frame.selected_window == window);
+        if !selected {
+            self.request_menu_bar_rebuild(MenuBarRebuildReason::WindowsOrBuffersChanged);
+        }
     }
 
     /// Called by redisplay for each window whose chrome it actually generated.
