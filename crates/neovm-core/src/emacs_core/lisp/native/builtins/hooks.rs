@@ -1818,9 +1818,17 @@ pub(crate) fn set_window_configuration_with_options(
         }
     }
 
-    eval.redisplay();
-    // Run window-configuration-change-hook after restoring configuration.
-    let _ = builtin_run_window_configuration_change_hook(eval, vec![]);
+    // GNU `Fset_window_configuration` marks the frame for redisplay with
+    // `fset_redisplay`; it never performs redisplay (or invokes window-change
+    // hooks) synchronously.  Besides preserving the public primitive's phase
+    // boundary, deferral is essential while `read_minibuf` unwinds: the outer
+    // interactive command must get to install its target before the restored
+    // caller configuration can be published.  The typed reason crosses both
+    // Neomacs gates that correspond to GNU's `windows_or_buffers_changed`:
+    // general redisplay and menu preparation.  Window-change hooks remain
+    // owned by `redisplay_with_force`, where the live-vs-recorded frame state
+    // is compared exactly once per natural redisplay cycle.
+    eval.request_menu_bar_rebuild(super::eval::MenuBarRebuildReason::WindowsOrBuffersChanged);
     Ok(Value::T)
 }
 

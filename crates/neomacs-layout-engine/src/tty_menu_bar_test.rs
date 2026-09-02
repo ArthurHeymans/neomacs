@@ -337,9 +337,11 @@ fn menu_bar_item_cache_tracks_temporary_window_selection() {
 /// or contents of the active maps.  A map mutation can therefore retain the
 /// previous menu until an update-mode-lines / windows-or-buffers-changed
 /// trigger asks `update_menu_bar` to rebuild it.  GNU's public
-/// `set-window-buffer` records an ordinary window-buffer transition and the
-/// next redisplay rebuilds the menu for the incoming buffer.  A bare mutation
-/// of the active keymap within one buffer remains cached.
+/// `set-window-buffer` records an ordinary window-buffer transition, but GNU
+/// prepares menus before it promotes that frame flag during redisplay.  A
+/// selected-window buffer switch therefore retains the prepared menu unless a
+/// separate rebuild predicate is already pending.  A bare mutation of the
+/// active keymap within one buffer is cached for the same reason.
 #[test]
 fn menu_bar_item_cache_rebuilds_only_at_the_redisplay_invalidation_boundary() {
     let mut eval = Context::new();
@@ -392,10 +394,10 @@ fn menu_bar_item_cache_rebuilds_only_at_the_redisplay_invalidation_boundary() {
         vec!["Second".to_string(), "First".to_string()]
     );
 
-    // Buffer identity is not itself a cache key, but GNU's public
+    // Buffer identity is not itself a cache key.  GNU's public
     // set-window-buffer operation records FRAME_WINDOW_CHANGE for an ordinary
-    // window.  That transition makes the next redisplay rebuild the menu for
-    // the incoming buffer (verified against GNU Emacs in a real TTY).
+    // window, but prepare_menu_bars runs before that flag is promoted.  The
+    // selected window therefore keeps the already-prepared menu here.
     let buffer_b = eval.buffer_manager_mut().create_buffer("cache-b");
     let other_map = make_sparse_list_keymap();
     let other_menu = make_sparse_list_keymap();
@@ -411,6 +413,13 @@ fn menu_bar_item_cache_rebuilds_only_at_the_redisplay_invalidation_boundary() {
 
     eval.eval_str("(set-window-buffer (selected-window) \"cache-b\")")
         .expect("switch selected window to other buffer");
+    assert_eq!(
+        labels(&eval),
+        vec!["Second".to_string(), "First".to_string()]
+    );
+
+    eval.eval_str("(force-mode-line-update)")
+        .expect("cross a later GNU update-mode-lines boundary");
     assert_eq!(labels(&eval), vec!["Other".to_string()]);
 
     // GNU's third predicate is `window_buffer_changed`: whether the selected

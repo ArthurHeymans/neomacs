@@ -12930,7 +12930,7 @@ fn redisplay_does_not_copy_unrelated_current_buffer_point_into_selected_window()
 }
 
 #[test]
-fn save_window_excursion_restores_selected_window_point_and_requests_final_redisplay() {
+fn save_window_excursion_defers_restore_redisplay_until_the_next_cycle() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let buffer_id = ev.buffers.create_buffer("*scratch*");
@@ -12962,10 +12962,16 @@ fn save_window_excursion_restores_selected_window_point_and_requests_final_redis
     )
     .expect("save-window-excursion equivalent should evaluate");
 
-    // GNU answers (10 10) for this shape (emacs -Q --batch): the configuration
-    // never recorded point in the buffer that was current when it was saved, so
-    // the restore leaves the live window point alone
-    // (`src/window.c:7692-7733, 7978-7984`).
+    // GNU `Fset_window_configuration` calls `fset_redisplay`; it does not call
+    // `redisplay` itself (`src/window.c:7786,8050`).  Therefore only the
+    // explicit redisplay in the protected body has run so far.
+    assert_eq!(*redisplayed_points.borrow(), vec![10]);
+
+    // The restore is nevertheless dirty, and the next natural cycle publishes
+    // it.  The configuration never recorded point in the buffer that was
+    // current when it was saved, so the restore leaves the live point at 10
+    // (`src/window.c:7692-7733,7978-7984`).
+    ev.redisplay();
     assert_eq!(*redisplayed_points.borrow(), vec![10, 10]);
 }
 

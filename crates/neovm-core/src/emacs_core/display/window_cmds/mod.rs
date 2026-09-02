@@ -4273,8 +4273,10 @@ pub(crate) fn builtin_previous_window(
 /// GNU's `set_window_buffer` always calls `wset_update_mode_line`; changing an
 /// ordinary window's buffer additionally records `FRAME_WINDOW_CHANGE`, while
 /// minibuffer windows are deliberately excluded (window.c).  Keeping those
-/// cases as an enum prevents the ordinary-window menu invalidation from being
-/// lost when the structural mutation is performed through split Rust borrows.
+/// cases as an enum prevents the two effects from being collapsed when the
+/// structural mutation is performed through split Rust borrows.  The immediate
+/// chrome invalidation is published here; redisplay's window-hook snapshot owns
+/// the later ordinary-window change notification.
 #[must_use = "a window-buffer transition must publish its redisplay effects"]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum WindowBufferDisplayEffect {
@@ -4302,27 +4304,19 @@ impl WindowBufferDisplayEffect {
 
     fn apply(self, eval: &mut super::eval::Context) {
         let window = self.window();
-        let globally_selected = eval
-            .frames
-            .selected_frame()
-            .is_some_and(|frame| frame.selected_window == window);
-
         // `mark_chrome_dirty_window` is GNU's wset_update_mode_line /
         // wset_redisplay pair.  It already crosses the broad menu boundary for
         // every nonselected window, exactly as `wset_redisplay` does.
         eval.mark_chrome_dirty_window(window);
 
-        // For the globally selected window, wset_redisplay is only a local
-        // repaint.  An ordinary buffer transition still sets
-        // FRAME_WINDOW_CHANGE in GNU; the menu observed on the next redisplay
-        // is therefore rebuilt for the incoming buffer.  Neomacs represents
-        // that next-redisplay boundary directly with the generation instead
-        // of exposing GNU's two-phase C flags to the layout cache.
-        if globally_selected && matches!(self, Self::OrdinaryWindowChanged(_)) {
-            eval.request_menu_bar_rebuild(
-                super::eval::MenuBarRebuildReason::WindowsOrBuffersChanged,
-            );
-        }
+        // Do not promote `OrdinaryWindowChanged` directly to a menu rebuild.
+        // GNU records FRAME_WINDOW_CHANGE here, but `prepare_menu_bars` runs
+        // before `run_window_change_functions` observes that flag.  Therefore
+        // a selected-window switch between equally modified buffers retains
+        // the prepared menu (Buffer Menu and Ibuffer rely on this timing).
+        // Neomacs' redisplay-owned window-hook snapshot observes the ordinary
+        // buffer transition independently; this effect only publishes the
+        // immediate wset_update_mode_line / wset_redisplay obligation.
     }
 }
 

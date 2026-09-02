@@ -7748,6 +7748,91 @@ fn bootstrap_runtime_read_buffer_to_switch_tab_completes_existing_buffer() {
 }
 
 #[test]
+fn call_interactively_switch_to_buffer_does_not_redisplay_between_argument_read_and_invocation() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+
+    let setup = eval_rendered(
+        &mut eval,
+        r#"(let ((buf (get-buffer-create "buffer-completion-target.txt")))
+             (switch-to-buffer buf)
+             (switch-to-buffer "*scratch*")
+             (buffer-name (current-buffer)))"#,
+    );
+    assert_eq!(setup, "OK \"*scratch*\"");
+
+    let frame_id = eval
+        .frames
+        .selected_frame()
+        .map(|frame| frame.id)
+        .expect("selected frame");
+    let observed_outside_minibuffer = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let observed_in_redisplay = std::sync::Arc::clone(&observed_outside_minibuffer);
+    eval.redisplay_fn = Some(Box::new(move |eval: &mut Context| {
+        if eval.active_minibuffer_window_id().is_none() {
+            let name = eval
+                .frames
+                .get(frame_id)
+                .and_then(|frame| frame.selected_window())
+                .and_then(|window| window.buffer_id())
+                .and_then(|buffer| eval.buffers.get(buffer))
+                .map(|buffer| buffer.name_runtime_string_owned())
+                .unwrap_or_else(|| "<missing>".to_string());
+            observed_in_redisplay
+                .lock()
+                .expect("observation lock")
+                .push(name);
+        }
+    }));
+
+    let (tx, rx) = crossbeam_channel::unbounded();
+    for ch in "buffer-completion-tar".chars() {
+        tx.send(crate::keyboard::InputEvent::key_press(
+            crate::keyboard::KeyEvent::char(ch),
+        ))
+        .expect("queue buffer chars");
+    }
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::named(crate::keyboard::NamedKey::Tab),
+    ))
+    .expect("queue TAB");
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::named(crate::keyboard::NamedKey::Return),
+    ))
+    .expect("queue RET");
+    drop(tx);
+    eval.input_rx = Some(rx);
+    eval.command_loop.running = true;
+
+    eval.apply(
+        Value::symbol("call-interactively"),
+        vec![Value::symbol("switch-to-buffer")],
+    )
+    .expect("interactive switch-to-buffer");
+
+    assert_eq!(
+        observed_outside_minibuffer
+            .lock()
+            .expect("observation lock")
+            .as_slice(),
+        [] as [&str; 0],
+        "GNU does not redisplay the restored caller between interactive argument acquisition and target invocation"
+    );
+    assert_eq!(
+        eval.frames
+            .get(frame_id)
+            .and_then(|frame| frame.selected_window())
+            .and_then(|window| window.buffer_id())
+            .and_then(|buffer| eval.buffers.get(buffer))
+            .map(|buffer| buffer.name_runtime_string_owned())
+            .as_deref(),
+        Some("buffer-completion-target.txt"),
+        "the command must still install the completed target before returning"
+    );
+}
+
+#[test]
 fn bootstrap_runtime_message_logging_does_not_change_other_buffer_order() {
     crate::test_utils::init_test_tracing();
     let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
