@@ -2351,6 +2351,20 @@ pub(crate) enum CommandEventInputSource {
     Unavailable,
 }
 
+/// GNU passes `prev_event == t` to its low-level reader when
+/// INHERIT-INPUT-METHOD is nil.  Besides suppressing input methods, that asks a
+/// TTY reader to return transport bytes without applying
+/// `keyboard-coding-system`.
+pub(crate) fn tty_input_decoding_from_read_args(
+    args: &[Value],
+) -> crate::keyboard::TtyInputDecoding {
+    if args.get(1).is_some_and(|value| value.is_truthy()) {
+        crate::keyboard::TtyInputDecoding::KeyboardCodingSystem
+    } else {
+        crate::keyboard::TtyInputDecoding::RawBytes
+    }
+}
+
 pub(crate) trait KeyboardInputRuntime {
     fn pop_unread_command_event(&mut self) -> Option<Value>;
     fn peek_unread_command_event(&self) -> Option<Value>;
@@ -2390,7 +2404,11 @@ pub(crate) trait KeyboardInputRuntime {
     }
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn read_char_blocking(&mut self) -> Result<Value, Flow>;
-    fn read_char_with_timeout(&mut self, timeout: Option<Duration>) -> Result<Option<Value>, Flow>;
+    fn read_char_with_timeout(
+        &mut self,
+        timeout: Option<Duration>,
+        tty_input_decoding: crate::keyboard::TtyInputDecoding,
+    ) -> Result<Option<Value>, Flow>;
     fn read_key_sequence_blocking(
         &mut self,
         options: crate::keyboard::ReadKeySequenceOptions,
@@ -2457,8 +2475,12 @@ impl KeyboardInputRuntime for super::eval::Context {
         super::eval::Context::read_char(self)
     }
 
-    fn read_char_with_timeout(&mut self, timeout: Option<Duration>) -> Result<Option<Value>, Flow> {
-        super::eval::Context::read_char_with_timeout(self, timeout)
+    fn read_char_with_timeout(
+        &mut self,
+        timeout: Option<Duration>,
+        tty_input_decoding: crate::keyboard::TtyInputDecoding,
+    ) -> Result<Option<Value>, Flow> {
+        super::eval::Context::read_char_with_timeout_decoding(self, timeout, tty_input_decoding)
     }
 
     fn read_key_sequence_blocking(
@@ -3010,7 +3032,8 @@ pub(crate) fn finish_read_char_interactive_in_runtime(
     match runtime.command_event_input_source() {
         CommandEventInputSource::Runtime => {
             let timeout = parse_optional_read_seconds_arg(args.get(2))?;
-            let Some(event) = runtime.read_char_with_timeout(timeout)? else {
+            let tty_input_decoding = tty_input_decoding_from_read_args(args);
+            let Some(event) = runtime.read_char_with_timeout(timeout, tty_input_decoding)? else {
                 return Ok(Value::NIL);
             };
             let seconds_is_nil_or_omitted = args.get(2).is_none_or(|v| v.is_nil());

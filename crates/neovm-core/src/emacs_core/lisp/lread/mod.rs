@@ -871,7 +871,8 @@ pub(crate) fn finish_read_event_interactive_in_runtime(
     match runtime.command_event_input_source() {
         super::reader::CommandEventInputSource::Runtime => {
             let timeout = super::reader::parse_optional_read_seconds_arg(args.get(2))?;
-            let Some(event) = runtime.read_char_with_timeout(timeout)? else {
+            let tty_input_decoding = super::reader::tty_input_decoding_from_read_args(args);
+            let Some(event) = runtime.read_char_with_timeout(timeout, tty_input_decoding)? else {
                 return Ok(Value::NIL);
             };
             let seconds_is_nil_or_omitted = args.get(2).is_none_or(|v| v.is_nil());
@@ -918,11 +919,13 @@ pub(crate) fn finish_read_char_exclusive_interactive_in_runtime(
     match runtime.command_event_input_source() {
         super::reader::CommandEventInputSource::Runtime => {
             let timeout = super::reader::parse_optional_read_seconds_arg(args.get(2))?;
+            let tty_input_decoding = super::reader::tty_input_decoding_from_read_args(args);
             let deadline = timeout.map(|timeout| std::time::Instant::now() + timeout);
             loop {
                 let remaining = deadline
                     .map(|deadline| deadline.saturating_duration_since(std::time::Instant::now()));
-                let Some(event) = runtime.read_char_with_timeout(remaining)? else {
+                let Some(event) = runtime.read_char_with_timeout(remaining, tty_input_decoding)?
+                else {
                     return Ok(Value::NIL);
                 };
                 let seconds_is_nil_or_omitted = args.get(2).is_none_or(|v| v.is_nil());

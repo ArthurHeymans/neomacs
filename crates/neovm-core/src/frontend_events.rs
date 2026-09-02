@@ -197,7 +197,9 @@ const fn special(
 /// an explicit choice about command visibility and scheduler behavior.
 fn semantics(event: &InputEvent) -> FrontendEventSemantics {
     match event {
-        InputEvent::RawTtyBytes { .. } | InputEvent::TtyCharacter { .. } => command(),
+        InputEvent::RawTtyBytes { .. }
+        | InputEvent::TtyByte { .. }
+        | InputEvent::TtyCharacter { .. } => command(),
         InputEvent::KeyPress { .. } => command(),
         InputEvent::MousePress { .. } => command(),
         InputEvent::MouseRelease { .. } => command(),
@@ -360,6 +362,10 @@ mod tests {
 
         let command_events = [
             InputEvent::raw_tty_bytes(vec![0x1b], 0),
+            InputEvent::TtyByte {
+                byte: b'k',
+                target: crate::keyboard::TtyInputTarget::SelectedFrame,
+            },
             InputEvent::TtyCharacter {
                 character: crate::emacs_core::emacs_char::EmacsChar::from_char('k'),
                 target: crate::keyboard::TtyInputTarget::SelectedFrame,

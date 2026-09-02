@@ -48,27 +48,33 @@ fn presented_pointer_preserves_phase_and_installs_snapshot_posn_string() {
     );
 
     let press = eval
-        .handle_read_char_input_event(InputEvent::PresentedPointer {
-            presentation,
-            interaction,
-            pressed: true,
-            button: 1,
-            x: 24.0,
-            y: 8.0,
-            emacs_frame_id: frame.0,
-        })
+        .handle_read_char_input_event(
+            InputEvent::PresentedPointer {
+                presentation,
+                interaction,
+                pressed: true,
+                button: 1,
+                x: 24.0,
+                y: 8.0,
+                emacs_frame_id: frame.0,
+            },
+            TtyInputDecoding::KeyboardCodingSystem,
+        )
         .expect("press conversion")
         .expect("press event");
     let release = eval
-        .handle_read_char_input_event(InputEvent::PresentedPointer {
-            presentation,
-            interaction,
-            pressed: false,
-            button: 1,
-            x: 24.0,
-            y: 8.0,
-            emacs_frame_id: frame.0,
-        })
+        .handle_read_char_input_event(
+            InputEvent::PresentedPointer {
+                presentation,
+                interaction,
+                pressed: false,
+                button: 1,
+                x: 24.0,
+                y: 8.0,
+                emacs_frame_id: frame.0,
+            },
+            TtyInputDecoding::KeyboardCodingSystem,
+        )
         .expect("release conversion")
         .expect("release event");
 
@@ -274,23 +280,29 @@ fn presented_region_drives_exact_gnu_mouse_position_and_rejects_stale_observatio
     .unwrap();
 
     assert_eq!(
-        eval.handle_read_char_input_event(InputEvent::PresentedRegion {
-            presentation: 1,
-            hit,
-            x: 22.0,
-            y: 12.0,
-            target_frame_id: frame_id.0,
-        })
+        eval.handle_read_char_input_event(
+            InputEvent::PresentedRegion {
+                presentation: 1,
+                hit,
+                x: 22.0,
+                y: 12.0,
+                target_frame_id: frame_id.0,
+            },
+            TtyInputDecoding::KeyboardCodingSystem,
+        )
         .unwrap(),
         None
     );
-    eval.handle_read_char_input_event(InputEvent::PresentedRegion {
-        presentation: 0,
-        hit: None,
-        x: 22.0,
-        y: 12.0,
-        target_frame_id: frame_id.0,
-    })
+    eval.handle_read_char_input_event(
+        InputEvent::PresentedRegion {
+            presentation: 0,
+            hit: None,
+            x: 22.0,
+            y: 12.0,
+            target_frame_id: frame_id.0,
+        },
+        TtyInputDecoding::KeyboardCodingSystem,
+    )
     .unwrap();
     assert_eq!(
         eval.command_loop
@@ -304,13 +316,16 @@ fn presented_region_drives_exact_gnu_mouse_position_and_rejects_stale_observatio
     );
 
     let event = eval
-        .handle_read_char_input_event(InputEvent::MousePress {
-            button: MouseButton::Left,
-            x: 22.0,
-            y: 12.0,
-            modifiers: Modifiers::none(),
-            target_frame_id: frame_id.0,
-        })
+        .handle_read_char_input_event(
+            InputEvent::MousePress {
+                button: MouseButton::Left,
+                x: 22.0,
+                y: 12.0,
+                modifiers: Modifiers::none(),
+                target_frame_id: frame_id.0,
+            },
+            TtyInputDecoding::KeyboardCodingSystem,
+        )
         .unwrap()
         .unwrap();
     let event = crate::emacs_core::value::list_to_vec(&event).unwrap();
@@ -356,22 +371,28 @@ fn presented_region_drives_exact_gnu_mouse_position_and_rejects_stale_observatio
         40.0,
     ))
     .unwrap();
-    eval.handle_read_char_input_event(InputEvent::PresentedRegion {
-        presentation: 1,
-        hit: divider_hit,
-        x: 185.0,
-        y: 40.0,
-        target_frame_id: frame_id.0,
-    })
-    .unwrap();
-    let divider_event = eval
-        .handle_read_char_input_event(InputEvent::MousePress {
-            button: MouseButton::Left,
+    eval.handle_read_char_input_event(
+        InputEvent::PresentedRegion {
+            presentation: 1,
+            hit: divider_hit,
             x: 185.0,
             y: 40.0,
-            modifiers: Modifiers::none(),
             target_frame_id: frame_id.0,
-        })
+        },
+        TtyInputDecoding::KeyboardCodingSystem,
+    )
+    .unwrap();
+    let divider_event = eval
+        .handle_read_char_input_event(
+            InputEvent::MousePress {
+                button: MouseButton::Left,
+                x: 185.0,
+                y: 40.0,
+                modifiers: Modifiers::none(),
+                target_frame_id: frame_id.0,
+            },
+            TtyInputDecoding::KeyboardCodingSystem,
+        )
         .unwrap()
         .unwrap();
     let divider_event = crate::emacs_core::value::list_to_vec(&divider_event).unwrap();
@@ -387,13 +408,16 @@ fn presented_region_drives_exact_gnu_mouse_position_and_rejects_stale_observatio
         .kboard
         .presented_mouse_observation = None;
     let event = eval
-        .handle_read_char_input_event(InputEvent::MousePress {
-            button: MouseButton::Left,
-            x: 22.0,
-            y: 12.0,
-            modifiers: Modifiers::none(),
-            target_frame_id: frame_id.0,
-        })
+        .handle_read_char_input_event(
+            InputEvent::MousePress {
+                button: MouseButton::Left,
+                x: 22.0,
+                y: 12.0,
+                modifiers: Modifiers::none(),
+                target_frame_id: frame_id.0,
+            },
+            TtyInputDecoding::KeyboardCodingSystem,
+        )
         .unwrap()
         .unwrap();
     let event = crate::emacs_core::value::list_to_vec(&event).unwrap();

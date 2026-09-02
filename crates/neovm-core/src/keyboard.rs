@@ -716,6 +716,18 @@ struct ReadCharEvent {
     command_key_recording: CommandKeyRecording,
 }
 
+/// Whether a TTY read returns the bytes supplied by the terminal or characters
+/// decoded through `keyboard-coding-system`.
+///
+/// GNU represents this distinction with the magic `prev_event == t` sentinel
+/// passed to `read_char`.  Making it an enum keeps raw Lisp `read-event` reads
+/// distinct from command/key-sequence reads at compile time.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum TtyInputDecoding {
+    RawBytes,
+    KeyboardCodingSystem,
+}
+
 #[derive(Clone, Copy, Debug)]
 enum CommandKeyRecording {
     Append,
@@ -1136,13 +1148,21 @@ impl TtyInputTarget {
 pub enum InputEvent {
     /// Uninterpreted bytes from a Unix TTY.
     ///
-    /// The evaluator expands this transport event through the selected
-    /// keyboard coding system before key-sequence translation.
+    /// The evaluator expands this transport batch into ordered
+    /// [`Self::TtyByte`] events.  The active read policy then either preserves
+    /// each byte or decodes it through the selected keyboard coding system.
     RawTtyBytes {
         bytes: Vec<u8>,
         target: TtyInputTarget,
     },
-    /// One character produced by expanding a [`Self::RawTtyBytes`] batch.
+    /// One still-undecoded byte produced by expanding a
+    /// [`Self::RawTtyBytes`] transport batch.
+    ///
+    /// Keeping bytes queued in this form lets each read decide whether to
+    /// preserve or decode them, like GNU's terminal event queue.
+    TtyByte { byte: u8, target: TtyInputTarget },
+    /// One character produced by decoding one or more [`Self::TtyByte`]
+    /// events through `keyboard-coding-system`.
     /// This evaluator-internal event keeps decoded characters in the same
     /// ordered frontend queue as every other input fact.
     TtyCharacter {
@@ -1330,6 +1350,7 @@ impl InputEvent {
     pub fn requests_default_quit(&self) -> bool {
         match self {
             Self::RawTtyBytes { bytes, .. } => bytes.contains(&0x07),
+            Self::TtyByte { byte, .. } => *byte == 0x07,
             Self::TtyCharacter { character, .. } => character.code() == 0x07,
             Self::KeyPress { key, .. } => key.is_default_quit_char(),
             _ => false,
@@ -4807,6 +4828,7 @@ impl crate::emacs_core::eval::Context {
     fn handle_read_char_input_event(
         &mut self,
         event: InputEvent,
+        tty_input_decoding: TtyInputDecoding,
     ) -> Result<Option<Value>, crate::emacs_core::error::Flow> {
         if crate::frontend_events::interrupts(&event)
             && self.interrupt_for_input_event_if_requested(event.clone())?
@@ -4817,23 +4839,47 @@ impl crate::emacs_core::eval::Context {
         match event {
             InputEvent::RawTtyBytes { bytes, target } => {
                 self.route_tty_keyboard_input(target);
-                let coding_system = crate::emacs_core::intern::resolve_sym(
-                    self.coding_systems.keyboard_coding_sym(),
-                )
-                .to_owned();
-                let eol_conversion = self.eol_conversion();
-                let characters = self.command_loop.keyboard.kboard.tty_input_decoder.push(
-                    &bytes,
-                    &coding_system,
-                    eol_conversion,
-                );
-                for character in characters.into_iter().rev() {
+                for byte in bytes.into_iter().rev() {
                     self.command_loop
                         .keyboard
                         .pending_input_events
-                        .push_front(InputEvent::TtyCharacter { character, target });
+                        .push_front(InputEvent::TtyByte { byte, target });
                 }
                 Ok(None)
+            }
+            InputEvent::TtyByte { byte, target } => {
+                self.route_tty_keyboard_input(target);
+                match tty_input_decoding {
+                    TtyInputDecoding::RawBytes => {
+                        self.clear_current_message_for_keyboard_input();
+                        let raw_event = Value::fixnum(i64::from(byte));
+                        if self.event_is_quit_char(&raw_event) {
+                            self.request_quit_from_keyboard_input();
+                        }
+                        let emacs_event = self.translate_fresh_character_event(raw_event);
+                        self.command_loop.store_kbd_macro_event(emacs_event);
+                        Ok(Some(emacs_event))
+                    }
+                    TtyInputDecoding::KeyboardCodingSystem => {
+                        let coding_system = crate::emacs_core::intern::resolve_sym(
+                            self.coding_systems.keyboard_coding_sym(),
+                        )
+                        .to_owned();
+                        let eol_conversion = self.eol_conversion();
+                        let characters = self.command_loop.keyboard.kboard.tty_input_decoder.push(
+                            &[byte],
+                            &coding_system,
+                            eol_conversion,
+                        );
+                        for character in characters.into_iter().rev() {
+                            self.command_loop
+                                .keyboard
+                                .pending_input_events
+                                .push_front(InputEvent::TtyCharacter { character, target });
+                        }
+                        Ok(None)
+                    }
+                }
             }
             InputEvent::TtyCharacter { character, target } => {
                 self.route_tty_keyboard_input(target);
@@ -5234,20 +5280,22 @@ impl crate::emacs_core::eval::Context {
     fn read_char_event_with_timeout(
         &mut self,
         timeout: Option<std::time::Duration>,
+        tty_input_decoding: TtyInputDecoding,
     ) -> Result<Option<ReadCharEvent>, crate::emacs_core::error::Flow> {
-        self.read_char_event_with_timeout_policy(timeout, false)
+        self.read_char_event_with_timeout_policy(timeout, false, tty_input_decoding)
     }
 
     fn read_char_event_with_timeout_for_key_sequence(
         &mut self,
     ) -> Result<Option<ReadCharEvent>, crate::emacs_core::error::Flow> {
-        self.read_char_event_with_timeout_policy(None, true)
+        self.read_char_event_with_timeout_policy(None, true, TtyInputDecoding::KeyboardCodingSystem)
     }
 
     fn read_char_event_with_timeout_policy(
         &mut self,
         timeout: Option<std::time::Duration>,
         command_input: bool,
+        tty_input_decoding: TtyInputDecoding,
     ) -> Result<Option<ReadCharEvent>, crate::emacs_core::error::Flow> {
         let deadline = timeout.map(|timeout| std::time::Instant::now() + timeout);
         let mut idle_auto_save_deadline = None;
@@ -5270,7 +5318,7 @@ impl crate::emacs_core::eval::Context {
                 self.redisplay();
             }
             if let Some(event) = self.drain_ready_input_event_for_read_char() {
-                if let Some(value) = self.handle_read_char_input_event(event)? {
+                if let Some(value) = self.handle_read_char_input_event(event, tty_input_decoding)? {
                     return Ok(Some(ReadCharEvent::fresh_input_method_candidate(value)));
                 }
                 continue;
@@ -5310,7 +5358,7 @@ impl crate::emacs_core::eval::Context {
             }
 
             if let Some(event) = self.drain_ready_input_event_for_read_char() {
-                if let Some(value) = self.handle_read_char_input_event(event)? {
+                if let Some(value) = self.handle_read_char_input_event(event, tty_input_decoding)? {
                     return Ok(Some(ReadCharEvent::fresh_input_method_candidate(value)));
                 }
                 continue;
@@ -5461,7 +5509,16 @@ impl crate::emacs_core::eval::Context {
         &mut self,
         timeout: Option<std::time::Duration>,
     ) -> Result<Option<Value>, crate::emacs_core::error::Flow> {
-        let Some(read_event) = self.read_char_event_with_timeout(timeout)? else {
+        self.read_char_with_timeout_decoding(timeout, TtyInputDecoding::KeyboardCodingSystem)
+    }
+
+    pub(crate) fn read_char_with_timeout_decoding(
+        &mut self,
+        timeout: Option<std::time::Duration>,
+        tty_input_decoding: TtyInputDecoding,
+    ) -> Result<Option<Value>, crate::emacs_core::error::Flow> {
+        let Some(read_event) = self.read_char_event_with_timeout(timeout, tty_input_decoding)?
+        else {
             return Ok(None);
         };
         if timeout.is_none() {

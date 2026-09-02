@@ -747,6 +747,42 @@ fn read_event_returns_nil() {
 }
 
 #[test]
+fn read_event_without_inherited_input_method_preserves_raw_tty_bytes() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+    tx.send(crate::keyboard::InputEvent::raw_tty_bytes(
+        "é".as_bytes().to_vec(),
+        0,
+    ))
+    .expect("queue UTF-8 terminal bytes");
+
+    let first = builtin_read_event(&mut ev, vec![]).expect("read first raw terminal event");
+    let second = builtin_read_event(&mut ev, vec![]).expect("read second raw terminal event");
+
+    assert_eq!([first, second], [Value::fixnum(0xc3), Value::fixnum(0xa9)]);
+}
+
+#[test]
+fn read_event_with_inherited_input_method_decodes_tty_bytes() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+    tx.send(crate::keyboard::InputEvent::raw_tty_bytes(
+        "é".as_bytes().to_vec(),
+        0,
+    ))
+    .expect("queue UTF-8 terminal bytes");
+
+    let event = builtin_read_event(&mut ev, vec![Value::NIL, Value::T])
+        .expect("read keyboard-decoded terminal event");
+
+    assert_eq!(event, Value::fixnum('é' as i64));
+}
+
+#[test]
 fn read_event_consumes_executing_keyboard_macro_event_without_input_receiver() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

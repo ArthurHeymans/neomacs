@@ -4264,6 +4264,7 @@ impl KeyboardInputRuntime for BlockingKeySequenceRuntime {
     fn read_char_with_timeout(
         &mut self,
         _timeout: Option<std::time::Duration>,
+        _tty_input_decoding: crate::keyboard::TtyInputDecoding,
     ) -> Result<Option<Value>, Flow> {
         unreachable!("read-char should not be used in this test runtime")
     }
