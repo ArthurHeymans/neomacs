@@ -81,7 +81,7 @@ fn run_teardown_and_collect(
     .expect("activate minibuffer window");
 
     // Outermost teardown: depth_after_pop == 0 (no nested minibuffer remains).
-    let result = teardown_minibuffer_level_in_state(
+    let outcome = teardown_minibuffer_level_in_state(
         &mut ev.frames,
         &mut ev.buffers,
         &mut ev.minibuffer_selected_window,
@@ -91,7 +91,11 @@ fn run_teardown_and_collect(
         saved,
         || Ok(Value::NIL),
     );
-    assert!(result.is_ok(), "teardown inactive-mode hook should succeed");
+    assert!(
+        outcome.inactive_mode_result.is_ok(),
+        "teardown inactive-mode hook should succeed"
+    );
+    outcome.window_restore.apply(ev);
 
     let height_after = ev
         .frames

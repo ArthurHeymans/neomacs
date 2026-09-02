@@ -425,6 +425,41 @@ struct ActiveMinibufferWindowState {
     previous_active_minibuffer_window: Option<crate::window::WindowId>,
 }
 
+/// Display-side effect produced when GNU's `minibuffer_unwind` restores the
+/// inactive minibuffer buffer.
+///
+/// The window-tree mutation is deliberately performed through split borrows
+/// of `FrameManager` and `BufferManager`, where the evaluator's redisplay
+/// generations are unavailable.  Returning a typed, must-use effect prevents
+/// that lower-level mutation from silently dropping the corresponding
+/// `wset_update_mode_line` / `wset_redisplay` event.
+#[must_use = "a restored minibuffer window must invalidate its display chrome"]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MinibufferWindowRestoreEffect {
+    NoBufferRestored,
+    BufferRestored(crate::window::WindowId),
+}
+
+impl MinibufferWindowRestoreEffect {
+    fn apply(self, eval: &mut super::eval::Context) {
+        if let Self::BufferRestored(window) = self {
+            // GNU `set_window_buffer` calls `wset_update_mode_line`; after
+            // `read_minibuf_unwind` has restored the caller's selection this
+            // mini-window is normally nonselected, so `wset_redisplay` also
+            // raises `windows_or_buffers_changed` and rebuilds the menu bar.
+            eval.mark_chrome_dirty_window(window);
+        }
+    }
+}
+
+/// Structural teardown and the display invalidation it obligates its caller
+/// to apply after releasing the split frame/buffer borrows.
+#[must_use = "minibuffer teardown effects must be applied before returning"]
+struct MinibufferTeardownOutcome {
+    inactive_mode_result: EvalResult,
+    window_restore: MinibufferWindowRestoreEffect,
+}
+
 /// How the recursive edit completed, recorded before the session unwind runs.
 /// `Pending` covers failures in mode/setup hooks before recursive edit starts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -638,12 +673,15 @@ fn restore_minibuffer_window_in_state(
     minibuffer_selected_window: &mut Option<crate::window::WindowId>,
     active_minibuffer_window: &mut Option<crate::window::WindowId>,
     saved: ActiveMinibufferWindowState,
-) {
+) -> MinibufferWindowRestoreEffect {
+    let mut window_restore = MinibufferWindowRestoreEffect::NoBufferRestored;
     if let Some(frame) = frames.get_mut(saved.minibuffer_frame.0) {
         if let Some(window) = frame.find_window_mut(saved.minibuffer_window_id)
             && let Some(prev_buffer_id) = saved.previous_minibuffer_buffer
         {
             window.set_buffer(prev_buffer_id);
+            window_restore =
+                MinibufferWindowRestoreEffect::BufferRestored(saved.minibuffer_window_id);
             debug_assert_eq!(window.buffer_id(), Some(prev_buffer_id));
             crate::window::window_markers::attach_window_position_markers(buffers, window);
             crate::window::window_markers::set_window_start_with_marker(
@@ -671,6 +709,7 @@ fn restore_minibuffer_window_in_state(
     }
     *minibuffer_selected_window = saved.previous_minibuffer_selected_window;
     *active_minibuffer_window = saved.previous_active_minibuffer_window;
+    window_restore
 }
 
 fn erase_expired_minibuffer_buffer_in_state(
@@ -721,7 +760,7 @@ fn teardown_minibuffer_level_in_state(
     depth_after_pop: usize,
     saved: ActiveMinibufferWindowState,
     run_inactive_mode: impl FnOnce() -> EvalResult,
-) -> EvalResult {
+) -> MinibufferTeardownOutcome {
     let teardown_frame_id = saved.minibuffer_frame.0;
 
     // (R1) Completely reset the expired *Minibuf-N* (overlays + text), then run
@@ -730,7 +769,7 @@ fn teardown_minibuffer_level_in_state(
     let inactive_mode_result = run_inactive_mode();
 
     // (R2) Restore the mini-window's buffer to *Minibuf-0* / the prev buffer.
-    restore_minibuffer_window_in_state(
+    let window_restore = restore_minibuffer_window_in_state(
         frames,
         buffers,
         minibuffer_selected_window,
@@ -746,7 +785,10 @@ fn teardown_minibuffer_level_in_state(
         frames.force_resize_mini_window_to_one_line(teardown_frame_id);
     }
 
-    inactive_mode_result
+    MinibufferTeardownOutcome {
+        inactive_mode_result,
+        window_restore,
+    }
 }
 
 /// Execute the typed cleanup registered immediately after minibuffer-window
@@ -781,7 +823,7 @@ pub(crate) fn unwind_minibuffer_session(
         shared.minibuffers.abort_minibuffer();
     }
 
-    let inactive_mode_result = if let Some(saved) = state.active_window_state {
+    let teardown_outcome = if let Some(saved) = state.active_window_state {
         let _ = shared.buffers.switch_current_unrecorded(state.minibuf_id);
         let shared_ptr = std::ptr::NonNull::from(&mut *shared);
         teardown_minibuffer_level_in_state(
@@ -801,8 +843,13 @@ pub(crate) fn unwind_minibuffer_session(
         )
     } else {
         erase_expired_minibuffer_buffer_in_state(&mut shared.buffers, state.minibuf_id);
-        run_minibuffer_mode_if_bound(shared, "minibuffer-inactive-mode")
+        MinibufferTeardownOutcome {
+            inactive_mode_result: run_minibuffer_mode_if_bound(shared, "minibuffer-inactive-mode"),
+            window_restore: MinibufferWindowRestoreEffect::NoBufferRestored,
+        }
     };
+    teardown_outcome.window_restore.apply(shared);
+    let inactive_mode_result = teardown_outcome.inactive_mode_result;
 
     if let Some(buffer_id) = state.saved_buffer_id
         && shared.buffers.get(buffer_id).is_some()
@@ -912,13 +959,14 @@ fn run_minibuffer_mode_if_bound(eval: &mut super::eval::Context, mode: &str) -> 
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn restore_minibuffer_window(eval: &mut super::eval::Context, saved: ActiveMinibufferWindowState) {
-    restore_minibuffer_window_in_state(
+    let effect = restore_minibuffer_window_in_state(
         &mut eval.frames,
         &mut eval.buffers,
         &mut eval.minibuffer_selected_window,
         &mut eval.active_minibuffer_window,
         saved,
-    )
+    );
+    effect.apply(eval);
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up

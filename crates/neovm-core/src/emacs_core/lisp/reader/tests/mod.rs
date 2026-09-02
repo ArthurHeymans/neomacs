@@ -1931,6 +1931,8 @@ fn activate_minibuffer_window_switches_displayed_buffer_and_restores_state() {
         Some(previous_selected_window)
     );
 
+    let generation_while_active = ev.menu_bar_rebuild_generation();
+
     restore_minibuffer_window(&mut ev, saved);
 
     let frame = ev
@@ -1946,6 +1948,11 @@ fn activate_minibuffer_window_switches_displayed_buffer_and_restores_state() {
     );
     assert_eq!(ev.active_minibuffer_window, None);
     assert_eq!(ev.minibuffer_selected_window, None);
+    assert_ne!(
+        ev.menu_bar_rebuild_generation(),
+        generation_while_active,
+        "GNU minibuffer_unwind restores the minibuffer buffer after the caller is selected, so wset_redisplay must raise the global menu rebuild boundary"
+    );
 }
 
 #[test]
