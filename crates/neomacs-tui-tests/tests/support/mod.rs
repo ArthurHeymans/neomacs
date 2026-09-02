@@ -192,8 +192,8 @@ pub fn eval_expression(gnu: &mut TuiSession, neo: &mut TuiSession, expression: &
     let prompt_ready = |grid: &[String]| grid.last().is_some_and(|row| row.contains("Eval:"));
     wait_for_both(gnu, neo, Duration::from_secs(8), prompt_ready);
     read_both(gnu, neo, Duration::from_millis(300));
-    gnu.send(expression.as_bytes());
-    neo.send(expression.as_bytes());
+    gnu.paste(expression);
+    neo.paste(expression);
     send_both(gnu, neo, "RET");
 }
 
@@ -202,7 +202,7 @@ pub fn eval_expression_one(session: &mut TuiSession, expression: &str) {
     let prompt_ready = |grid: &[String]| grid.last().is_some_and(|row| row.contains("Eval:"));
     session.read_until(Duration::from_secs(8), prompt_ready);
     session.read(Duration::from_millis(300));
-    session.send(expression.as_bytes());
+    session.paste(expression);
     session.send_key("RET");
 }
 

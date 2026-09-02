@@ -122,27 +122,26 @@ fn frame_visibility_via_iconify_frame() {
 fn child_frame_visibility_lifecycle() {
     let (mut gnu, mut neo) = boot_pair("");
 
-    // Create a child frame
+    // Exercise the complete lifecycle in one expression so the temporary
+    // frame cannot become the input frame for a later M-: invocation.
     eval_expression(
         &mut gnu,
         &mut neo,
-        "(let ((cf (make-frame '((parent-frame . (selected-frame)))))) \
-          (prin1-to-string (frame-live-p cf)))",
+        "(let ((cf (make-frame `((parent-frame . ,(selected-frame)) \
+                                  (width . 30) (height . 5) \
+                                  (minibuffer . nil))))) \
+          (unwind-protect \
+              (progn \
+                (set-frame-parameter cf 'visibility nil) \
+                (prin1-to-string \
+                  (list (frame-live-p cf) (frame-visible-p cf)))) \
+            (delete-frame cf)))",
     );
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(10), |grid| {
-        grid.iter().rev().take(4).any(|row| row.contains("t"))
-    });
-
-    // Create child frame and check visibility
-    eval_expression(
-        &mut gnu,
-        &mut neo,
-        "(let ((cf (make-frame '((parent-frame . (selected-frame)))))) \
-          (set-frame-parameter cf 'visibility nil) \
-          (prin1-to-string (frame-visible-p cf)))",
-    );
-    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(10), |grid| {
-        grid.iter().rev().take(4).any(|row| row.contains("nil"))
+        grid.iter()
+            .rev()
+            .take(4)
+            .any(|row| row.contains("(t nil)"))
     });
     assert_pair_exact_display("child_frame_visibility_lifecycle", &gnu, &neo);
 }

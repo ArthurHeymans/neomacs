@@ -654,6 +654,24 @@ impl TuiSession {
         self.recording.input(data);
     }
 
+    /// Paste text through the terminal's bracketed-paste protocol.
+    ///
+    /// This is intentionally distinct from [`Self::send`]: control bytes in
+    /// pasted text are input data, while the same bytes sent as keystrokes can
+    /// invoke commands.  Both editors enable bracketed paste during terminal
+    /// startup, so requiring that mode here catches callers that paste before
+    /// the terminal handshake has completed.
+    pub fn paste(&mut self, text: &str) {
+        assert!(
+            self.screen().bracketed_paste(),
+            "{} has not enabled terminal bracketed-paste mode",
+            self.name
+        );
+        self.send(b"\x1b[200~");
+        self.send(text.as_bytes());
+        self.send(b"\x1b[201~");
+    }
+
     /// Like [`TuiSession::read`] but keep reading past idle gaps until
     /// `predicate` returns true on some row of the rendered grid, or
     /// `max_timeout` elapses. Useful when a command's legitimate

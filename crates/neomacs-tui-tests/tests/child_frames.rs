@@ -271,8 +271,9 @@ fn delete_child_frame_restores_parent() {
 
     // Insert text into the parent buffer near the bottom, outside the
     // child frame's default area (rows 3-7).
-    let insert_expr = r#"(goto-char (point-max))
-        (insert "\nPARENT TEXT SURVIVES\n")"#;
+    let insert_expr = r#"(progn
+        (goto-char (point-max))
+        (insert "\nPARENT TEXT SURVIVES\n"))"#;
     eval_expression(&mut gnu, &mut neo, insert_expr);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
