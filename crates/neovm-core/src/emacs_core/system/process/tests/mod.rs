@@ -618,6 +618,124 @@ fn async_shell_command_wrappers_use_dynamic_shell_variables_like_gnu() {
 
 // -- ProcessManager unit tests ------------------------------------------
 
+struct BrokenPipeWriter;
+
+impl std::io::Write for BrokenPipeWriter {
+    fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+        Err(std::io::ErrorKind::BrokenPipe.into())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn epipe_closes_the_exact_selected_pty_writer() {
+    crate::test_utils::init_test_tracing();
+    let mut pm = ProcessManager::new();
+    let id = pm.create_process(
+        "pty-epipe".into(),
+        Value::NIL,
+        "prog".into(),
+        vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
+    pm.processes
+        .get_mut(&id)
+        .expect("process")
+        .live_io
+        .pty_writer = Some(Box::new(BrokenPipeWriter));
+
+    assert!(pm.write_process_input_once(id, b"x").is_err());
+
+    let process = pm.processes.get(&id).expect("process remains live");
+    assert!(
+        process.live_io.pty_writer.is_none(),
+        "EPIPE must close the selected PTY endpoint, not an unrelated child stdin"
+    );
+    assert_eq!(
+        process.input_disposition,
+        ProcessInputDisposition::Disconnected,
+        "EPIPE must make later sends observe GNU's closed outfd"
+    );
+    assert_eq!(
+        process.status,
+        Value::symbol("run"),
+        "closing the failed writer must leave status settlement to the child reaper"
+    );
+    assert_eq!(
+        pm.write_process_input_once(id, b"again")
+            .expect("a disconnected writer is a stable state"),
+        ProcessWriteAttempt::NoSource,
+        "later writes must not probe a failed transport again"
+    );
+}
+
+#[test]
+fn send_eof_after_epipe_installs_discard_sink_and_clears_queued_input() {
+    crate::test_utils::init_test_tracing();
+    let mut pm = ProcessManager::new();
+    let id = pm.create_process(
+        "pipe-epipe-eof".into(),
+        Value::NIL,
+        "prog".into(),
+        vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
+    let proc = pm.processes.get_mut(&id).expect("process");
+    proc.input_disposition = ProcessInputDisposition::Disconnected;
+    proc.write_queue = write_queue_push(
+        Value::NIL,
+        Value::heap_string(LispString::from_utf8("stale")),
+        false,
+    );
+
+    send_eof_to_process(pm.processes.get_mut(&id).expect("process"))
+        .expect("GNU installs /dev/null even when the old outfd is already -1");
+
+    assert_eq!(
+        pm.get(id).map(|proc| proc.input_disposition),
+        Some(ProcessInputDisposition::Discard),
+        "explicit EOF must replace an EPIPE-disconnected write side with the discard sink"
+    );
+    pm.flush_process_write_queue(id)
+        .expect("discarding queued input cannot fail");
+    assert_eq!(
+        pm.get(id).map(|proc| proc.write_queue),
+        Some(Value::NIL),
+        "queued input must drain through the discard sink"
+    );
+}
+
+#[test]
+fn sends_after_epipe_do_not_accumulate_unsendable_input() {
+    crate::test_utils::init_test_tracing();
+    let mut pm = ProcessManager::new();
+    let id = pm.create_process(
+        "pipe-epipe-queue".into(),
+        Value::NIL,
+        "prog".into(),
+        vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
+    pm.processes
+        .get_mut(&id)
+        .expect("process")
+        .input_disposition = ProcessInputDisposition::Disconnected;
+
+    pm.send_input(id, &LispString::from_utf8("one"))
+        .expect("process still exists");
+    pm.send_input(id, &LispString::from_utf8("two"))
+        .expect("process still exists");
+
+    assert_eq!(
+        pm.get(id).map(|proc| proc.write_queue),
+        Some(Value::NIL),
+        "a permanently disconnected endpoint must not retain bytes that can never be written"
+    );
+}
+
 #[test]
 fn process_manager_create_and_query() {
     crate::test_utils::init_test_tracing();
@@ -7355,7 +7473,8 @@ fn pipe_process_send_after_eof_discards_input_like_gnu() {
         Value::make_process(id)
     );
     assert!(
-        pm.get(id).is_some_and(|proc| proc.child_stdin_eof_sink),
+        pm.get(id)
+            .is_some_and(|proc| proc.input_disposition == ProcessInputDisposition::Discard),
         "pipe EOF should install the GNU-style discard sink"
     );
     assert!(
@@ -14210,21 +14329,30 @@ fn gnus_eight_update_status_sites_are_enumerated_and_four_are_the_asynchronous_o
     );
 }
 
-/// GNU's NINE `p->tick = ++process_tick;` sites, as a table.
+/// GNU's EIGHT `p->tick = ++process_tick;` sites, as a table.
 ///
-/// `grep -n 'tick = ++process_tick' src/process.c` in GNU Emacs 31.0.90
-/// (0ee48ac4df20) returns exactly these nine lines, and **eight of them are
-/// not `handle_child_signal`'s** -- which is the whole point of
-/// [`StatusChangeSite`].  The citations are spelled out here so a renumbered
-/// line is a failing test rather than a stale comment, and the count is
-/// asserted so a tenth site cannot appear without one.
+/// The citations pinned below are the release lineage's line numbers, which
+/// the rest of `child_status.rs` uses: `grep -n '++process_tick'
+/// src/process.c` on emacs-31.0.90 and emacs-31.1 (a360712c9d, 2026-08-24;
+/// identical numbering) gives 1128, 1148, 6058, 6075, 6084, 6141, 7178,
+/// 7746 -- and a ninth, 6927, in `send_process`'s EPIPE arm, which is the
+/// `(exit . 256)` behavior GNU commit 4d7e6e51dd4 introduced in 2012.  That
+/// ninth line is deliberately NOT in the table: master commit e381cf1fc97
+/// (2025-08-15) removed it, leaving exactly eight sites (master snapshot
+/// 98165ff73e8, 2026-08-30: 1169, 1189, 6075, 6092, 6101, 6158, 7193, 7752,
+/// the same eight sites renumbered), and master's arm -- close the write fd,
+/// touch neither status nor tick -- is the one this port follows.  **Seven
+/// of the eight are not `handle_child_signal`'s**, which is the whole point
+/// of [`StatusChangeSite`].  The citations are spelled out here so a
+/// renumbered line is a failing test rather than a stale comment, and the
+/// count is asserted so a ninth site cannot appear without one.
 #[test]
-fn the_status_change_sites_are_gnus_nine_tick_bumps() {
+fn the_status_change_sites_are_gnus_eight_tick_bumps() {
     use crate::emacs_core::process::StatusChangeSite;
     use crate::emacs_core::process::child_status::{StatusChangeNotifier, StatusChangeRecorder};
 
-    assert_eq!(StatusChangeSite::COUNT, 9);
-    assert_eq!(StatusChangeSite::ALL.len(), 9);
+    assert_eq!(StatusChangeSite::COUNT, 8);
+    assert_eq!(StatusChangeSite::ALL.len(), 8);
 
     let cited: Vec<&'static str> = StatusChangeSite::ALL.iter().map(|s| s.gnu()).collect();
     assert_eq!(
@@ -14236,7 +14364,6 @@ fn the_status_change_sites_are_gnus_nine_tick_bumps() {
             "src/process.c:6075",
             "src/process.c:6084",
             "src/process.c:6141",
-            "src/process.c:6927",
             "src/process.c:7178",
             "src/process.c:7746",
         ]
@@ -14250,7 +14377,7 @@ fn the_status_change_sites_are_gnus_nine_tick_bumps() {
         assert!(!site.what().is_empty(), "{site:?} needs a status");
     }
 
-    // GNU consumes four of the nine on the spot -- `status_notify` is called
+    // GNU consumes four of the eight on the spot -- `status_notify` is called
     // within a few lines of the bump -- and leaves the rest for the wait's own
     // `status_notify` at :5554 / :5854.
     let synchronous: Vec<StatusChangeSite> = StatusChangeSite::ALL
@@ -14272,7 +14399,7 @@ fn the_status_change_sites_are_gnus_nine_tick_bumps() {
         ]
     );
 
-    // And exactly one of the nine has no analogue in this port, with a reason.
+    // And exactly one of the eight has no analogue in this port, with a reason.
     let without: Vec<StatusChangeSite> = StatusChangeSite::ALL
         .into_iter()
         .filter(|site| matches!(site.recorder(), StatusChangeRecorder::NoAnalogue { .. }))
@@ -14866,7 +14993,7 @@ fn a_childs_own_descriptor_returns_the_block_which_is_what_gnu_uses_sigchld_for(
     // `ErrorKind::Interrupted` and re-enters (polling-3.11.0/src/lib.rs:
     // 751-764), so even a delivery that DID interrupt the syscall would not
     // shorten the block.
-    let mut eval = Context::new();
+    let eval = Context::new();
     assert_no_sigchld_handler_is_installed();
     let waker = std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(200));
@@ -15229,5 +15356,92 @@ fn a_just_this_one_wait_notifies_another_childs_sentinel_like_gnu() {
         "GNU's `status_notify (NULL, wait_proc)' walks the whole alist \
          (src/process.c:5554, :5854 -> :7886-7890), so a just-this-one wait \
          still runs another child's sentinel; measured 5/5 in GNU 31.0.90"
+    );
+}
+
+/// A write that hits `EPIPE` must not decide the child's fate: GNU's EPIPE
+/// arm in `send_process` (src/process.c:6940-6946 on master, as of
+/// e381cf1fc97, 2025-08-15) closes the write fd and signals `"Process %s no
+/// longer connected to pipe; closed it"` -- and touches NOTHING else.  The
+/// child's real status arrives through the SIGCHLD record and
+/// `status_notify` runs the sentinel with it.  (The emacs-31.1 release still
+/// has the pre-e381cf1fc97 arm at :6923-6931, which synthesizes
+/// `(exit . 256)` and bumps the tick; this port follows master.)
+///
+/// This port used to write `(exit . 256)` into the settled status right in
+/// the EPIPE branch.  A terminal status makes the child ineligible for the
+/// reap sweep (`SweepableChild::of` admits only `run`/`stop`), and the branch
+/// set no `status_notify_pending`, so the real exit was never recorded and
+/// the SENTINEL NEVER RAN.  Lisp-visible consequence, measured with lsp-mode
+/// against a crashing nixd: `lsp--handle-process-exit` never runs, the dead
+/// workspace stays in the session, and every later `process-send-string`
+/// reports "Process nixd-lsp not running: exited abnormally with code 256"
+/// forever.
+///
+/// The scenario needs the send to beat the reap sweep to the dead child,
+/// which no Lisp program can arrange (any wait sweeps first) -- so the pause
+/// between spawn and send is a host-level sleep with no Lisp wait in it.
+/// GNU itself cannot reach the EPIPE arm this way (its SIGCHLD is
+/// asynchronous, so the send finds the status already settled); the pinned
+/// divergence that statuses here settle only at wait sites (ledger 180/184)
+/// is exactly what makes the arm reachable, and therefore what its contract
+/// protects.
+#[test]
+fn epipe_on_send_leaves_the_real_child_status_for_the_next_wait_to_reap() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    let sh = find_bin("sh");
+
+    let result = eval_one_in_context(
+        &mut eval,
+        &format!(
+            r#"(progn
+                 (setq neovm-test-epipe-events nil)
+                 (setq neovm-test-epipe-proc
+                       (make-process :name "epipe-child"
+                                     :command '("{sh}" "-c" "exit 7")
+                                     :connection-type 'pipe
+                                     :noquery t
+                                     :sentinel (lambda (p e)
+                                                 (push (list e
+                                                             (process-status p)
+                                                             (process-exit-status p))
+                                                       neovm-test-epipe-events))))
+                 t)"#
+        ),
+    );
+    assert_eq!(result, "OK t");
+
+    // The child exits immediately; nothing here runs a Lisp wait, so no
+    // sweep records its death before the send below.
+    std::thread::sleep(Duration::from_millis(400));
+
+    let send = eval_one_in_context(
+        &mut eval,
+        r#"(condition-case err
+               (progn (process-send-string neovm-test-epipe-proc "x\n") 'sent)
+             (error (error-message-string err)))"#,
+    );
+    assert_eq!(
+        send, r#"OK "Process epipe-child no longer connected to pipe; closed it""#,
+        "GNU's EPIPE arm closes the pipe and says so"
+    );
+
+    // GNU: the EPIPE arm did not settle a status, so the child is still
+    // sweepable; the next wait reaps the REAL exit and runs the sentinel.
+    let after = eval_one_in_context(
+        &mut eval,
+        r#"(progn
+             (accept-process-output nil 0.3)
+             (list neovm-test-epipe-events
+                   (process-live-p neovm-test-epipe-proc)
+                   (if (memq neovm-test-epipe-proc (process-list)) 'listed 'deleted)))"#,
+    );
+    assert_eq!(
+        after,
+        r#"OK ((("exited abnormally with code 7
+" exit 7)) nil deleted)"#,
+        "the sentinel runs once with the child's real status, and \
+         `delete-exited-processes' removes the process afterwards"
     );
 }
