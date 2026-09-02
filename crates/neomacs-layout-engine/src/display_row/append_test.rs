@@ -1,4 +1,5 @@
 use super::*;
+use neomacs_display_protocol::VideoId;
 
 fn test_image_load(id: u32) -> neomacs_display_protocol::ImageLoadToken {
     neomacs_display_protocol::ImageLoadToken::new(

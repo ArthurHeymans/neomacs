@@ -2042,7 +2042,8 @@ fn tab_line_pointer_provenance_preserves_nested_source_string() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .active_presentation_snapshot(window_id)
+        .active_window_presentation(window_id)
+        .and_then(neovm_core::window::WindowPresentationSnapshot::live_window_snapshot)
         .expect("active window snapshot");
     assert!(
         snapshot
@@ -2320,7 +2321,8 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         .unwrap();
     assert_eq!(tab_hit.string_position(), Some(tab_string_position));
     let active_snapshot = frame
-        .active_presentation_snapshot(selected)
+        .active_window_presentation(selected)
+        .and_then(neovm_core::window::WindowPresentationSnapshot::live_window_snapshot)
         .expect("active window snapshot");
     assert!(active_snapshot.chrome_strings.iter().any(|source| {
         source.area() == neovm_core::window::PresentedWindowChromeArea::TabLine
@@ -2349,11 +2351,10 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         .iter()
         .filter_map(|info| {
             frame
-                .active_presentation_snapshot(neovm_core::window::WindowId(
+                .active_window_presentation(neovm_core::window::WindowId(
                     info.window_id.get() as u64
                 ))
                 .cloned()
-                .map(neovm_core::window::WindowPresentationSnapshot::LiveWindow)
         })
         .collect::<Vec<_>>();
     let mut poisoned_transport = renderer.clone().into_state();
