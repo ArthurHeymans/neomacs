@@ -302,6 +302,46 @@ fn terminal_failure_detaches_the_ephemeral_native_incarnation() {
 }
 
 #[test]
+fn active_session_command_failure_does_not_create_a_terminal_tombstone() {
+    let stable = VideoId::new(7);
+    let native = NativeVideoSessionId(VideoId::new(41));
+    let mut cache = VideoCache {
+        sampling: None,
+        channel_targets: None,
+        system: VideoSystemState::unavailable("test fixture"),
+        videos: HashMap::from([(
+            stable,
+            CachedVideo {
+                id: stable,
+                width: 1920,
+                height: 1080,
+                state: VideoState::Playing,
+                frame_count: 3,
+                failure: None,
+                native_id: Some(native),
+                parked: None,
+            },
+        )]),
+        next_id: 8,
+        next_native_id: 42,
+        native_to_video: HashMap::from([(native, stable)]),
+        accounting: Vec::new(),
+        gpu_accounting: VideoGpuAccounting::default(),
+        presentation: Default::default(),
+        terminal_diagnostics: HashMap::new(),
+        last_service: Default::default(),
+    };
+
+    cache.fail(stable, "command failed".into());
+
+    assert_eq!(cache.videos[&stable].native_id, Some(native));
+    assert!(
+        cache.terminal_diagnostics.is_empty(),
+        "an attached decoder incarnation cannot also have a terminal tombstone"
+    );
+}
+
+#[test]
 fn typed_missing_plugin_failure_survives_the_renderer_cache_boundary() {
     let stable = VideoId::new(7);
     let native = NativeVideoSessionId(VideoId::new(41));

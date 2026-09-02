@@ -983,6 +983,8 @@ impl VideoCache {
             .expect("resumed video remains registered");
         video.native_id = Some(native_id);
         video.state = VideoState::Loading;
+        video.failure = None;
+        self.terminal_diagnostics.remove(&external_id);
         Ok(())
     }
 
@@ -1048,7 +1050,11 @@ impl VideoCache {
         diagnostics.sessions.extend(
             self.terminal_diagnostics
                 .iter()
-                .filter(|(id, _)| self.videos.contains_key(id))
+                .filter(|(id, _)| {
+                    self.videos
+                        .get(id)
+                        .is_some_and(|video| video.native_id.is_none())
+                })
                 .map(|(_, session)| session.clone()),
         );
         diagnostics.sessions.sort_by_key(|session| session.id);
@@ -1246,30 +1252,36 @@ impl VideoCache {
     }
 
     fn fail(&mut self, id: VideoId, error: VideoCommandError) {
-        let presentation_counts = self.presentation.counts(id);
-        self.terminal_diagnostics
-            .entry(id)
-            .and_modify(|diagnostic| {
-                diagnostic.state = VideoSessionState::Failed;
-                diagnostic.terminal_error = Some(error.clone());
-            })
-            .or_insert_with(|| neomacs_video::VideoSessionDiagnostics {
-                id,
-                backend: VideoSystem::BACKEND,
-                state: VideoSessionState::Failed,
-                frame_path: None,
-                frame_format: None,
-                colorimetry: None,
-                decoded_frames: 0,
-                replaced_frames: 0,
-                late_dropped_frames: 0,
-                imported_frames: 0,
-                backpressured_frames: 0,
-                output_reconfigurations: 0,
-                import_counts: Default::default(),
-                presentation_counts,
-                terminal_error: Some(error.clone()),
-            });
+        let is_detached = self
+            .videos
+            .get(&id)
+            .is_none_or(|video| video.native_id.is_none());
+        if is_detached {
+            let presentation_counts = self.presentation.counts(id);
+            self.terminal_diagnostics
+                .entry(id)
+                .and_modify(|diagnostic| {
+                    diagnostic.state = VideoSessionState::Failed;
+                    diagnostic.terminal_error = Some(error.clone());
+                })
+                .or_insert_with(|| neomacs_video::VideoSessionDiagnostics {
+                    id,
+                    backend: VideoSystem::BACKEND,
+                    state: VideoSessionState::Failed,
+                    frame_path: None,
+                    frame_format: None,
+                    colorimetry: None,
+                    decoded_frames: 0,
+                    replaced_frames: 0,
+                    late_dropped_frames: 0,
+                    imported_frames: 0,
+                    backpressured_frames: 0,
+                    output_reconfigurations: 0,
+                    import_counts: Default::default(),
+                    presentation_counts,
+                    terminal_error: Some(error.clone()),
+                });
+        }
         let already_diagnosed = match &error {
             VideoCommandError::Backend { message } => self.system.already_diagnosed(message),
             _ => false,
