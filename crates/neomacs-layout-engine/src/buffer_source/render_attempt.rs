@@ -154,6 +154,9 @@ pub(crate) enum BufferSourceRenderAttemptOutcome {
     Finished {
         redisplay_positions: TextWindowRedisplayPositions,
         window_end_record: neovm_core::window::WindowEndRecord,
+        /// Exact canonical inputs after body production and immediately before
+        /// GNU's late `display_mode_lines` phase enters Lisp.
+        freshness_before_chrome: neovm_core::window::WindowLayoutAttemptFreshness,
         /// Whether this window took the Phase 1 cursor-only fast path (body rows
         /// reused verbatim) rather than a full body walk.
         cursor_only: bool,
@@ -333,6 +336,10 @@ impl BufferSourceRedisplayPublishRequest {
             WindowPositionPublication::InactiveEchoArea
             | WindowPositionPublication::SynchronousQueryEnd => {}
         }
+    }
+
+    pub(crate) const fn frame_id(self) -> FrameId {
+        self.frame_id
     }
 
     pub(crate) fn window_end_record(

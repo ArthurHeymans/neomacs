@@ -3327,8 +3327,29 @@ impl LayoutEngine {
         // certified as fresh.
         let freshness_after_leaf =
             evaluator.window_layout_attempt_freshness(frame_id, window_id, buf_id);
+        let lisp_boundaries_remain_valid = match (&render_outcome, freshness_after_leaf) {
+            (
+                BufferSourceRenderAttemptOutcome::Finished {
+                    freshness_before_chrome,
+                    ..
+                },
+                Some(freshness_after_leaf),
+            ) => {
+                freshness_after_fontification.remains_valid_across(
+                    *freshness_before_chrome,
+                    neovm_core::window::WindowLayoutLispBoundary::BufferBody,
+                ) && freshness_before_chrome.remains_valid_across(
+                    freshness_after_leaf,
+                    neovm_core::window::WindowLayoutLispBoundary::WindowChrome,
+                )
+            }
+            (_, Some(freshness_after_leaf)) => {
+                freshness_after_leaf == freshness_after_fontification
+            }
+            (_, None) => false,
+        };
         if evaluator.frame_manager().window_topology_generation() != topology_generation
-            || freshness_after_leaf != Some(freshness_after_fontification)
+            || !lisp_boundaries_remain_valid
         {
             if let Some(attempt) = window_end_attempt.take() {
                 evaluator.reject_redisplay_window_end_attempt(attempt);
@@ -3523,6 +3544,7 @@ impl LayoutEngine {
             BufferSourceRenderAttemptOutcome::Finished {
                 redisplay_positions,
                 window_end_record,
+                freshness_before_chrome: _,
                 cursor_only,
                 reused_matrix_rows,
             } => {

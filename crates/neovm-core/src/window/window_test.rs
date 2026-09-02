@@ -1973,6 +1973,58 @@ fn window_parameters() {
 }
 
 #[test]
+fn layout_freshness_types_late_chrome_cache_writes_separately_from_body_mutations() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("chrome-freshness", 800, 600, buffer_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let before = eval
+        .window_layout_attempt_freshness(frame_id, window_id, buffer_id)
+        .expect("initial freshness");
+
+    eval.frame_manager_mut().set_window_parameter(
+        window_id,
+        Value::symbol("tab-line-buffers"),
+        Value::list(vec![Value::make_buffer(buffer_id)]),
+    );
+    eval.obarray
+        .set_symbol_function("neomacs-test-chrome-lazy-load", Value::T);
+    let after_chrome_cache = eval
+        .window_layout_attempt_freshness(frame_id, window_id, buffer_id)
+        .expect("freshness after chrome cache write");
+
+    assert!(
+        !before.remains_valid_across(after_chrome_cache, WindowLayoutLispBoundary::BufferBody,)
+    );
+    assert!(
+        before.remains_valid_across(after_chrome_cache, WindowLayoutLispBoundary::WindowChrome,)
+    );
+
+    eval.buffer_manager_mut()
+        .get_mut(buffer_id)
+        .expect("buffer")
+        .insert("body changed");
+    let after_body_mutation = eval
+        .window_layout_attempt_freshness(frame_id, window_id, buffer_id)
+        .expect("freshness after body mutation");
+    assert!(
+        !after_chrome_cache
+            .remains_valid_across(after_body_mutation, WindowLayoutLispBoundary::WindowChrome,)
+    );
+}
+
+#[test]
 fn split_window_does_not_copy_window_parameters() {
     crate::test_utils::init_test_tracing();
     let mut mgr = FrameManager::new();

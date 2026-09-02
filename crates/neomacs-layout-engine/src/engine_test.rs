@@ -17737,6 +17737,85 @@ fn layout_frame_rust_evaluates_mode_line_exactly_once_per_redisplay() {
     );
 }
 
+/// GNU finishes the window body before `display_mode_lines` evaluates tab,
+/// header, and mode-line forms.  `tab-line-tabs-fixed-window-buffers` uses that
+/// late phase to replace the `tab-line-buffers` window parameter with a fresh
+/// (but structurally equal) cache list on every evaluation.  That cache write
+/// must not make an otherwise complete frame retry forever.
+#[test]
+fn layout_frame_rust_accepts_late_chrome_window_cache_writes() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let fresh_cache_write = Value::list(vec![Value::list(vec![
+        Value::symbol(":eval"),
+        Value::list(vec![
+            Value::symbol("progn"),
+            Value::list(vec![
+                Value::symbol("set-window-parameter"),
+                Value::NIL,
+                Value::list(vec![
+                    Value::symbol("quote"),
+                    Value::symbol("tab-line-buffers"),
+                ]),
+                Value::list(vec![
+                    Value::symbol("list"),
+                    Value::list(vec![Value::symbol("window-buffer")]),
+                ]),
+            ]),
+            Value::string("TAB"),
+        ]),
+    ])]);
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert("body line\n");
+        buffer.set_buffer_local("tab-line-format", fresh_cache_write);
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("late-tab-line-cache-write", 640, 160, buffer_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let display = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("late chrome cache writes must converge to a prepared frame");
+    let entry = display
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == window_id.0 as i64)
+        .expect("selected window matrix");
+    let tab_line = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::TabLine)
+        .expect("tab-line row");
+    assert!(
+        glyphs_logical_text(&tab_line.glyphs[GlyphArea::Text.index()]).starts_with("TAB"),
+        "accepted frame must contain the chrome produced after the cache write"
+    );
+    assert!(
+        eval.frame_manager()
+            .window_parameter(window_id, &Value::symbol("tab-line-buffers"))
+            .is_some(),
+        "the accepted attempt must retain GNU tab-line's window-local cache"
+    );
+}
+
 #[test]
 fn layout_frame_rust_abandons_stale_chrome_when_eval_kills_target_buffer() {
     let (mut eval, frame_id, killed_buffer, selected_window) =

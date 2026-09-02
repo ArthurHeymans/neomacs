@@ -107,6 +107,20 @@ fn render_or_retain_window_chrome(
     }
 }
 
+fn freshness_before_window_chrome(
+    evaluator: &neovm_core::emacs_core::Context,
+    frame_id: FrameId,
+    params: &WindowParams,
+) -> Result<neovm_core::window::WindowLayoutAttemptFreshness, BufferSourceRenderAttemptOutcome> {
+    evaluator
+        .window_layout_attempt_freshness(
+            frame_id,
+            WindowId(params.window_id as u64),
+            BufferId(params.buffer_id),
+        )
+        .ok_or(BufferSourceRenderAttemptOutcome::LogicalInputsChanged)
+}
+
 pub(crate) struct BufferSourceOutputSetup {
     begin_request: TextWindowBeginRequest,
     row_visibility_limit: DisplayRowVisibilityLimit,
@@ -861,6 +875,12 @@ impl BufferSourceOutputSetup {
             // decided in `RetainedWindowMatrix::chrome_reusable_after_cursor_move`,
             // where the dirty flags and the point-stayed-on-this-line
             // precondition live.
+            let freshness_before_chrome =
+                match freshness_before_window_chrome(evaluator, publish_request.frame_id(), params)
+                {
+                    Ok(freshness) => freshness,
+                    Err(outcome) => return outcome,
+                };
             let measured_chrome_heights = match render_or_retain_window_chrome(
                 output.reborrow(),
                 &mut output_emitter,
@@ -880,6 +900,7 @@ impl BufferSourceOutputSetup {
             return BufferSourceRenderAttemptOutcome::Finished {
                 redisplay_positions,
                 window_end_record: publish_request.window_end_record(redisplay_positions),
+                freshness_before_chrome,
                 cursor_only: true,
                 reused_matrix_rows: None,
             };
@@ -1073,6 +1094,12 @@ impl BufferSourceOutputSetup {
             // own row may re-install the retained chrome, while a genuine scroll
             // never may (its `%p` moved). The discriminator is in
             // `RetainedWindowMatrix::chrome_reusable_after_edit`.
+            let freshness_before_chrome =
+                match freshness_before_window_chrome(evaluator, publish_request.frame_id(), params)
+                {
+                    Ok(freshness) => freshness,
+                    Err(outcome) => return outcome,
+                };
             let measured_chrome_heights = match render_or_retain_window_chrome(
                 output.reborrow(),
                 &mut output_emitter,
@@ -1109,6 +1136,7 @@ impl BufferSourceOutputSetup {
             return BufferSourceRenderAttemptOutcome::Finished {
                 redisplay_positions,
                 window_end_record: publish_request.window_end_record(redisplay_positions),
+                freshness_before_chrome,
                 cursor_only: false,
                 reused_matrix_rows: Some(reused_matrix_rows),
             };
@@ -1291,6 +1319,11 @@ impl BufferSourceOutputSetup {
         } else {
             WindowChromeRowSource::Recompute
         };
+        let freshness_before_chrome =
+            match freshness_before_window_chrome(evaluator, publish_request.frame_id(), params) {
+                Ok(freshness) => freshness,
+                Err(outcome) => return outcome,
+            };
         let measured_chrome_heights = match render_or_retain_window_chrome(
             output.reborrow(),
             &mut output_emitter,
@@ -1315,6 +1348,7 @@ impl BufferSourceOutputSetup {
         BufferSourceRenderAttemptOutcome::Finished {
             redisplay_positions,
             window_end_record: publish_request.window_end_record(redisplay_positions),
+            freshness_before_chrome,
             cursor_only: false,
             reused_matrix_rows: None,
         }

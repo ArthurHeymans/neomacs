@@ -2473,6 +2473,49 @@ pub struct WindowLayoutAttemptFreshness {
     function_epoch: u64,
 }
 
+/// Lisp-bearing boundary crossed by one speculative window layout.
+///
+/// The variants encode GNU redisplay's ordering contract.  Buffer-body Lisp
+/// runs while rows are still being produced, so every logical input must stay
+/// unchanged.  Window chrome runs after GNU has completed the body
+/// (`redisplay_window` -> `display_mode_lines`, xdisp.c): status-line helpers
+/// may populate window-local caches or lazily load functions without making
+/// the body GNU would publish invalid.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowLayoutLispBoundary {
+    BufferBody,
+    WindowChrome,
+}
+
+impl WindowLayoutAttemptFreshness {
+    /// Whether `after` may still publish rows produced from `self` across the
+    /// given GNU redisplay boundary.
+    ///
+    /// Keep this projection closed over the complete freshness value: newly
+    /// added fields participate in the final equality automatically.  The two
+    /// assignments below are the only explicitly permitted late-chrome
+    /// mutations.
+    pub fn remains_valid_across(self, after: Self, boundary: WindowLayoutLispBoundary) -> bool {
+        match boundary {
+            WindowLayoutLispBoundary::BufferBody => self == after,
+            WindowLayoutLispBoundary::WindowChrome => {
+                let mut expected_after = self;
+                // GNU tab-line.el writes window-local caches such as
+                // `tab-line-buffers` while `display_mode_lines` is formatting
+                // chrome.  Face filters observe the new identity on the next
+                // redisplay; GNU does not rewind the body already produced.
+                expected_after.window.window_parameters_generation =
+                    after.window.window_parameters_generation;
+                // Chrome evaluation can autoload its formatter.  The emitted
+                // chrome already used the loaded definition, while the body
+                // precedes this phase in GNU and is not replayed.
+                expected_after.function_epoch = after.function_epoch;
+                expected_after == after
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WindowVisibleBufferSpan {
     start: LispCharPos1,
