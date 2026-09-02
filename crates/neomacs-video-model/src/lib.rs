@@ -4,6 +4,10 @@ use std::time::Instant;
 
 use neomacs_display_protocol::types::VideoId;
 
+#[cfg(test)]
+#[path = "lib_test.rs"]
+mod tests;
+
 /// Typed replacement for the legacy `-1`/`0`/positive loop count.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoopMode {
@@ -734,6 +738,93 @@ impl VideoSessionRecovery {
 
     pub fn into_manifest(self) -> VideoRecoveryManifest {
         self.manifest
+    }
+}
+
+/// Evidence the playback adapter can provide about where decoding occurred.
+///
+/// This is intentionally independent from compositor import. A frame can be
+/// imported without a pixel copy even when a high-level player does not expose
+/// enough information to prove how the decoder produced it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoDecodeResidency {
+    HardwareSharedPool,
+    HardwareUnverified,
+    Software,
+    Unknown,
+}
+
+/// Pixel movement performed at the native-frame-to-compositor seam.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum VideoCompositorImport {
+    BorrowedNativeSurface,
+    GpuBlit,
+    CpuUpload,
+}
+
+/// How the selected frame reaches the display.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoPresentationPath {
+    WgpuComposited,
+    NativeOverlay,
+}
+
+/// Independently observable evidence for one compositor-visible frame.
+///
+/// Keeping the axes separate makes it impossible to use a direct GPU import
+/// as proof of hardware decoding, or to confuse native overlay promotion with
+/// a sampleable texture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VideoFramePath {
+    decode_residency: VideoDecodeResidency,
+    compositor_import: VideoCompositorImport,
+    presentation: VideoPresentationPath,
+}
+
+impl VideoFramePath {
+    pub const fn new(
+        decode_residency: VideoDecodeResidency,
+        compositor_import: VideoCompositorImport,
+        presentation: VideoPresentationPath,
+    ) -> Self {
+        Self {
+            decode_residency,
+            compositor_import,
+            presentation,
+        }
+    }
+
+    pub const fn decode_residency(self) -> VideoDecodeResidency {
+        self.decode_residency
+    }
+
+    pub const fn compositor_import(self) -> VideoCompositorImport {
+        self.compositor_import
+    }
+
+    pub const fn presentation(self) -> VideoPresentationPath {
+        self.presentation
+    }
+}
+
+/// How far the compositor importer may fall back from borrowing a native
+/// decoder/player surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FrameImportPolicy {
+    RequireDirectSurface,
+    AllowGpuBlit,
+    AllowCpuUpload,
+}
+
+impl FrameImportPolicy {
+    pub const fn permits(self, import: VideoCompositorImport) -> bool {
+        match self {
+            Self::RequireDirectSurface => {
+                matches!(import, VideoCompositorImport::BorrowedNativeSurface)
+            }
+            Self::AllowGpuBlit => !matches!(import, VideoCompositorImport::CpuUpload),
+            Self::AllowCpuUpload => true,
+        }
     }
 }
 
