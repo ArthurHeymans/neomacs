@@ -55,6 +55,12 @@ jobs:
       - name: Run melpa package tests for neomacs
         run: cargo nextest run -p neomacs-melpa-tests --release --no-fail-fast
 
+      - name: Upload TUI recordings
+        if: always()
+        uses: ./.github/actions/upload-tui-recordings
+        with:
+          artifact-name: neomacs-tui-recordings-linux-${{ github.run_id }}
+
   lint:
     name: lint & clippy (frontend, linux)
     runs-on: ubuntu-24.04

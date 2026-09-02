@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use neomacs_tui_tests::{
-    RawTerminalSnapshot, TuiLaunch, TuiSession, assert_raw_terminal_snapshots_eq,
-    compare_session_displays,
+    RawTerminalSnapshot, TuiLaunch, TuiRecordingScope, TuiSession,
+    assert_raw_terminal_snapshots_eq, compare_session_displays,
 };
 
 use crate::{EmacsRuntime, MelpaSandbox, PreparedPackageSet};
@@ -204,10 +204,11 @@ impl StartingPackageTuiPair {
             false,
         );
 
+        let recording_scope = TuiRecordingScope::new("neomacs-melpa-tests", label);
         Ok(Self {
             label: label.to_owned(),
-            gnu: TuiSession::spawn_launch(gnu_launch, "GNU"),
-            neo: TuiSession::spawn_launch(neo_launch, "NEO"),
+            gnu: TuiSession::spawn_launch_in_scope(gnu_launch, "GNU", recording_scope.clone()),
+            neo: TuiSession::spawn_launch_in_scope(neo_launch, "NEO", recording_scope),
             gnu_sandbox,
             neo_sandbox,
         })
@@ -242,6 +243,10 @@ impl StartingPackageTuiPair {
                 failures.join("\n\n")
             ));
         }
+
+        let marker = format!("ready: {}", checkpoint.description);
+        self.gnu.mark_recording(&marker);
+        self.neo.mark_recording(&marker);
 
         Ok(PackageTuiPair {
             label: self.label,
@@ -280,8 +285,11 @@ impl PackageTuiPair {
         self.drive_both(|session| session.read(timeout));
     }
 
-    pub fn assert_display(&self, checkpoint: DisplayCheckpoint) {
+    pub fn assert_display(&mut self, checkpoint: DisplayCheckpoint) {
         let label = format!("{}: {}", self.label, checkpoint.label);
+        let marker = format!("display: {}", checkpoint.label);
+        self.gnu.mark_recording(&marker);
+        self.neo.mark_recording(&marker);
         match checkpoint.contract {
             PackageDisplayContract::ExactDisplay => {
                 let report = compare_session_displays(&self.gnu, &self.neo);

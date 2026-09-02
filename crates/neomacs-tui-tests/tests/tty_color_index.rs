@@ -21,9 +21,10 @@
 //! `crates/neomacs-display-protocol/src/tty_palette_data/`.
 
 use std::ffi::OsStr;
-use std::io::Read;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use neomacs_tui_tests::{TuiLaunch, TuiProcessOutcome, TuiSession, TuiTerminalConfig};
 
 /// Every terminal here reports a DIFFERENT palette, which is the point:
 ///
@@ -156,53 +157,35 @@ fn run_on_pty(
     let script = home.path().join("probe.el");
     std::fs::write(&script, elisp).expect("write probe elisp");
 
-    let (pty, pts) = pty_process::blocking::open().expect("open pty");
-    pty.resize(pty_process::Size::new(24, 80)).expect("resize");
-
-    let mut command = pty_process::blocking::Command::new(&editor.program);
-    command = command.arg("-nw").arg("-Q");
+    let mut launch = TuiLaunch::new(editor.program.as_os_str())
+        .arg("-nw")
+        .arg("-Q");
     for arg in &editor.extra_args {
-        command = command.arg(arg);
+        launch = launch.arg(arg);
     }
-    command = command
+    launch = launch
         .arg("-l")
         .arg(&script)
-        .env("TERM", term)
         .env("HOME", home.path())
         .env("TMPDIR", home.path())
-        .env("LINES", "24")
-        .env("COLUMNS", "80")
         .env_remove("COLORTERM");
     for (name, value) in environment {
-        command = command.env(name, value);
+        launch = launch.env(name, value);
     }
-    let mut child = command.spawn(pts).expect("spawn editor on pty");
+    let session_name = format!("{}-{term}", editor.name);
+    let mut session = TuiSession::spawn_launch_on_terminal(
+        launch,
+        &session_name,
+        TuiTerminalConfig::new(term, 24, 80),
+    );
 
-    // Drain the pty on another thread: a child that fills the pty buffer while
-    // the parent waits for it to exit deadlocks with itself.
-    let reader = std::thread::spawn(move || {
-        let mut pty = pty;
-        let mut buffer = Vec::new();
-        let _ = pty.read_to_end(&mut buffer);
-        buffer
-    });
-
-    let deadline = Instant::now() + budget;
-    loop {
-        match child.try_wait().expect("wait on editor") {
-            Some(_) => break,
-            None if Instant::now() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
-                panic!(
-                    "{} did not finish on TERM={term} within {budget:?}",
-                    editor.name
-                );
-            }
-            None => std::thread::sleep(Duration::from_millis(50)),
-        }
+    if session.run_to_completion(budget) == TuiProcessOutcome::TimedOut {
+        panic!(
+            "{} did not finish on TERM={term} within {budget:?}",
+            editor.name
+        );
     }
-    reader.join().expect("pty reader thread")
+    session.recent_output().to_vec()
 }
 
 fn sweep(editor: &Editor, term: &str) -> String {

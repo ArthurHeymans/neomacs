@@ -48,6 +48,21 @@ cargo nextest run -p neomacs-tui-tests --release --no-fail-fast
 The TUI harness uses `target/release/neomacs` by default, regardless of the
 Cargo test profile. Set `NEOMACS_TUI_NEOMACS_BIN` to use a different binary.
 
+Every `TuiSession` writes an asciicast v3 recording by default. Core parity
+tests are grouped by Rust test name and package parity tests by package
+scenario:
+
+```text
+target/tui-recordings/
+├── neomacs-tui-tests/<test-name>/{gnu,neomacs}.cast
+└── neomacs-melpa-tests/<scenario>/{gnu,neomacs}.cast
+```
+
+Replay a recording with `asciinema play <path>`. Set
+`NEOMACS_TUI_RECORD=off` to disable recording, or
+`NEOMACS_TUI_RECORD_DIR=<path>` to select another artifact root. A relative
+artifact root is resolved from the Cargo workspace.
+
 ## Linux (Arch Linux)
 
 ```bash

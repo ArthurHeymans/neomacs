@@ -11,7 +11,8 @@
 //! - [`TuiSession`] wraps a child process in a PTY with a `vt100::Parser`.
 //!   Call [`TuiSession::send`] to type keys and [`TuiSession::read`] to
 //!   advance the parser. [`TuiSession::screen`] returns the current
-//!   virtual screen.
+//!   virtual screen. Each session also writes an asciicast v3 recording under
+//!   `target/tui-recordings` by default.
 //!
 //! - [`emacs_key`] translates Emacs key descriptions (`"C-x"`, `"M-x"`,
 //!   `"RET"`) into the raw bytes a terminal would send.
@@ -27,17 +28,54 @@ use std::ffi::OsString;
 use std::io::{Read, Write};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::process::ExitStatus;
 use std::time::{Duration, Instant};
 
 mod launch;
+mod recording;
 
 pub use launch::TuiLaunch;
+pub use recording::TuiRecordingScope;
+use recording::{RecordingIdentity, RecordingPolicy, SessionRecording, TerminalSize};
 
 // ── Session ──────────────────────────────────────────────────────────
 
 /// Default terminal size for tests.
 pub const COLS: u16 = 160;
 pub const ROWS: u16 = 50;
+
+/// Initial terminal identity and geometry for a TUI process.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TuiTerminalConfig {
+    terminal_type: String,
+    rows: u16,
+    columns: u16,
+}
+
+impl TuiTerminalConfig {
+    pub fn new(terminal_type: impl Into<String>, rows: u16, columns: u16) -> Self {
+        assert!(rows != 0, "TUI terminal rows must be non-zero");
+        assert!(columns != 0, "TUI terminal columns must be non-zero");
+        Self {
+            terminal_type: terminal_type.into(),
+            rows,
+            columns,
+        }
+    }
+}
+
+impl Default for TuiTerminalConfig {
+    fn default() -> Self {
+        Self::new("screen-256color", ROWS, COLS)
+    }
+}
+
+/// Result of driving a TUI process until it exits or exhausts its budget.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TuiProcessOutcome {
+    Exited,
+    TimedOut,
+}
 
 /// The ERASE character a test PTY reports to the editor it hosts.
 ///
@@ -224,6 +262,7 @@ pub struct TuiSession {
     _child: std::process::Child,
     parser: vt100::Parser,
     recent_output: Vec<u8>,
+    recording: SessionRecording,
     home: SessionDirectory,
     // Keep TMPDIR isolated per session: interactive Org chooses one of only
     // 1,000 babel-stable names there and cleans it from kill-emacs-hook. A
@@ -243,6 +282,39 @@ impl TuiSession {
         Self::spawn_launch_with_erase_char(launch, name, PtyEraseChar::TerminalDefault)
     }
 
+    /// Spawn a structured process under a caller-provided recording scope.
+    ///
+    /// Package suites use this to group both editor recordings under the
+    /// package scenario rather than under harness implementation details.
+    pub fn spawn_launch_in_scope(launch: TuiLaunch, name: &str, scope: TuiRecordingScope) -> Self {
+        Self::spawn_launch_with_scope_terminal_and_erase_char(
+            launch,
+            name,
+            scope,
+            TuiTerminalConfig::default(),
+            PtyEraseChar::TerminalDefault,
+        )
+    }
+
+    /// Spawn a structured process with an explicit terminal type and initial
+    /// geometry.
+    ///
+    /// Direct terminal probes use this path so they retain the same process,
+    /// lifecycle, and recording behavior as ordinary parity sessions.
+    pub fn spawn_launch_on_terminal(
+        launch: TuiLaunch,
+        name: &str,
+        terminal: TuiTerminalConfig,
+    ) -> Self {
+        Self::spawn_launch_with_scope_terminal_and_erase_char(
+            launch,
+            name,
+            TuiRecordingScope::current(),
+            terminal,
+            PtyEraseChar::TerminalDefault,
+        )
+    }
+
     /// Spawn a structured process description in a new PTY whose ERASE
     /// character is ERASE.
     ///
@@ -256,10 +328,56 @@ impl TuiSession {
         name: &str,
         erase: PtyEraseChar,
     ) -> Self {
+        Self::spawn_launch_with_scope_terminal_and_erase_char(
+            launch,
+            name,
+            TuiRecordingScope::current(),
+            TuiTerminalConfig::default(),
+            erase,
+        )
+    }
+
+    fn spawn_launch_with_scope_terminal_and_erase_char(
+        launch: TuiLaunch,
+        name: &str,
+        scope: TuiRecordingScope,
+        terminal: TuiTerminalConfig,
+        erase: PtyEraseChar,
+    ) -> Self {
+        let policy = RecordingPolicy::parse(std::env::var_os(NEOMACS_TUI_RECORD).as_deref())
+            .unwrap_or_else(|message| panic!("{message}"));
+        let root = tui_recording_root();
+        Self::spawn_launch_with_recording(
+            launch,
+            name,
+            terminal,
+            erase,
+            policy,
+            &root,
+            scope.session(name),
+        )
+    }
+
+    fn spawn_launch_with_recording(
+        launch: TuiLaunch,
+        name: &str,
+        terminal: TuiTerminalConfig,
+        erase: PtyEraseChar,
+        recording_policy: RecordingPolicy,
+        recording_root: &Path,
+        recording_identity: RecordingIdentity,
+    ) -> Self {
         let (pty, pts) = pty_process::blocking::open().expect("open pty");
-        pty.resize(pty_process::Size::new(ROWS, COLS))
+        pty.resize(pty_process::Size::new(terminal.rows, terminal.columns))
             .expect("resize pty");
         set_pty_erase_char(&pts, erase);
+        let recording = SessionRecording::start(
+            recording_policy,
+            recording_root,
+            recording_identity,
+            &terminal.terminal_type,
+            TerminalSize::new(terminal.rows, terminal.columns),
+        );
 
         let supplied_home = launch.environment_value("HOME").map(PathBuf::from);
         let supplied_tmp = launch.environment_value("TMPDIR").map(PathBuf::from);
@@ -282,9 +400,9 @@ impl TuiSession {
             command = command.arg(arg);
         }
         command = command
-            .env("TERM", "screen-256color")
-            .env("COLUMNS", COLS.to_string())
-            .env("LINES", ROWS.to_string())
+            .env("TERM", &terminal.terminal_type)
+            .env("COLUMNS", terminal.columns.to_string())
+            .env("LINES", terminal.rows.to_string())
             // Prevent user config from interfering while also isolating
             // concurrent TUI tests from one another.
             .env("HOME", home.path())
@@ -311,17 +429,38 @@ impl TuiSession {
 
         let child = command.spawn(pts).expect("spawn");
 
-        let parser = vt100::Parser::new(ROWS, COLS, 0);
+        let parser = vt100::Parser::new(terminal.rows, terminal.columns, 0);
 
         TuiSession {
             pty,
             _child: child,
             parser,
             recent_output: Vec::new(),
+            recording,
             home,
             _tmp: tmp,
             name: name.to_string(),
         }
+    }
+
+    #[cfg(test)]
+    fn spawn_launch_for_recording_test(
+        launch: TuiLaunch,
+        name: &str,
+        terminal: TuiTerminalConfig,
+        policy: RecordingPolicy,
+        root: &Path,
+        identity: RecordingIdentity,
+    ) -> Self {
+        Self::spawn_launch_with_recording(
+            launch,
+            name,
+            terminal,
+            PtyEraseChar::TerminalDefault,
+            policy,
+            root,
+            identity,
+        )
     }
 
     /// Spawn GNU Emacs in TUI mode.
@@ -417,7 +556,7 @@ impl TuiSession {
     }
 
     /// Read PTY output until the editor has been quiet for
-    /// [`IDLE_CUTOFF`] *after at least one byte has arrived*, or
+    /// `IDLE_CUTOFF` *after at least one byte has arrived*, or
     /// `max_timeout` elapses — whichever comes first. Feeds whatever
     /// it reads into the vt100 parser.
     ///
@@ -439,6 +578,7 @@ impl TuiSession {
         let mut last_activity: Option<Instant> = None;
         let mut buf = [0u8; 65536];
         loop {
+            self.recording.flush_if_due();
             let now = Instant::now();
             if now >= max_deadline {
                 break;
@@ -461,6 +601,7 @@ impl TuiSession {
                 match self.pty.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
+                        self.recording.output(&buf[..n]);
                         self.recent_output.extend_from_slice(&buf[..n]);
                         if self.recent_output.len() > 262_144 {
                             let drain = self.recent_output.len() - 262_144;
@@ -510,6 +651,7 @@ impl TuiSession {
                 ),
             }
         }
+        self.recording.input(data);
     }
 
     /// Like [`TuiSession::read`] but keep reading past idle gaps until
@@ -539,12 +681,49 @@ impl TuiSession {
         }
     }
 
+    /// Drain the PTY while the child runs, stopping when it exits or when the
+    /// supplied budget is exhausted.
+    ///
+    /// A timed-out child is terminated and reaped before this returns. Keeping
+    /// reads and lifecycle management in the harness prevents a verbose child
+    /// from deadlocking on a full PTY and ensures direct probes are recorded.
+    pub fn run_to_completion(&mut self, max_timeout: Duration) -> TuiProcessOutcome {
+        const READ_SLICE: Duration = Duration::from_millis(100);
+
+        let deadline = Instant::now() + max_timeout;
+        loop {
+            if let Some(status) = self._child.try_wait().expect("wait on TUI process") {
+                self.read(READ_SLICE);
+                self.recording.finish(exit_status_code(status));
+                return TuiProcessOutcome::Exited;
+            }
+
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                let _ = self._child.kill();
+                let status = self._child.wait().ok();
+                self.read(READ_SLICE);
+                self.recording
+                    .finish(status.map(exit_status_code).unwrap_or(1));
+                return TuiProcessOutcome::TimedOut;
+            }
+
+            self.read(remaining.min(READ_SLICE));
+        }
+    }
+
     /// Resize the underlying PTY and the virtual terminal parser.
     pub fn resize(&mut self, rows: u16, cols: u16) {
         self.pty
             .resize(pty_process::Size::new(rows, cols))
             .expect("resize pty");
         self.parser.screen_mut().set_size(rows, cols);
+        self.recording.resize(TerminalSize::new(rows, cols));
+    }
+
+    /// Add a named navigation point to the terminal recording.
+    pub fn mark_recording(&mut self, label: &str) {
+        self.recording.marker(label);
     }
 
     /// Send an Emacs key description (e.g. `"C-x"`, `"M-x"`, `"RET"`).
@@ -582,14 +761,19 @@ impl TuiSession {
         (0..rows).map(|r| self.row_text(r)).collect()
     }
 
-    /// Clear the accumulated raw PTY output captured by [`read`].
+    /// Clear the accumulated raw PTY output captured by [`Self::read`].
     pub fn clear_recent_output(&mut self) {
         self.recent_output.clear();
     }
 
-    /// Borrow the recent raw PTY output captured by [`read`].
+    /// Borrow the recent raw PTY output captured by [`Self::read`].
     pub fn recent_output(&self) -> &[u8] {
         &self.recent_output
+    }
+
+    /// Return the asciicast artifact path when recording is enabled.
+    pub fn recording_path(&self) -> Option<&Path> {
+        self.recording.path()
     }
 
     /// Return the isolated HOME directory used for this session.
@@ -604,6 +788,17 @@ impl TuiSession {
 }
 
 const NEOMACS_TUI_NEOMACS_BIN: &str = "NEOMACS_TUI_NEOMACS_BIN";
+const NEOMACS_TUI_RECORD: &str = "NEOMACS_TUI_RECORD";
+const NEOMACS_TUI_RECORD_DIR: &str = "NEOMACS_TUI_RECORD_DIR";
+
+fn tui_recording_root() -> PathBuf {
+    let workspace = workspace_root();
+    match std::env::var_os(NEOMACS_TUI_RECORD_DIR).map(PathBuf::from) {
+        Some(path) if path.is_absolute() => path,
+        Some(path) => workspace.join(path),
+        None => workspace.join("target/tui-recordings"),
+    }
+}
 
 fn neomacs_binary_path(workspace: &Path) -> PathBuf {
     neomacs_binary_path_from_override(workspace, std::env::var_os(NEOMACS_TUI_NEOMACS_BIN))
@@ -635,11 +830,26 @@ fn neomacs_binary_path_from_override(
     workspace.join("target").join("release").join("neomacs")
 }
 
+fn exit_status_code(status: ExitStatus) -> i32 {
+    use std::os::unix::process::ExitStatusExt;
+
+    status
+        .code()
+        .or_else(|| status.signal().map(|signal| 128 + signal))
+        .unwrap_or(1)
+}
+
 impl Drop for TuiSession {
     fn drop(&mut self) {
-        // Best-effort kill
-        let _ = self._child.kill();
-        let _ = self._child.wait();
+        let status = match self._child.try_wait() {
+            Ok(Some(status)) => Some(status),
+            _ => {
+                let _ = self._child.kill();
+                self._child.wait().ok()
+            }
+        };
+        self.recording
+            .finish(status.map(exit_status_code).unwrap_or(1));
     }
 }
 
@@ -794,7 +1004,11 @@ pub fn emacs_key(key: &str) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::{TuiLaunch, TuiSession, emacs_key, neomacs_binary_path_from_override};
+    use super::{
+        TuiLaunch, TuiProcessOutcome, TuiSession, TuiTerminalConfig, emacs_key,
+        neomacs_binary_path_from_override,
+        recording::{RecordingIdentity, RecordingPolicy},
+    };
     use std::ffi::OsString;
     use std::fmt::Write as _;
     use std::path::{Path, PathBuf};
@@ -816,6 +1030,94 @@ mod tests {
                 .text_grid()
                 .iter()
                 .any(|row| row.contains("alpha beta"))
+        );
+    }
+
+    #[test]
+    fn tui_session_records_the_pty_interaction_at_its_public_artifact_path() {
+        let artifacts = tempfile::tempdir().expect("create recording root");
+        let launch = TuiLaunch::new("sh").args([
+            "-c",
+            "printf ready; IFS= read -r line; printf 'done:%s' \"$line\"",
+        ]);
+        let mut session = TuiSession::spawn_launch_for_recording_test(
+            launch,
+            "GNU",
+            TuiTerminalConfig::new("xterm-256color", 24, 80),
+            RecordingPolicy::On,
+            artifacts.path(),
+            RecordingIdentity::new("neomacs-tui-tests", "pty interaction", "GNU"),
+        );
+        session.read(Duration::from_secs(1));
+        session.send(b"go\n");
+        session.resize(30, 90);
+        session.mark_recording("command complete");
+        assert_eq!(
+            session.run_to_completion(Duration::from_secs(1)),
+            TuiProcessOutcome::Exited
+        );
+        let path = session
+            .recording_path()
+            .expect("recording path")
+            .to_path_buf();
+
+        drop(session);
+
+        let lines = std::fs::read_to_string(path)
+            .expect("read session cast")
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("valid event"))
+            .collect::<Vec<serde_json::Value>>();
+        assert_eq!(
+            lines[0]["term"],
+            serde_json::json!({"cols": 80, "rows": 24, "type": "xterm-256color"})
+        );
+        let events = &lines[1..];
+        let output = events
+            .iter()
+            .filter(|event| event[1] == "o")
+            .filter_map(|event| event[2].as_str())
+            .collect::<String>();
+
+        assert!(output.contains("ready"));
+        assert!(output.contains("done:go"));
+        assert!(
+            events
+                .iter()
+                .any(|event| event[1] == "i" && event[2] == "go\n")
+        );
+        assert!(
+            events
+                .iter()
+                .any(|event| event[1] == "r" && event[2] == "90x30")
+        );
+        assert!(
+            events
+                .iter()
+                .any(|event| event[1] == "m" && event[2] == "command complete")
+        );
+        assert!(events.iter().any(|event| event[1] == "x"));
+    }
+
+    #[test]
+    fn tui_session_recording_can_be_turned_off() {
+        let artifacts = tempfile::tempdir().expect("create recording root");
+        let session = TuiSession::spawn_launch_for_recording_test(
+            TuiLaunch::new("sh").args(["-c", "printf ignored"]),
+            "NEO",
+            TuiTerminalConfig::default(),
+            RecordingPolicy::Off,
+            artifacts.path(),
+            RecordingIdentity::new("neomacs-tui-tests", "recording off", "NEO"),
+        );
+
+        assert_eq!(session.recording_path(), None);
+        drop(session);
+        assert!(
+            std::fs::read_dir(artifacts.path())
+                .expect("read recording root")
+                .next()
+                .is_none()
         );
     }
 

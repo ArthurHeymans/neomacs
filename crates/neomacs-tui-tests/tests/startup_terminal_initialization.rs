@@ -20,9 +20,10 @@
 //! without an XTVERSION reply, so the auto-enable never fires there and the same
 //! startup succeeded even while alacritty failed.
 
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use neomacs_tui_tests::{TuiLaunch, TuiProcessOutcome, TuiSession, TuiTerminalConfig};
 
 /// TERM values, and whether `xterm--init` auto-enables `xterm-mouse-mode` on them.
 const TERMINALS: [(&str, bool); 2] = [("alacritty", true), ("xterm-256color", false)];
@@ -99,52 +100,26 @@ fn run_startup(editor: &Editor, term: &str, budget: Duration) -> Startup {
     std::fs::write(&script, PROBE_EL).expect("write probe elisp");
     let facts_path = home.path().join("facts.txt");
 
-    let (pty, pts) = pty_process::blocking::open().expect("open pty");
-    pty.resize(pty_process::Size::new(24, 80)).expect("resize");
-
-    let mut command = pty_process::blocking::Command::new(&editor.program);
-    command = command.arg("-nw").arg("-Q");
+    let mut launch = TuiLaunch::new(editor.program.as_os_str())
+        .arg("-nw")
+        .arg("-Q");
     for arg in &editor.extra_args {
-        command = command.arg(arg);
+        launch = launch.arg(arg);
     }
-    let mut child = command
+    launch = launch
         .arg("-l")
         .arg(&script)
-        .env("TERM", term)
         .env("HOME", home.path())
         .env("TMPDIR", home.path())
         .env("NEOMACS_STARTUP_PROBE_OUT", &facts_path)
-        .env("LINES", "24")
-        .env("COLUMNS", "80")
-        .env_remove("COLORTERM")
-        .spawn(pts)
-        .expect("spawn editor on pty");
-
-    // Drain the pty on another thread: a child that fills the pty buffer while
-    // the parent waits for it to exit deadlocks with itself.
-    let reader = std::thread::spawn(move || {
-        let mut pty = pty;
-        let mut sink = Vec::new();
-        let _ = pty.read_to_end(&mut sink);
-    });
-
-    let deadline = Instant::now() + budget;
-    let mut exited = false;
-    loop {
-        match child.try_wait().expect("wait on editor") {
-            Some(_) => {
-                exited = true;
-                break;
-            }
-            None if Instant::now() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
-                break;
-            }
-            None => std::thread::sleep(Duration::from_millis(50)),
-        }
-    }
-    let _ = reader.join();
+        .env_remove("COLORTERM");
+    let session_name = format!("{}-{term}", editor.name);
+    let mut session = TuiSession::spawn_launch_on_terminal(
+        launch,
+        &session_name,
+        TuiTerminalConfig::new(term, 24, 80),
+    );
+    let exited = session.run_to_completion(budget) == TuiProcessOutcome::Exited;
 
     Startup {
         exited,

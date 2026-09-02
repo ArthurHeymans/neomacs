@@ -63,7 +63,7 @@ fn magit_log_buffer_file_margin_columns_match_gnu_full_screen() {
             row.contains("medium subject") && row.contains("A U Thor") && row.contains("2003-04-05")
         })
     };
-    let pair = PackageTuiScenario::new("magit-log-margin", oracle.prepared_packages())
+    let mut pair = PackageTuiScenario::new("magit-log-margin", oracle.prepared_packages())
         .spawn_when_ready(
             ReadinessCheckpoint::new(
                 "Magit log rows",

@@ -110,3 +110,9 @@ jobs:
             --workspace-remap "$GITHUB_WORKSPACE" \
             --partition slice:${{ matrix.partition }}/20 \
             --no-fail-fast
+
+      - name: Upload TUI recordings
+        if: inputs.suite == 'tui' && always()
+        uses: ./.github/actions/upload-tui-recordings
+        with:
+          artifact-name: neomacs-tui-recordings-${{ github.run_id }}-${{ matrix.partition }}

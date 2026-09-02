@@ -564,6 +564,12 @@ jobs:
             --success-output immediate \
             --no-fail-fast
 
+      - name: Upload MELPA TUI recordings
+        if: matrix.suite == 'tui' && always()
+        uses: ./.github/actions/upload-tui-recordings
+        with:
+          artifact-name: neomacs-melpa-tui-recordings-${{ github.run_id }}
+
   neomacs-display-tests:
     name: display stack tests (linux x86_64)
     if: github.event_name != 'schedule'
@@ -638,6 +644,12 @@ jobs:
             -E 'package(neomacs-tui-tests) and test(=line_and_wrap_prefix_named_face_remapping_match_gnu)' \
             --workspace-remap "$GITHUB_WORKSPACE" \
             --no-fail-fast
+
+      - name: Upload prefix-face TUI recordings
+        if: always()
+        uses: ./.github/actions/upload-tui-recordings
+        with:
+          artifact-name: neomacs-prefix-face-tui-recordings-${{ github.run_id }}
 
   neomacs-gui-tests:
     name: real GUI tests (linux x86_64, X11)

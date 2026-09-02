@@ -3986,6 +3986,7 @@ dependencies = [
  "libc",
  "neomacs-display-protocol",
  "pty-process",
+ "serde_json",
  "tempfile",
  "vt100",
 ]
