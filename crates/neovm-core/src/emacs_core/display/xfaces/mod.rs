@@ -3648,6 +3648,43 @@ pub(crate) fn builtin_internal_lisp_face_equal_p(
     Ok(Value::T)
 }
 
+/// GNU `try_window_id` / `try_cursor_movement` (xdisp.c, `GIVE_UP (24)`):
+/// the incremental redisplay paths proceed under `display-line-numbers`
+/// only while `(internal-lisp-face-equal-p 'line-number
+/// 'line-number-current-line)` holds, i.e. the current line's number needs
+/// no distinct decoration.  The same predicate, read-only, for the
+/// retained-layout key; memoized on `face_change_count` since every face
+/// definition change bumps it.
+pub fn line_number_faces_equal(eval: &super::eval::Context) -> bool {
+    thread_local! {
+        static MEMO: std::cell::Cell<Option<(u64, bool)>> = const { std::cell::Cell::new(None) };
+    }
+    let generation = eval.face_change_count;
+    if let Some((memo_generation, equal)) = MEMO.get()
+        && memo_generation == generation
+    {
+        return equal;
+    }
+    let equal = (|| {
+        let face1 =
+            resolve_known_face_name_for_compare(eval, &Value::symbol("line-number"), false)
+                .ok()?;
+        let face2 = resolve_known_face_name_for_compare(
+            eval,
+            &Value::symbol("line-number-current-line"),
+            false,
+        )
+        .ok()?;
+        Some(LFACE_ATTRS.iter().all(|attr| {
+            lisp_face_attribute_value(&face1, *attr, false)
+                == lisp_face_attribute_value(&face2, *attr, false)
+        }))
+    })()
+    .unwrap_or(false);
+    MEMO.set(Some((generation, equal)));
+    equal
+}
+
 /// `(internal-lisp-face-empty-p FACE &optional FRAME)` -- return t if FACE has
 /// only unspecified attributes in selected/default face definitions.
 pub(crate) fn builtin_internal_lisp_face_empty_p(

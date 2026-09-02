@@ -153,6 +153,12 @@ pub struct RetainedWindowKey {
     /// -invisibility-spec, fill-column-indicator, overlay-arrow,
     /// display-line-numbers, …) — none of which move a buffer/face tick.
     pub display_var_change_count: u64,
+    /// `(internal-lisp-face-equal-p 'line-number 'line-number-current-line)`
+    /// at snapshot time — GNU's gate (xdisp.c `GIVE_UP (24)`) for reusing
+    /// rows that carry a line number: while it holds, a row's number is a
+    /// property of its text line alone, so no reused row can show a stale
+    /// current-line decoration.
+    pub line_number_faces_equal: bool,
 }
 
 impl RetainedWindowKey {
@@ -224,6 +230,9 @@ impl RetainedWindowKey {
             overlay_modified_tick,
             face_change_count: evaluator.face_change_count,
             display_var_change_count: evaluator.display_var_change_count,
+            line_number_faces_equal: neovm_core::emacs_core::xfaces::line_number_faces_equal(
+                evaluator,
+            ),
         }
     }
 
@@ -282,6 +291,26 @@ impl RetainedWindowKey {
         // narrowing change (or an edit before BEGV) still escalates to Full.
         aligned.buffer_size = curr.buffer_size;
         aligned == *curr
+    }
+
+    /// Whether body rows whose left margin holds glyphs may be reused by the
+    /// scroll and edit replays.
+    ///
+    /// GNU `try_window_id` proceeds under `display-line-numbers` unless the
+    /// numbering is relative or visual (every number depends on point) or the
+    /// current line's number wears a distinct face (xdisp.c `GIVE_UP (24)`).
+    /// With no Lisp `left-margin-width` region the left-margin glyphs are
+    /// exactly the line-number gutter, and an absolute number belongs to the
+    /// row's text line: unchanged for rows above an edit, and for rows below
+    /// whenever the row structure survived — the post-walk `expected_walk`
+    /// backstop rejects the replay otherwise.  Refusing every numbered row
+    /// used to force a full relayout of the window on every keystroke with
+    /// `display-line-numbers-mode` on (37 rows per frame on the
+    /// rust-lsp-typing workload).
+    pub(crate) fn margin_rows_reusable(&self) -> bool {
+        self.display_line_numbers == DisplayLineNumbersMode::Absolute
+            && self.line_number_faces_equal
+            && !self.partition.has_lisp_left_margin()
     }
 }
 
@@ -956,7 +985,8 @@ impl RetainedWindowMatrix {
             if !row.enabled || Self::is_chrome_role(row.role) {
                 continue;
             }
-            if !row.glyphs[GlyphArea::LeftMargin.index()].is_empty()
+            if (!row.glyphs[GlyphArea::LeftMargin.index()].is_empty()
+                && !curr.margin_rows_reusable())
                 || row.continued
                 || row.truncated_left
             {
@@ -1083,7 +1113,8 @@ impl RetainedWindowMatrix {
             if !row.enabled || Self::is_chrome_role(row.role) {
                 continue;
             }
-            if !row.glyphs[GlyphArea::LeftMargin.index()].is_empty()
+            if (!row.glyphs[GlyphArea::LeftMargin.index()].is_empty()
+                && !curr.margin_rows_reusable())
                 || row.continued
                 || row.truncated_left
             {
@@ -1546,6 +1577,7 @@ mod scroll_classifier_tests {
             overlay_modified_tick: 5,
             face_change_count: 5,
             display_var_change_count: 5,
+            line_number_faces_equal: true,
         }
     }
 
@@ -1722,6 +1754,7 @@ mod scroll_classifier_tests {
             ("line_prefix", |k| k.line_prefix = vec![b'>', b' ']),
             ("wrap_prefix", |k| k.wrap_prefix = vec![b' ', b' ']),
             ("is_multibyte", |k| k.is_multibyte = false),
+            ("line_number_faces_equal", |k| k.line_number_faces_equal = false),
         ];
         for (name, mutate) in mutations {
             // Cursor-only (point also moved): must bail.
@@ -1833,6 +1866,103 @@ mod scroll_classifier_tests {
         assert_eq!(
             above_only.exposed_row_count, 3,
             "edited line + 2 rows below"
+        );
+    }
+
+    /// A retained matrix whose every body row carries a line number in its
+    /// left margin, under the given numbering mode on both keys.
+    fn numbered_matrix(mode: DisplayLineNumbersMode) -> RetainedWindowMatrix {
+        use neomacs_display_protocol::glyph_matrix::Glyph;
+        let mut m = synthetic_matrix(0, 5);
+        for row_idx in 0..5 {
+            let row = MatrixRow::make_mut(&mut m.matrix.rows[row_idx]);
+            row.glyphs[GlyphArea::LeftMargin.index()]
+                .push(Glyph::char('1', FaceId::new(0), row_idx * 10));
+        }
+        // The edited row (row 2, chars [20,29]) carries 10 monospace glyphs so
+        // the below-reuse fit check can vouch for it, as in the base replay test.
+        for c in 0..10 {
+            let mut g = Glyph::char('a', FaceId::new(0), (20 + c) as usize);
+            g.pixel_width = 8.0;
+            MatrixRow::make_mut(&mut m.matrix.rows[2]).glyphs[GlyphArea::Text.index()].push(g);
+        }
+        m.key.display_line_numbers = mode;
+        m
+    }
+
+    fn numbered_edit_key(mode: DisplayLineNumbersMode) -> RetainedWindowKey {
+        let mut curr = synthetic_key(0, 25);
+        curr.chars_modified_tick = 6;
+        curr.buffer_size = 1001;
+        curr.display_line_numbers = mode;
+        curr
+    }
+
+    /// GNU `try_window_id` keeps going under absolute `display-line-numbers`
+    /// with equal line-number faces: a row's number belongs to its text line,
+    /// so rows above the edit reuse verbatim and rows below reuse shifted.
+    #[test]
+    fn edit_replay_reuses_numbered_rows_under_absolute_line_numbers() {
+        let m = numbered_matrix(DisplayLineNumbersMode::Absolute);
+        let curr = numbered_edit_key(DisplayLineNumbersMode::Absolute);
+        let r = m
+            .edit_replay(&curr, EditDamage::new(25, 26, 1, 0), true)
+            .expect("absolute line numbers keep the edit replay eligible");
+        assert_eq!(
+            r.reused_rows.iter().map(|(i, _)| *i).collect::<Vec<_>>(),
+            vec![0, 1, 3, 4],
+            "numbered rows above and below the edit are reused"
+        );
+        let below3 = r.reused_rows.iter().find(|(i, _)| *i == 3).unwrap();
+        assert_eq!(
+            below3.1.glyphs[GlyphArea::LeftMargin.index()].len(),
+            1,
+            "the reused row keeps its line-number glyph"
+        );
+    }
+
+    /// GNU `GIVE_UP (24)`: relative and visual numbering depend on point
+    /// throughout the window, so no numbered row may be reused.
+    #[test]
+    fn edit_replay_bails_on_numbered_rows_under_relative_line_numbers() {
+        for mode in [DisplayLineNumbersMode::Relative, DisplayLineNumbersMode::Visual] {
+            let m = numbered_matrix(mode);
+            let curr = numbered_edit_key(mode);
+            assert!(
+                m.edit_replay(&curr, EditDamage::new(25, 26, 1, 0), true)
+                    .is_none(),
+                "{mode:?} numbering must force a full relayout"
+            );
+        }
+    }
+
+    /// GNU `GIVE_UP (24)`: a distinct `line-number-current-line` face means
+    /// the current row's number is decoration a verbatim reuse cannot repair.
+    #[test]
+    fn edit_replay_bails_on_numbered_rows_when_line_number_faces_differ() {
+        let mut m = numbered_matrix(DisplayLineNumbersMode::Absolute);
+        m.key.line_number_faces_equal = false;
+        let mut curr = numbered_edit_key(DisplayLineNumbersMode::Absolute);
+        curr.line_number_faces_equal = false;
+        assert!(
+            m.edit_replay(&curr, EditDamage::new(25, 26, 1, 0), true)
+                .is_none(),
+            "a distinct current-line face must force a full relayout"
+        );
+    }
+
+    /// A Lisp `left-margin-width` region shares the margin area with the
+    /// numbers; its glyphs are buffer decorations the replay cannot vouch for.
+    #[test]
+    fn edit_replay_bails_on_numbered_rows_beside_a_lisp_margin() {
+        let mut m = numbered_matrix(DisplayLineNumbersMode::Absolute);
+        m.key.partition.regions_mut().left_margin = Some(Rect::new(0.0, 0.0, 16.0, 600.0));
+        let mut curr = numbered_edit_key(DisplayLineNumbersMode::Absolute);
+        curr.partition.regions_mut().left_margin = Some(Rect::new(0.0, 0.0, 16.0, 600.0));
+        assert!(
+            m.edit_replay(&curr, EditDamage::new(25, 26, 1, 0), true)
+                .is_none(),
+            "a Lisp margin beside the numbers must force a full relayout"
         );
     }
 
