@@ -277,6 +277,7 @@ fn index_org_has_face_colours() {
         neo_doc_fgs.is_superset(&gnu_doc_fgs),
         "Neomacs document palette should contain GNU's: GNU={gnu_doc_fgs:?}, NEO={neo_doc_fgs:?}"
     );
+    assert_pair_exact_display("index_org_has_face_colours", &gnu, &neo);
 }
 
 fn document_fg_set(screen: &vt100::Screen) -> std::collections::BTreeSet<String> {
