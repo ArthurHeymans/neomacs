@@ -1582,31 +1582,75 @@ pub enum DisplayColorContract {
     ResolvedRgb,
 }
 
-/// The colors which visibly paint one terminal cell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DisplayColorRepresentation {
+    TerminalEncoding,
+    ResolvedRgb,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DisplayColorCoverage {
+    StyleTopology,
+    VisiblePaint,
+    TerminalState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DisplayColorPolicy {
+    representation: DisplayColorRepresentation,
+    coverage: DisplayColorCoverage,
+}
+
+impl DisplayColorContract {
+    const fn policy(self) -> DisplayColorPolicy {
+        match self {
+            Self::StyleTopology => DisplayColorPolicy {
+                representation: DisplayColorRepresentation::ResolvedRgb,
+                coverage: DisplayColorCoverage::StyleTopology,
+            },
+            Self::ExactTerminalValues => DisplayColorPolicy {
+                representation: DisplayColorRepresentation::TerminalEncoding,
+                coverage: DisplayColorCoverage::TerminalState,
+            },
+            Self::ResolvedRgb => DisplayColorPolicy {
+                representation: DisplayColorRepresentation::ResolvedRgb,
+                coverage: DisplayColorCoverage::VisiblePaint,
+            },
+        }
+    }
+}
+
+/// The terminal color state selected for comparison at one cell.
 ///
-/// `foreground` is absent for an ordinary blank cell because its retained
-/// terminal foreground is write history, not visible output. Underlined and
-/// inverted blanks retain it because they can paint foreground-colored pixels.
+/// Under the visible-paint policy, `foreground` is absent for an ordinary blank
+/// cell because its retained terminal foreground is write history. The exact
+/// terminal-state policy retains that value as `Some`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DisplayCellColors {
     pub foreground: Option<DisplayColor>,
     pub background: DisplayColor,
 }
 
-impl DisplayCellColors {
-    fn for_contract(cell: &vt100::Cell, contract: DisplayColorContract) -> Self {
-        if contract == DisplayColorContract::ExactTerminalValues {
-            return Self {
-                foreground: Some(cell.fgcolor().into()),
-                background: cell.bgcolor().into(),
-            };
+impl DisplayColorPolicy {
+    fn normalize(self, color: DisplayColor) -> DisplayColor {
+        match self.representation {
+            DisplayColorRepresentation::TerminalEncoding => color,
+            DisplayColorRepresentation::ResolvedRgb => color.resolve_xterm_256(),
         }
-        let blank = !cell.is_wide_continuation()
-            && cell.contents().chars().all(|character| character == ' ');
-        Self {
-            foreground: (!blank || cell.underline() || cell.inverse())
-                .then(|| DisplayColor::from(cell.fgcolor()).for_contract(contract)),
-            background: DisplayColor::from(cell.bgcolor()).for_contract(contract),
+    }
+
+    fn cell_colors(self, cell: &vt100::Cell) -> Option<DisplayCellColors> {
+        match self.coverage {
+            DisplayColorCoverage::StyleTopology => None,
+            DisplayColorCoverage::TerminalState => Some(DisplayCellColors {
+                foreground: Some(self.normalize(cell.fgcolor().into())),
+                background: self.normalize(cell.bgcolor().into()),
+            }),
+            DisplayColorCoverage::VisiblePaint => Some(DisplayCellColors {
+                foreground: (!is_visually_blank(cell) || cell.underline() || cell.inverse())
+                    .then(|| self.normalize(cell.fgcolor().into())),
+                background: self.normalize(cell.bgcolor().into()),
+            }),
         }
     }
 }
@@ -1622,15 +1666,6 @@ impl From<vt100::Color> for DisplayColor {
 }
 
 impl DisplayColor {
-    fn for_contract(self, contract: DisplayColorContract) -> Self {
-        match contract {
-            DisplayColorContract::ExactTerminalValues => self,
-            DisplayColorContract::StyleTopology | DisplayColorContract::ResolvedRgb => {
-                self.resolve_xterm_256()
-            }
-        }
-    }
-
     /// Resolve `screen-256color` indices through xterm's standard palette.
     ///
     /// Default foreground/background remain typed as `Default`: a PTY does not
@@ -1671,11 +1706,15 @@ impl From<&vt100::Cell> for DisplayAttributes {
 }
 
 impl DisplayAttributes {
-    fn for_contract(mut self, contract: DisplayColorContract) -> Self {
-        self.foreground = self.foreground.for_contract(contract);
-        self.background = self.background.for_contract(contract);
+    fn for_color_policy(mut self, policy: DisplayColorPolicy) -> Self {
+        self.foreground = policy.normalize(self.foreground);
+        self.background = policy.normalize(self.background);
         self
     }
+}
+
+fn is_visually_blank(cell: &vt100::Cell) -> bool {
+    !cell.is_wide_continuation() && cell.contents().chars().all(|character| character == ' ')
 }
 
 /// The attributes which can actually paint one terminal cell.
@@ -1707,9 +1746,7 @@ enum VisibleBlankStyle {
 impl From<&vt100::Cell> for VisibleCellStyle {
     fn from(cell: &vt100::Cell) -> Self {
         let attributes = DisplayAttributes::from(cell);
-        let blank = !cell.is_wide_continuation()
-            && cell.contents().chars().all(|character| character == ' ');
-        if !blank {
+        if !is_visually_blank(cell) {
             return Self::Glyph(attributes);
         }
 
@@ -1734,25 +1771,25 @@ impl From<&vt100::Cell> for VisibleCellStyle {
 }
 
 impl VisibleCellStyle {
-    fn for_contract(cell: &vt100::Cell, contract: DisplayColorContract) -> Self {
+    fn for_color_policy(cell: &vt100::Cell, policy: DisplayColorPolicy) -> Self {
         match Self::from(cell) {
-            Self::Glyph(attributes) => Self::Glyph(attributes.for_contract(contract)),
-            Self::Blank(VisibleBlankStyle::Background(background)) => Self::Blank(
-                VisibleBlankStyle::Background(background.for_contract(contract)),
-            ),
+            Self::Glyph(attributes) => Self::Glyph(attributes.for_color_policy(policy)),
+            Self::Blank(VisibleBlankStyle::Background(background)) => {
+                Self::Blank(VisibleBlankStyle::Background(policy.normalize(background)))
+            }
             Self::Blank(VisibleBlankStyle::Underlined {
                 foreground,
                 background,
                 bold,
                 dim,
             }) => Self::Blank(VisibleBlankStyle::Underlined {
-                foreground: foreground.for_contract(contract),
-                background: background.for_contract(contract),
+                foreground: policy.normalize(foreground),
+                background: policy.normalize(background),
                 bold,
                 dim,
             }),
             Self::Blank(VisibleBlankStyle::Inverted(attributes)) => Self::Blank(
-                VisibleBlankStyle::Inverted(attributes.for_contract(contract)),
+                VisibleBlankStyle::Inverted(attributes.for_color_policy(policy)),
             ),
         }
     }
@@ -1854,6 +1891,7 @@ fn compare_displays_with_environment(
     environment: Option<&PairedDisplayEnvironment>,
     color_contract: DisplayColorContract,
 ) -> DisplayReport {
+    let color_policy = color_contract.policy();
     let gnu_size = DisplaySize::from(gnu.size());
     let neomacs_size = DisplaySize::from(neomacs.size());
     let mut unexpected = Vec::new();
@@ -1897,10 +1935,13 @@ fn compare_displays_with_environment(
                 .cell(row, column)
                 .expect("cell inside Neomacs geometry");
             let gnu_class = *gnu_style_origins
-                .entry(VisibleCellStyle::for_contract(gnu_cell, color_contract))
+                .entry(VisibleCellStyle::for_color_policy(gnu_cell, color_policy))
                 .or_insert(at);
             let neomacs_class = *neomacs_style_origins
-                .entry(VisibleCellStyle::for_contract(neomacs_cell, color_contract))
+                .entry(VisibleCellStyle::for_color_policy(
+                    neomacs_cell,
+                    color_policy,
+                ))
                 .or_insert(at);
             if gnu_class != neomacs_class {
                 unexpected.push(DisplayDifference::StyleClass {
@@ -1909,21 +1950,17 @@ fn compare_displays_with_environment(
                     neomacs_class,
                 });
             }
-            match color_contract {
-                DisplayColorContract::StyleTopology => {}
-                DisplayColorContract::ExactTerminalValues | DisplayColorContract::ResolvedRgb => {
-                    let gnu_colors = DisplayCellColors::for_contract(gnu_cell, color_contract);
-                    let neomacs_colors =
-                        DisplayCellColors::for_contract(neomacs_cell, color_contract);
-                    if gnu_colors != neomacs_colors {
-                        unexpected.push(DisplayDifference::Colors {
-                            cell: at,
-                            contract: color_contract,
-                            gnu: gnu_colors,
-                            neomacs: neomacs_colors,
-                        });
-                    }
-                }
+            if let (Some(gnu_colors), Some(neomacs_colors)) = (
+                color_policy.cell_colors(gnu_cell),
+                color_policy.cell_colors(neomacs_cell),
+            ) && gnu_colors != neomacs_colors
+            {
+                unexpected.push(DisplayDifference::Colors {
+                    cell: at,
+                    contract: color_contract,
+                    gnu: gnu_colors,
+                    neomacs: neomacs_colors,
+                });
             }
         }
     }
