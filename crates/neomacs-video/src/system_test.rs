@@ -471,6 +471,7 @@ fn service_imports_only_the_latest_due_frame_and_reports_its_timestamp() {
             late_dropped_frames: 0,
             imported_frames: 1,
             backpressured_frames: 0,
+            output_reconfigurations: 0,
             import_counts: super::VideoImportCounts {
                 borrowed_native_frames: 1,
                 gpu_blit_frames: 0,
@@ -643,6 +644,7 @@ fn recoverable_import_failure_reconfigures_decoder_without_poisoning_session() {
     let second = system.service(now);
     assert_eq!(second.ready_frames.len(), 1);
     assert_eq!(system.sampled(id), Some(&2));
+    assert_eq!(system.session_diagnostics()[0].output_reconfigurations, 1);
 }
 
 #[test]

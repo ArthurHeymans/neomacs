@@ -137,6 +137,13 @@ pub(crate) trait DecoderBackend {
     fn next_service_deadline(&self, _now: Instant) -> Option<Instant> {
         None
     }
+
+    /// Snapshot a decoder-owned native surface pool, when this backend owns
+    /// one. The default makes the absence of a pool explicit without forcing
+    /// fake or push-only decoders to manufacture telemetry.
+    fn surface_pool_diagnostics(&self) -> Option<crate::VideoSurfacePoolDiagnostics> {
+        None
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -334,6 +341,11 @@ pub(crate) trait FrameImporter<F> {
         &mut self,
         frame: DecodedFrame<F>,
     ) -> Result<FrameImportOutcome<Self::Sampled>, String>;
+
+    /// Snapshot an importer-owned native surface pool, when present.
+    fn surface_pool_diagnostics(&self) -> Option<crate::VideoSurfacePoolDiagnostics> {
+        None
+    }
 }
 
 pub(crate) trait Platform {

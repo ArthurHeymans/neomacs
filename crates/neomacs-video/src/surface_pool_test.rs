@@ -1,4 +1,46 @@
+use super::VideoSurfacePoolRole;
 use super::surface_pool::{BoundedSurfacePool, SurfacePoolAcquire};
+
+#[test]
+fn diagnostics_measure_allocation_reuse_backpressure_and_occupancy() {
+    let pool = BoundedSurfacePool::new(1);
+    let reservation = match pool.acquire("decoder-slot") {
+        SurfacePoolAcquire::Allocate(reservation) => reservation,
+        SurfacePoolAcquire::Reused(_) | SurfacePoolAcquire::Backpressured => unreachable!(),
+    };
+    let reserved = pool.diagnostics(VideoSurfacePoolRole::CompositorImport);
+    assert_eq!(reserved.allocations, 0);
+    assert_eq!(reserved.allocated, 0);
+    assert_eq!(reserved.in_flight, 0);
+    assert_eq!(reserved.in_flight_high_water, 0);
+    let lease = reservation.fulfill(7);
+
+    assert!(matches!(
+        pool.acquire("other-slot"),
+        SurfacePoolAcquire::Backpressured
+    ));
+    drop(lease);
+    let reused = match pool.acquire("decoder-slot") {
+        SurfacePoolAcquire::Reused(lease) => lease,
+        SurfacePoolAcquire::Allocate(_) | SurfacePoolAcquire::Backpressured => unreachable!(),
+    };
+
+    assert_eq!(
+        pool.diagnostics(VideoSurfacePoolRole::CompositorImport),
+        super::VideoSurfacePoolDiagnostics {
+            role: VideoSurfacePoolRole::CompositorImport,
+            capacity: 1,
+            allocated: 1,
+            idle: 0,
+            in_flight: 1,
+            allocations: 1,
+            reuses: 1,
+            backpressured_acquires: 1,
+            in_flight_high_water: 1,
+        }
+    );
+    drop(reused);
+}
 
 #[test]
 fn a_checked_out_surface_backpressures_at_capacity_and_reuses_after_retirement() {

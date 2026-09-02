@@ -67,6 +67,7 @@ struct SessionCounters {
     late_dropped_frames: u64,
     imported_frames: u64,
     backpressured_frames: u64,
+    output_reconfigurations: u64,
     import_counts: VideoImportCounts,
 }
 
@@ -233,6 +234,7 @@ impl VideoSystem {
     pub fn diagnostics(&self) -> VideoDiagnostics {
         VideoDiagnostics {
             sessions: self.inner.session_diagnostics(),
+            surface_pools: self.inner.surface_pool_diagnostics(),
             gpu_memory_bytes: self.gpu.allocated_bytes(),
         }
     }
@@ -692,6 +694,13 @@ impl<P: Platform> VideoSystemImpl<P> {
                     session
                         .diagnostics
                         .record_import(imported.completed_import, decoder_import);
+                    if let CompletedFrameImport::CpuUpload { bytes } = imported.completed_import {
+                        tracing::warn!(
+                            video_id = id.get(),
+                            bytes,
+                            "native video frame crossed the CPU upload compatibility path"
+                        );
+                    }
                     session.last_pts = timing.pts;
                 }
                 Ok(FrameImportOutcome::Ready(imported)) => {
@@ -707,6 +716,10 @@ impl<P: Platform> VideoSystemImpl<P> {
                 Ok(FrameImportOutcome::ReconfigureDecoder { rejected, reason }) => {
                     match self.decoder.reconfigure_after_import_failure(*id, rejected) {
                         Ok(DecoderReconfiguration::Applied) => {
+                            session.diagnostics.output_reconfigurations = session
+                                .diagnostics
+                                .output_reconfigurations
+                                .saturating_add(1);
                             tracing::warn!(
                                 video_id = id.get(),
                                 ?rejected,
@@ -814,11 +827,20 @@ impl<P: Platform> VideoSystemImpl<P> {
                 late_dropped_frames: session.diagnostics.late_dropped_frames,
                 imported_frames: session.diagnostics.imported_frames,
                 backpressured_frames: session.diagnostics.backpressured_frames,
+                output_reconfigurations: session.diagnostics.output_reconfigurations,
                 import_counts: session.diagnostics.import_counts,
             })
             .collect();
         sessions.sort_unstable_by_key(|session| session.id.get());
         sessions
+    }
+
+    fn surface_pool_diagnostics(&self) -> Vec<crate::VideoSurfacePoolDiagnostics> {
+        self.decoder
+            .surface_pool_diagnostics()
+            .into_iter()
+            .chain(self.importer.surface_pool_diagnostics())
+            .collect()
     }
 
     pub(crate) fn take_all_sampled_for_retirement(&mut self) -> Vec<P::Sampled> {

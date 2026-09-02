@@ -140,4 +140,11 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
             }
         }
     }
+
+    fn surface_pool_diagnostics(&self) -> Option<crate::VideoSurfacePoolDiagnostics> {
+        Some(
+            self.imported
+                .diagnostics(crate::VideoSurfacePoolRole::CompositorImport),
+        )
+    }
 }

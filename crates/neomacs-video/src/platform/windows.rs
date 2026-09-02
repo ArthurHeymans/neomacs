@@ -853,6 +853,14 @@ impl DecoderBackend for WindowsDecoder {
             })
             .then_some(now + WINDOWS_MEDIA_POLL_INTERVAL)
     }
+
+    fn surface_pool_diagnostics(&self) -> Option<crate::VideoSurfacePoolDiagnostics> {
+        Some(
+            self.capture
+                .surfaces
+                .diagnostics(crate::VideoSurfacePoolRole::CompositorImport),
+        )
+    }
 }
 
 fn configure_media_engine(

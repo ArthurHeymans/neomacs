@@ -10,7 +10,13 @@ pub(crate) struct BoundedSurfacePool<K, V> {
 
 struct SurfacePoolState<K, V> {
     capacity: usize,
+    /// Slots occupied by live values or by in-progress allocations.
     allocated: usize,
+    reservations: usize,
+    allocations: u64,
+    reuses: u64,
+    backpressured_acquires: u64,
+    in_flight_high_water: usize,
     /// Idle entries in least-recently-returned order. Decoder surface pools
     /// rotate through several stable identities, so a miss is not evidence
     /// that the other identities are stale.
@@ -43,6 +49,11 @@ where
             shared: Arc::new(Mutex::new(SurfacePoolState {
                 capacity,
                 allocated: 0,
+                reservations: 0,
+                allocations: 0,
+                reuses: 0,
+                backpressured_acquires: 0,
+                in_flight_high_water: 0,
                 idle: VecDeque::with_capacity(capacity),
             })),
         }
@@ -62,6 +73,12 @@ where
                     .idle
                     .remove(index)
                     .expect("the matching idle surface index remains valid");
+                state.reuses = state.reuses.saturating_add(1);
+                let in_flight = state
+                    .allocated
+                    .saturating_sub(state.reservations)
+                    .saturating_sub(state.idle.len());
+                state.in_flight_high_water = state.in_flight_high_water.max(in_flight);
                 return SurfacePoolAcquire::Reused(SurfaceLease {
                     entry: Some(entry),
                     shared: Arc::clone(&self.shared),
@@ -70,6 +87,7 @@ where
 
             if state.allocated < state.capacity {
                 state.allocated += 1;
+                state.reservations += 1;
                 return SurfacePoolAcquire::Allocate(SurfaceReservation {
                     key: key.take(),
                     shared: Arc::clone(&self.shared),
@@ -86,7 +104,28 @@ where
                 continue;
             }
 
+            state.backpressured_acquires = state.backpressured_acquires.saturating_add(1);
             return SurfacePoolAcquire::Backpressured;
+        }
+    }
+
+    pub(crate) fn diagnostics(
+        &self,
+        role: crate::VideoSurfacePoolRole,
+    ) -> crate::VideoSurfacePoolDiagnostics {
+        let state = lock_unpoisoned(&self.shared);
+        let idle = state.idle.len();
+        let allocated = state.allocated.saturating_sub(state.reservations);
+        crate::VideoSurfacePoolDiagnostics {
+            role,
+            capacity: state.capacity,
+            allocated,
+            idle,
+            in_flight: allocated.saturating_sub(idle),
+            allocations: state.allocations,
+            reuses: state.reuses,
+            backpressured_acquires: state.backpressured_acquires,
+            in_flight_high_water: state.in_flight_high_water,
         }
     }
 }
@@ -97,6 +136,16 @@ impl<K, V> SurfaceReservation<K, V> {
             .key
             .take()
             .expect("a surface reservation can only be fulfilled once");
+        {
+            let mut state = lock_unpoisoned(&self.shared);
+            state.reservations -= 1;
+            state.allocations = state.allocations.saturating_add(1);
+            let in_flight = state
+                .allocated
+                .saturating_sub(state.reservations)
+                .saturating_sub(state.idle.len());
+            state.in_flight_high_water = state.in_flight_high_water.max(in_flight);
+        }
         SurfaceLease {
             entry: Some((key, value)),
             shared: Arc::clone(&self.shared),
@@ -109,6 +158,7 @@ impl<K, V> Drop for SurfaceReservation<K, V> {
         if self.key.is_some() {
             let mut state = lock_unpoisoned(&self.shared);
             state.allocated -= 1;
+            state.reservations -= 1;
         }
     }
 }

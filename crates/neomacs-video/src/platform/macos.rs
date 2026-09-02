@@ -1302,6 +1302,13 @@ impl FrameImporter<MacFrame> for MacImporter {
             completed_import: CompletedFrameImport::BorrowedNativeSurface,
         }))
     }
+
+    fn surface_pool_diagnostics(&self) -> Option<crate::VideoSurfacePoolDiagnostics> {
+        Some(
+            self.surfaces
+                .diagnostics(crate::VideoSurfacePoolRole::CompositorImport),
+        )
+    }
 }
 
 impl Platform for MacPlatform {

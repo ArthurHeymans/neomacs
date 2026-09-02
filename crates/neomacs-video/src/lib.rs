@@ -26,8 +26,8 @@ pub use model::{
     VideoModelError, VideoOpenRequest, VideoPlaneFormat, VideoPresentationPath,
     VideoRecoveryManifest, VideoRotation, VideoSampleKind, VideoSamplingTransform,
     VideoServiceRequest, VideoServiceResult, VideoServiceTiming, VideoSessionDiagnostics,
-    VideoSessionRecovery, VideoSessionState, VideoSource, VideoTextureCoordinates,
-    VideoTransferCharacteristic,
+    VideoSessionRecovery, VideoSessionState, VideoSource, VideoSurfacePoolDiagnostics,
+    VideoSurfacePoolRole, VideoTextureCoordinates, VideoTransferCharacteristic,
 };
 pub(crate) use sampling::GpuVideoFrame;
 pub use sampling::{GpuGeneration, PreparedVideoDraw, PreparedVideoDraws, VideoSamplingResources};

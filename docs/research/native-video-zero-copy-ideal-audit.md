@@ -552,3 +552,14 @@ hardware decoder. Measure and expose at least:
 
 The strict mode should reject `GpuBlit` and `CpuUpload`; the compatible default
 may fall back but must make that fallback observable.
+
+The common diagnostics now expose the evidence Neomacs can obtain without
+guessing: independent decode/import/presentation path tags, current format and
+colorimetry, decoded/replaced/late-dropped/imported/backpressured frame counts,
+format reconfiguration count, per-path frame and known-byte totals, native
+surface-pool allocation/reuse/backpressure/occupancy/high-water, and retained
+GPU bytes. CPU upload compatibility use is additionally warned for every
+frame. Hardware decode state remains `Unknown` where the broad native player
+API does not report it. CPU/GPU duration, bandwidth, and power still require
+platform profilers and representative hardware gates before any path can be
+promoted as a measured performance tier.

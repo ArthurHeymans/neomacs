@@ -868,13 +868,49 @@ pub struct VideoSessionDiagnostics {
     pub late_dropped_frames: u64,
     pub imported_frames: u64,
     pub backpressured_frames: u64,
+    pub output_reconfigurations: u64,
     pub import_counts: VideoImportCounts,
+}
+
+/// Which native-video stage owns a bounded surface pool.
+///
+/// Keeping this typed distinguishes decoder-owned output surfaces from
+/// compositor import/copy targets without exposing platform handle types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoSurfacePoolRole {
+    DecoderOutput,
+    CompositorImport,
+}
+
+/// Point-in-time occupancy plus cumulative activity for one native surface
+/// pool. Counts describe real pool operations rather than inferred frame
+/// sizes or assumed decoder behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VideoSurfacePoolDiagnostics {
+    pub role: VideoSurfacePoolRole,
+    /// Maximum number of live or reserved entries.
+    pub capacity: usize,
+    /// Fulfilled native surfaces, including idle and checked-out entries.
+    pub allocated: usize,
+    /// Fulfilled surfaces currently available for keyed reuse.
+    pub idle: usize,
+    /// Fulfilled surfaces retained by frames awaiting GPU retirement.
+    pub in_flight: usize,
+    /// Cumulative successfully fulfilled native allocations.
+    pub allocations: u64,
+    /// Cumulative keyed acquisitions served without allocating.
+    pub reuses: u64,
+    /// Cumulative acquisitions rejected because every slot was checked out.
+    pub backpressured_acquires: u64,
+    /// Largest observed number of fulfilled checked-out surfaces.
+    pub in_flight_high_water: usize,
 }
 
 /// Point-in-time diagnostics owned by the authoritative video system.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VideoDiagnostics {
     pub sessions: Vec<VideoSessionDiagnostics>,
+    pub surface_pools: Vec<VideoSurfacePoolDiagnostics>,
     pub gpu_memory_bytes: usize,
 }
 
