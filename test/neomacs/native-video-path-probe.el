@@ -9,10 +9,43 @@
 ;;; Code:
 
 (require 'neomacs-video)
+(require 'seq)
 
 (defvar neomacs-video-path-probe--handle nil)
 (defvar neomacs-video-path-probe--started-at nil)
 (defvar neomacs-video-path-probe--done nil)
+
+(defun neomacs-video-path-probe--positive-integer-p (value)
+  "Return non-nil when VALUE is an integer greater than zero."
+  (and (integerp value) (> value 0)))
+
+(defun neomacs-video-path-probe--zero-p (value)
+  "Return non-nil when VALUE is the integer zero."
+  (and (integerp value) (= value 0)))
+
+(defun neomacs-video-path-probe--coherent-pool-p (pool)
+  "Return non-nil when compositor-import POOL reports coherent pressure data."
+  (let ((capacity (plist-get pool :capacity))
+        (allocated (plist-get pool :allocated))
+        (idle (plist-get pool :idle))
+        (in-flight (plist-get pool :in-flight))
+        (allocations (plist-get pool :allocations))
+        (reuses (plist-get pool :reuses))
+        (backpressure (plist-get pool :backpressured-acquires))
+        (high-water (plist-get pool :in-flight-high-water)))
+    (and (neomacs-video-path-probe--positive-integer-p capacity)
+         (neomacs-video-path-probe--positive-integer-p allocated)
+         (natnump idle)
+         (natnump in-flight)
+         (neomacs-video-path-probe--positive-integer-p allocations)
+         (natnump reuses)
+         (neomacs-video-path-probe--zero-p backpressure)
+         (neomacs-video-path-probe--positive-integer-p high-water)
+         (= allocated (+ idle in-flight))
+         (<= allocated capacity)
+         (<= allocated allocations)
+         (<= in-flight high-water)
+         (<= high-water capacity))))
 
 (defun neomacs-video-path-probe--record (text)
   "Record TEXT on the probe's explicit result channel, when configured."
@@ -50,11 +83,27 @@
         (let* ((snapshot
                 (neomacs-video-diagnostics
                  neomacs-video-path-probe--handle))
-               (session (car (plist-get snapshot :sessions)))
+               (sessions (plist-get snapshot :sessions))
+               (session (car sessions))
                (state (and session (plist-get session :state)))
                (path (and session (plist-get session :frame-path)))
                (import (and path (plist-get path :compositor-import)))
                (presentation (and path (plist-get path :presentation)))
+               (format (and session (plist-get session :frame-format)))
+               (decoded (and session (plist-get session :decoded-frames)))
+               (imported (and session (plist-get session :imported-frames)))
+               (backpressured
+                (and session (plist-get session :backpressured-frames)))
+               (counts (and session (plist-get session :import-counts)))
+               (borrowed
+                (and counts (plist-get counts :borrowed-native-frames)))
+               (gpu-blits (and counts (plist-get counts :gpu-blit-frames)))
+               (cpu-uploads (and counts (plist-get counts :cpu-upload-frames)))
+               (pools
+                (seq-filter
+                 (lambda (pool)
+                   (eq (plist-get pool :role) 'compositor-import))
+                 (plist-get snapshot :surface-pools)))
                (elapsed (- (float-time)
                            neomacs-video-path-probe--started-at))
                (timeout (string-to-number
@@ -67,8 +116,33 @@
             (neomacs-video-path-probe--finish
              1 (format "FAIL presentation=%s" presentation) snapshot))
            ((eq import 'borrowed-native-surface)
-            (neomacs-video-path-probe--finish
-             0 "PASS dma-buf-zero-copy" snapshot))
+            (cond
+             ((/= (length sessions) 1)
+              (neomacs-video-path-probe--finish
+               1 (format "FAIL session-count=%s" (length sessions)) snapshot))
+             ((not (memq format '(nv12 p010)))
+              (neomacs-video-path-probe--finish
+               1 (format "FAIL direct-frame-format=%s" format) snapshot))
+             ((not (and
+                    (neomacs-video-path-probe--positive-integer-p decoded)
+                    (neomacs-video-path-probe--positive-integer-p imported)
+                    (neomacs-video-path-probe--positive-integer-p borrowed)
+                    (= borrowed imported)
+                    (neomacs-video-path-probe--zero-p gpu-blits)
+                    (neomacs-video-path-probe--zero-p cpu-uploads)
+                    (neomacs-video-path-probe--zero-p backpressured)))
+              (neomacs-video-path-probe--finish
+               1 "FAIL incoherent-import-counts" snapshot))
+             ((/= (length pools) 1)
+              (neomacs-video-path-probe--finish
+               1 (format "FAIL compositor-pool-count=%s" (length pools))
+               snapshot))
+             ((not (neomacs-video-path-probe--coherent-pool-p (car pools)))
+              (neomacs-video-path-probe--finish
+               1 "FAIL incoherent-compositor-pool" snapshot))
+             (t
+              (neomacs-video-path-probe--finish
+               0 "PASS direct-yuv-dma-buf-zero-copy" snapshot))))
            ((memq import '(gpu-blit cpu-upload))
             (neomacs-video-path-probe--finish
              1 (format "FAIL compositor-import=%s" import) snapshot))

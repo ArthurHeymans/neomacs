@@ -511,12 +511,15 @@ cargo xtask fresh-build --release --features video --skip-build
 scripts/probe-linux-native-video.sh /path/to/video.mp4
 ```
 
-The probe rejects GPU blits, CPU uploads, non-wgpu presentation, session
-failure, missing diagnostics, and timeouts. It writes logs and the explicit
-result channel below `target/neomacs-video-probe/`, so no binary fixture is
-tracked. The remaining steps are optional negotiated tiers that require
-representative hardware measurement; they should not replace the broad player
-backends speculatively.
+The probe rejects GPU blits, CPU uploads, packed output, non-wgpu presentation,
+session failure, missing or inconsistent import counters, missing or pressured
+compositor-pool telemetry, and timeouts. Success requires an observed NV12 or
+P010 frame, positive decoded/imported/direct-frame counts, and a coherent
+bounded compositor-import pool. It writes logs and the explicit result channel
+below `target/neomacs-video-probe/`, so no binary fixture is tracked. The
+remaining steps are optional negotiated tiers that require representative
+hardware measurement; they should not replace the broad player backends
+speculatively.
 
 1. Split decoder provenance, compositor import, and presentation path in the
    shared model; keep the existing public `VideoId` session API stable.

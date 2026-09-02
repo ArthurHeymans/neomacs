@@ -63,4 +63,4 @@ else
 fi
 
 [[ $process_status -eq 0 ]] &&
-    grep -q '^NEOMACS_VIDEO_PROBE_RESULT PASS dma-buf-zero-copy$' "$result_file"
+    grep -q '^NEOMACS_VIDEO_PROBE_RESULT PASS direct-yuv-dma-buf-zero-copy$' "$result_file"
