@@ -62,23 +62,13 @@ impl RenderApp {
         );
 
         let (device, queue) =
-            match pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-                label: Some("Neomacs Render Thread Device"),
-                // Enable native multi-planar video where the backend exposes
-                // it. Keep every feature optional so older adapters retain
-                // the NV12/BGRA fallback selected by their platform importer.
-                required_features: adapter.features()
-                    & (wgpu::Features::TEXTURE_FORMAT_16BIT_NORM
-                        | wgpu::Features::TEXTURE_FORMAT_NV12
-                        | wgpu::Features::TEXTURE_FORMAT_P010),
-                required_limits: wgpu::Limits::default(),
-                memory_hints: Default::default(),
-                experimental_features: wgpu::ExperimentalFeatures::disabled(),
-                trace: wgpu::Trace::Off,
-            })) {
+            match pollster::block_on(neomacs_renderer_wgpu::request_renderer_device(
+                &adapter,
+                "Neomacs Render Thread Device",
+            )) {
                 Ok((d, q)) => (d, q),
                 Err(e) => {
-                    tracing::error!("Failed to create wgpu device: {:?}", e);
+                    tracing::error!("Failed to create wgpu device: {e}");
                     return;
                 }
             };

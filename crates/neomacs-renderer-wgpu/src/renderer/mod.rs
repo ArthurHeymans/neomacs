@@ -1192,22 +1192,7 @@ impl WgpuRenderer {
             .map_err(|e| format!("Failed to find a suitable GPU adapter: {}", e))?;
 
         // Request device and queue
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: Some("Neomacs Device"),
-                // Native video uses NV12/P010 on Vulkan/DX12 and R16/RG16
-                // plane wrappers on Metal. Unsupported features stay off.
-                required_features: adapter.features()
-                    & (wgpu::Features::TEXTURE_FORMAT_16BIT_NORM
-                        | wgpu::Features::TEXTURE_FORMAT_NV12
-                        | wgpu::Features::TEXTURE_FORMAT_P010),
-                required_limits: wgpu::Limits::default(),
-                memory_hints: Default::default(),
-                experimental_features: wgpu::ExperimentalFeatures::disabled(),
-                trace: wgpu::Trace::Off,
-            })
-            .await
-            .map_err(|e| format!("Failed to create device: {}", e))?;
+        let (device, queue) = crate::request_renderer_device(&adapter, "Neomacs Device").await?;
 
         let device = Arc::new(device);
         let queue = Arc::new(queue);
