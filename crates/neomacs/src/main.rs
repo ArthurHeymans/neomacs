@@ -1024,6 +1024,7 @@ impl EvaluatorExit {
 
 const GUI_EVALUATOR_THREAD_STACK_SIZE: usize = 64 * 1024 * 1024;
 const CLIPBOARD_REPLY_TIMEOUT: Duration = Duration::from_secs(5);
+#[cfg(feature = "video")]
 const VIDEO_DIAGNOSTICS_REPLY_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// FIFO cap for the declarative-surface memo: each resolved entry keeps a
