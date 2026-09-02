@@ -145,21 +145,43 @@ fn wait_for_pty_writable(pty: &pty_process::blocking::Pty, timeout: Duration) {
 /// it. Returning a bare [`PathBuf`] from a fixture constructor loses that
 /// ownership fact and leaves the directory behind after the test exits.
 pub struct TuiTempDirectory {
-    directory: tempfile::TempDir,
+    _owner: tempfile::TempDir,
+    path: PathBuf,
 }
 
 impl TuiTempDirectory {
     /// Create an isolated fixture root with a recognizable name prefix.
     pub fn new(prefix: &str) -> Self {
-        let directory = tempfile::Builder::new()
+        let owner = tempfile::Builder::new()
             .prefix(prefix)
             .tempdir()
             .expect("create TUI fixture temp directory");
-        Self { directory }
+        let path = owner.path().to_path_buf();
+        Self {
+            _owner: owner,
+            path,
+        }
+    }
+
+    /// Create an isolated fixture directory beneath a private owned parent.
+    ///
+    /// Use this when a program displays metadata for `..`: activity in the
+    /// system temporary directory cannot then perturb the observable parent.
+    pub fn new_with_private_parent(prefix: &str, directory_name: impl AsRef<Path>) -> Self {
+        let owner = tempfile::Builder::new()
+            .prefix(prefix)
+            .tempdir()
+            .expect("create TUI fixture parent directory");
+        let path = owner.path().join(directory_name);
+        std::fs::create_dir(&path).expect("create nested TUI fixture directory");
+        Self {
+            _owner: owner,
+            path,
+        }
     }
 
     pub fn path(&self) -> &Path {
-        self.directory.path()
+        &self.path
     }
 }
 
@@ -1023,11 +1045,32 @@ pub fn emacs_key(key: &str) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::{
-        TuiLaunch, TuiProcessOutcome, TuiSession, TuiTerminalConfig, emacs_key,
+        TuiLaunch, TuiProcessOutcome, TuiSession, TuiTempDirectory, TuiTerminalConfig, emacs_key,
         neomacs_binary_path_from_override,
         recording::{RecordingIdentity, RecordingPolicy},
     };
     use std::ffi::OsString;
+
+    #[test]
+    fn private_parent_temp_directory_exposes_a_nested_owned_directory() {
+        let directory = TuiTempDirectory::new_with_private_parent("tui-private-parent-", "listing");
+        let exposed = directory.path().to_path_buf();
+        let owner = exposed
+            .parent()
+            .expect("nested fixture directory should have a private parent")
+            .to_path_buf();
+
+        assert_eq!(
+            exposed.file_name().and_then(|name| name.to_str()),
+            Some("listing")
+        );
+        assert!(exposed.is_dir());
+        assert!(owner.is_dir());
+
+        drop(directory);
+
+        assert!(!owner.exists(), "private parent survived fixture drop");
+    }
     use std::fmt::Write as _;
     use std::path::{Path, PathBuf};
     use std::time::Duration;

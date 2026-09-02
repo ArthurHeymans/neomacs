@@ -9,7 +9,10 @@ use support::*;
 // ── Local helpers ───────────────────────────────────────────
 
 fn make_shared_dired_fixture(label: &str) -> TuiTempDirectory {
-    let directory = TuiTempDirectory::new(&format!("neomacs-dired-root-{label}-"));
+    let directory = TuiTempDirectory::new_with_private_parent(
+        &format!("neomacs-dired-root-{label}-"),
+        "listing",
+    );
     fs::create_dir_all(directory.join("nested")).expect("create dired fixture directory");
     fs::write(directory.join("alpha.txt"), "alpha body\n").expect("write alpha fixture");
     fs::write(directory.join("beta.org"), "* beta heading\n").expect("write beta fixture");
