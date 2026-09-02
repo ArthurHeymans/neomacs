@@ -15043,6 +15043,26 @@ fn display_space_relative_width_uses_displayed_character_width() {
 }
 
 #[test]
+fn display_space_relative_width_truncates_to_integer_pixels() {
+    let _eval = Context::new();
+    let params = test_window_params();
+    let spec = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword("relative-width"),
+        Value::make_float(1.001),
+    ]);
+    let geometry = DisplaySpaceGeometry::from_display_space_spec(
+        &spec, 0.0, 0.0, 8.0, 8.0, 10.0, 7.0, &params,
+    );
+
+    assert_eq!(
+        geometry.width, 8.0,
+        "GNU produce_stretch_glyph stores FACTOR * pixel_width in an int; \
+         Org's 1.001 alignment shim must not round up to a second TTY cell"
+    );
+}
+
+#[test]
 fn display_space_geometry_uses_relative_height_and_percent_ascent() {
     let _eval = Context::new();
     let params = test_window_params();

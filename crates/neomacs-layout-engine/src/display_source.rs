@@ -1844,7 +1844,11 @@ impl DisplaySpaceWidthPolicy {
             Self::Explicit(prop) => calc_pixel_width_or_height(pctx, &prop, true, None)
                 .map(|pixels| pixels as f32)
                 .unwrap_or(default_width),
-            Self::Relative { factor } => factor * display_char_width.max(0.0),
+            // GNU `produce_stretch_glyph` assigns the product to its integer
+            // pixel-width field (`xdisp.c`), truncating before row fitting.
+            // Keep that conversion inside the typed Relative branch: callers
+            // must not choose their own rounding policy for this width kind.
+            Self::Relative { factor } => (factor * display_char_width.max(0.0)).trunc(),
             Self::AlignTo(prop) => {
                 let mut align_to: i32 = -1;
                 if let Some(pixels) =
