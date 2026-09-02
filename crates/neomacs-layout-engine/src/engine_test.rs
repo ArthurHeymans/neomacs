@@ -31517,6 +31517,66 @@ fn p52_header_and_tab_lines_are_evaluated_with_the_mode_line() {
     assert_eq!(tab_line_eval_count(), 1, "tab line evaluated once");
 }
 
+/// Lisp entered from redisplay may write its own bookkeeping window
+/// parameters on every evaluation: `tab-line-format` stores `tab-line-cache`
+/// and, through `tab-line-tabs-fixed-window-buffers`, `tab-line-buffers`.
+/// GNU reads window parameters live and never treats such a write as a
+/// redisplay event. Keying attempt freshness on a write counter over the
+/// whole alist made every attempt that evaluated a tab line invalidate
+/// itself, and the frame was rejected once the retry budget ran out —
+/// `neomacs -nw` froze on its last accepted frame the moment
+/// `global-tab-line-mode` was enabled.
+#[test]
+fn tab_line_that_rewrites_its_bookkeeping_parameter_converges() {
+    let text = "body line\n".repeat(4);
+    let (mut eval, frame_id, buf_id, selected) = incr_editing_frame(&text, 640, 160);
+    let format = Value::list(vec![Value::list(vec![
+        Value::symbol(":eval"),
+        Value::list(vec![
+            Value::symbol("progn"),
+            Value::list(vec![
+                Value::symbol("set-window-parameter"),
+                Value::NIL,
+                Value::list(vec![
+                    Value::symbol("quote"),
+                    Value::symbol("tab-line-buffers"),
+                ]),
+                Value::list(vec![Value::symbol("list"), Value::string("tick")]),
+            ]),
+            Value::string("TAB"),
+        ]),
+    ])]);
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .set_buffer_local("tab-line-format", format);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("the frame converges instead of being rejected");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected.0 as i64)
+        .expect("selected window matrix");
+    let tab_line = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::TabLine)
+        .expect("tab-line row");
+    assert_eq!(row_text(&tab_line.glyphs[GlyphArea::Text.index()]), "TAB");
+    assert_eq!(
+        crate::display_status_line::tab_line_eval_count(),
+        1,
+        "the bookkeeping write did not force a layout retry"
+    );
+}
+
 /// WORK LIST (expected RED today): a redisplay that only moved point inside
 /// an unchanged buffer must NOT re-evaluate the mode line. This is GNU's
 /// one-line optimization (xdisp.c:17572-17726): it re-displays the cursor's

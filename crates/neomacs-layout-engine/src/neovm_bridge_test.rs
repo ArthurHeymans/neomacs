@@ -494,7 +494,6 @@ fn test_window_params_from_neovm_internal_returns_none() {
         top_line: 0,
         left_col: 0,
         parameters: Vec::new(),
-        parameters_generation: 0,
         combination_limit: false,
         new_pixel: None,
         new_total: None,
