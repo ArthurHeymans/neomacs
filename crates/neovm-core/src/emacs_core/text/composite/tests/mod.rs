@@ -302,11 +302,7 @@ fn composition_display_text_treats_tabs_as_padding_markers() {
         Value::fixnum('\t' as i64),
     ]);
     let id = composition_assign_id(&components, true);
-    let property = Value::list(vec![
-        Value::fixnum(id),
-        Value::fixnum(1),
-        components,
-    ]);
+    let property = Value::list(vec![Value::fixnum(id), Value::fixnum(1), components]);
 
     let display = composition_display_text_for_property(property).expect("valid composition");
     assert_eq!(display.text(), "A");

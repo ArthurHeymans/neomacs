@@ -4201,9 +4201,7 @@ pub(crate) fn builtin_select_window(
         // NORECORD selection used by `with-selected-window`.  The same typed
         // event invalidates both window chrome and the selected buffer's menu.
         eval.mark_chrome_dirty_all();
-        eval.request_menu_bar_rebuild(
-            super::eval::MenuBarRebuildReason::WindowsOrBuffersChanged,
-        );
+        eval.request_menu_bar_rebuild(super::eval::MenuBarRebuildReason::WindowsOrBuffersChanged);
     }
     if record_selection && run_buffer_list_hook {
         super::builtins::run_buffer_list_update_hook(eval)?;

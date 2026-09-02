@@ -138,10 +138,7 @@ fn child_frame_visibility_lifecycle() {
             (delete-frame cf)))",
     );
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(10), |grid| {
-        grid.iter()
-            .rev()
-            .take(4)
-            .any(|row| row.contains("(t nil)"))
+        grid.iter().rev().take(4).any(|row| row.contains("(t nil)"))
     });
     assert_pair_exact_display("child_frame_visibility_lifecycle", &gnu, &neo);
 }
