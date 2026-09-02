@@ -273,6 +273,19 @@ fn run_worker_inner(
         .sync(true)
         .enable_last_sample(false)
         .build();
+    let sink_pad = appsink
+        .static_pad("sink")
+        .ok_or_else(|| "GStreamer appsink has no static sink pad".to_owned())?;
+    let _allocation_probe = sink_pad
+        .add_probe(gst::PadProbeType::QUERY_DOWNSTREAM, |_, info| {
+            if let Some(query) = info.query_mut()
+                && let gst::QueryViewMut::Allocation(allocation) = query.view_mut()
+            {
+                advertise_required_video_meta(allocation);
+            }
+            gst::PadProbeReturn::Ok
+        })
+        .ok_or_else(|| "failed to observe GStreamer appsink allocation queries".to_owned())?;
     let audio_sink = gst::ElementFactory::make("fakesink")
         .build()
         .map_err(|error| format!("failed to create audio sink: {error}"))?;
@@ -606,7 +619,17 @@ fn preferred_sink_caps(
     policy: FrameImportPolicy,
     native_formats: NativeVideoFormatSupport,
 ) -> gst::Caps {
-    let mut builder = gst::Caps::builder_full();
+    // Modern GStreamer includes a hardware/driver-specific modifier in the
+    // `drm-format` string. Caps cannot express "these fourccs with any
+    // modifier", so accept DMA_DRM here and validate its typed sample before
+    // importing it. Requiring the bare "NV12" string would exclude the real
+    // `NV12:0x...` output advertised by VA decoders.
+    let mut builder = gst::Caps::builder_full().structure_with_features(
+        gst::Structure::builder("video/x-raw")
+            .field("format", "DMA_DRM")
+            .build(),
+        gst::CapsFeatures::new(["memory:DMABuf"]),
+    );
     let mut native_drm_formats = Vec::with_capacity(2);
     if native_formats.p010 {
         native_drm_formats.push("P010");
@@ -622,14 +645,6 @@ fn preferred_sink_caps(
                 format => format,
             })
             .collect();
-        builder = builder.structure_with_features(
-            gst::Structure::builder("video/x-raw")
-                .field("format", "DMA_DRM")
-                // Prefer the hardware decoder's native two-plane surfaces.
-                .field("drm-format", gst::List::new(native_drm_formats))
-                .build(),
-            gst::CapsFeatures::new(["memory:DMABuf"]),
-        );
         // GStreamer 1.20 represents linear DMA-BUF surfaces with the ordinary
         // video format in caps. Keep this after the 1.24 DMA_DRM form so newer
         // runtimes can still negotiate explicit modifiers, while the release
@@ -641,17 +656,6 @@ fn preferred_sink_caps(
             gst::CapsFeatures::new(["memory:DMABuf"]),
         );
     }
-    let builder = builder.structure_with_features(
-        gst::Structure::builder("video/x-raw")
-            .field("format", "DMA_DRM")
-            // Packed DMA-BUF remains an interop fallback. Requiring sRGB
-            // here is part of its contract: the packed sampling pipeline
-            // has no YUV transfer/color transform.
-            .field("drm-format", gst::List::new(["AR24", "AB24"]))
-            .field("colorimetry", "sRGB")
-            .build(),
-        gst::CapsFeatures::new(["memory:DMABuf"]),
-    );
     let builder = builder.structure_with_features(
         gst::Structure::builder("video/x-raw")
             .field("format", gst::List::new(["BGRA", "RGBA"]))
@@ -670,6 +674,17 @@ fn preferred_sink_caps(
             .build()
     } else {
         builder.build()
+    }
+}
+
+/// Tell hardware decoders that downstream preserves per-plane video layout.
+///
+/// GStreamer 1.20's appsink predates the dedicated propose-allocation
+/// callback. A downstream-query pad probe gives us the same safe allocation
+/// seam without raising Neomacs's minimum GStreamer ABI.
+fn advertise_required_video_meta(query: &mut gst::query::Allocation) {
+    if query.find_allocation_meta::<gst_video::VideoMeta>().is_none() {
+        query.add_allocation_meta::<gst_video::VideoMeta>(None);
     }
 }
 

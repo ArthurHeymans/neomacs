@@ -1,7 +1,7 @@
 use super::{
     DmaBufMemoryLayout, NativeVideoFormatSupport, ParsedDrmFormat, PipelineDrmIdentity,
-    PipelineDrmTopology, classify_pipeline_error, dma_buf_compositor_import,
-    frame_format_from_fourcc, missing_video_plugin, preferred_sink_caps,
+    PipelineDrmTopology, advertise_required_video_meta, classify_pipeline_error,
+    dma_buf_compositor_import, frame_format_from_fourcc, missing_video_plugin, preferred_sink_caps,
     retain_unready_decoder_writes, rotation_from_gstreamer_tag,
 };
 use crate::sampling::LinuxDrmDevice;
@@ -10,6 +10,20 @@ use crate::{
     VideoCompositorImport, VideoInstallerHint, VideoRotation,
 };
 use std::num::NonZeroU32;
+
+#[test]
+fn appsink_allocation_query_advertises_required_video_metadata() {
+    gstreamer::init().unwrap();
+    let mut query = gstreamer::query::Allocation::new(None, true);
+
+    advertise_required_video_meta(&mut query);
+
+    assert!(
+        query
+            .find_allocation_meta::<gstreamer_video::VideoMeta>()
+            .is_some()
+    );
+}
 
 #[test]
 fn finite_loop_count_means_additional_replays() {
@@ -105,7 +119,7 @@ fn packed_dmabuf_fallback_retains_its_srgb_contract() {
         },
     );
 
-    assert_eq!(caps.size(), 5);
+    assert_eq!(caps.size(), 4);
     assert!(
         caps.structure(0)
             .unwrap()
@@ -126,17 +140,10 @@ fn packed_dmabuf_fallback_retains_its_srgb_contract() {
             .unwrap(),
         "sRGB"
     );
-    assert_eq!(
-        caps.structure(4)
-            .unwrap()
-            .get::<String>("colorimetry")
-            .unwrap(),
-        "sRGB"
-    );
 }
 
 #[test]
-fn sink_caps_offer_only_native_formats_the_renderer_can_sample() {
+fn sink_caps_accept_modifier_bearing_dma_drm_then_validate_the_sample() {
     gstreamer::init().unwrap();
     let caps = preferred_sink_caps(
         FrameImportPolicy::AllowGpuBlit,
@@ -145,17 +152,19 @@ fn sink_caps_offer_only_native_formats_the_renderer_can_sample() {
             p010: false,
         },
     );
-    let formats = caps
-        .structure(0)
-        .unwrap()
-        .get::<gstreamer::List>("drm-format")
-        .unwrap();
-    let formats: Vec<_> = formats
-        .iter()
-        .map(|format| format.get::<String>().unwrap())
-        .collect();
-
-    assert_eq!(formats, ["NV12"]);
+    assert_eq!(
+        caps.structure(0)
+            .unwrap()
+            .get::<String>("format")
+            .unwrap(),
+        "DMA_DRM"
+    );
+    assert!(
+        caps.structure(0)
+            .unwrap()
+            .get::<String>("drm-format")
+            .is_err()
+    );
     let legacy_formats = caps
         .structure(1)
         .unwrap()
@@ -167,7 +176,7 @@ fn sink_caps_offer_only_native_formats_the_renderer_can_sample() {
         .collect();
 
     assert_eq!(legacy_formats, ["NV12"]);
-    assert_eq!(caps.size(), 4);
+    assert_eq!(caps.size(), 3);
 
     let packed_only = preferred_sink_caps(
         FrameImportPolicy::AllowGpuBlit,
@@ -180,6 +189,14 @@ fn sink_caps_offer_only_native_formats_the_renderer_can_sample() {
     assert_eq!(
         packed_only
             .structure(0)
+            .unwrap()
+            .get::<String>("format")
+            .unwrap(),
+        "DMA_DRM"
+    );
+    assert_eq!(
+        packed_only
+            .structure(1)
             .unwrap()
             .get::<String>("colorimetry")
             .unwrap(),
