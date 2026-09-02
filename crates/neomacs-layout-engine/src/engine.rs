@@ -3160,7 +3160,6 @@ impl LayoutEngine {
                             .is_empty()
                         })
                         .count(),
-                    margin_rows_reusable = curr_key.margin_rows_reusable(),
                     continued_rows = body.iter().filter(|row| row.continued).count(),
                     truncated_rows = body.iter().filter(|row| row.truncated_left).count(),
                     text_fringe_rows = body

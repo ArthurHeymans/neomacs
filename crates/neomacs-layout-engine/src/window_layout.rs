@@ -136,12 +136,6 @@ impl WindowPartitionSignature {
         self.regions.text_body
     }
 
-    /// Whether the window reserves a Lisp `left-margin-width` region, whose
-    /// glyphs share the left-margin area with the line-number gutter.
-    pub(crate) fn has_lisp_left_margin(self) -> bool {
-        self.regions.left_margin.is_some()
-    }
-
     #[cfg(test)]
     pub(crate) fn from_regions(regions: PresentedWindowRegions) -> Self {
         Self { regions }
