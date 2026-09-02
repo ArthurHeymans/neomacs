@@ -1123,6 +1123,24 @@ pub(crate) fn builtin_display_supports_face_attributes_p(
             host
         }
     };
+
+    // These attributes are rendered directly by the graphical backend; they
+    // do not require selecting a different font. In particular, reporting a
+    // wave underline as supported lets Flyspell choose its GNU graphical face
+    // instead of the `:inherit error`/`warning` fallback that recolors words.
+    let graphical_attribute = requested_attributes.foreground.is_some()
+        || requested_attributes.background.is_some()
+        || requested_attributes.underline.enabled().is_some()
+        || requested_attributes.overline == Some(true)
+        || requested_attributes.strike_through == Some(true)
+        || requested_attributes.box_border.enabled().is_some()
+        || requested_attributes.inverse_video == Some(true)
+        || requested_attributes.distant_foreground.is_some()
+        || requested_attributes.extend == Some(true);
+    if graphical_attribute {
+        return Ok(Value::T);
+    }
+
     let default_font = host
         .resolve_frame_font(
             frame_id,
@@ -1138,7 +1156,16 @@ pub(crate) fn builtin_display_supports_face_attributes_p(
         .ok()
         .flatten();
     let supported = match (default_font, requested_font) {
-        (Some(default), Some(requested)) if default != requested => {
+        // Native materialization may allocate a fresh `ResolvedFontId` for each
+        // request even when both requests opened the same exact font. GNU
+        // compares the realized selection, not transient host handles.
+        (Some(default), Some(requested))
+            if default.font.resolved.identity != requested.font.resolved.identity
+                || default.font.weight() != requested.font.weight()
+                || default.font.slant != requested.font.slant
+                || default.font.width() != requested.font.width()
+                || default.height_tenths != requested.height_tenths =>
+        {
             requested_attributes
                 .slant
                 .is_none_or(|slant| requested.font.slant.is_italic() == slant.is_italic())

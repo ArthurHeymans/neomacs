@@ -76,6 +76,54 @@ impl DisplayHost for ItalicCapableDisplayHost {
     }
 }
 
+#[derive(Default)]
+struct FreshIdSameFontDisplayHost {
+    next_id: u32,
+}
+
+impl DisplayHost for FreshIdSameFontDisplayHost {
+    fn realize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resolve_frame_font(
+        &mut self,
+        _frame_id: crate::window::FrameId,
+        _request: crate::emacs_core::display_host::FrameFontRequest,
+    ) -> Result<Option<crate::emacs_core::eval::ResolvedFrameFont>, String> {
+        let metrics = crate::emacs_core::eval::FontPxProbeResult {
+            pixel_size: 14,
+            height: 16,
+            ascent: 12,
+            descent: 4,
+            max_width: 8,
+            space_width: 8,
+            average_width: 8,
+        };
+        let mut font = crate::emacs_core::eval::test_resolved_opened_font(
+            "Noto Sans",
+            None,
+            None,
+            crate::face::FontWeight::NORMAL,
+            crate::face::FontSlant::Normal,
+            crate::face::FontWidth::Normal,
+            None,
+            metrics,
+            None,
+        );
+        self.next_id += 1;
+        font.resolved.id = neomacs_display_protocol::font::ResolvedFontId(self.next_id);
+        Ok(Some(crate::emacs_core::eval::ResolvedFrameFont {
+            font,
+            height_tenths: 100,
+        }))
+    }
+}
+
 struct FailingClipboardDisplayHost;
 
 impl DisplayHost for FailingClipboardDisplayHost {
@@ -3797,6 +3845,50 @@ fn display_supports_face_attributes_p_uses_live_gui_font_capabilities() {
         builtin_display_supports_face_attributes_p(&mut eval, vec![attrs]).unwrap(),
         Value::T,
         "a GUI host that realizes the requested italic font must report the face spec as supported",
+    );
+}
+
+#[test]
+fn display_supports_face_attributes_p_ignores_fresh_handles_for_the_same_font() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    let frame_id = eval
+        .frames
+        .create_frame("gui-face-support-same-font", 800, 600, scratch);
+    eval.frames.select_frame(frame_id);
+    eval.set_display_host(Box::new(FreshIdSameFontDisplayHost::default()));
+
+    let attrs = Value::list(vec![
+        Value::keyword("family"),
+        Value::string("Definitely Missing Font"),
+    ]);
+    assert_eq!(
+        builtin_display_supports_face_attributes_p(&mut eval, vec![attrs]).unwrap(),
+        Value::NIL,
+        "fresh native handles for the same opened font must not make an unavailable font look supported",
+    );
+}
+
+#[test]
+fn display_supports_face_attributes_p_reports_gui_wave_underline() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    let frame_id = eval
+        .frames
+        .create_frame("gui-face-support-wave-underline", 800, 600, scratch);
+    eval.frames.select_frame(frame_id);
+    eval.set_display_host(Box::new(FreshIdSameFontDisplayHost::default()));
+
+    let attrs = Value::list(vec![
+        Value::keyword("underline"),
+        Value::list(vec![Value::keyword("style"), Value::symbol("wave")]),
+    ]);
+    assert_eq!(
+        builtin_display_supports_face_attributes_p(&mut eval, vec![attrs]).unwrap(),
+        Value::T,
+        "the graphical renderer supports Flyspell's wave underline without changing fonts",
     );
 }
 
