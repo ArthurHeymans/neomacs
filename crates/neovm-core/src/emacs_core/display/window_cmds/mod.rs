@@ -4287,7 +4287,7 @@ pub(crate) fn builtin_set_window_buffer(
         // fall back to the frame-wide flag rather than dropping the event.
         eval.mark_chrome_dirty_all();
     }
-    let (fid, wid, buf_id, keep_margins, run_buffer_list_hook, ordinary_buffer_changed) = {
+    let (fid, wid, buf_id, keep_margins, run_buffer_list_hook) = {
         let (frames, buffers, minibuffers) =
             (&mut eval.frames, &mut eval.buffers, &eval.minibuffers);
         let (fid, wid) = resolve_window_id_in_state(frames, buffers, args.first())?;
@@ -4393,29 +4393,15 @@ pub(crate) fn builtin_set_window_buffer(
                 discard_buffers_from_window_history(frames, wid, &[Value::make_buffer(buf_id)])?;
             }
         }
-        let ordinary_buffer_changed = old_state
-            .is_some_and(|(old_buffer_id, _, _, _)| old_buffer_id != buf_id)
-            && frames
-                .get(fid)
-                .is_some_and(|frame| frame.minibuffer_window != Some(wid));
-        (
-            fid,
-            wid,
-            buf_id,
-            keep_margins,
-            run_buffer_list_hook,
-            ordinary_buffer_changed,
-        )
+        (fid, wid, buf_id, keep_margins, run_buffer_list_hook)
     };
-    // GNU `set_window_buffer` raises FRAME_WINDOW_CHANGE when a different
-    // buffer is installed in an ordinary window (window.c). Redisplay promotes
-    // that frame event to `windows_or_buffers_changed`, one of
-    // `update_menu_bar`'s explicit cache-rebuild predicates. Keep this
-    // separate from `mark_chrome_dirty_window`: same-buffer assignments still
-    // dirty `%b`/`%m` chrome without broadening the menu invalidation.
-    if ordinary_buffer_changed {
-        eval.request_menu_bar_rebuild(super::eval::MenuBarRebuildReason::WindowsOrBuffersChanged);
-    }
+    // Do not turn GNU's `FRAME_WINDOW_CHANGE` side effect into an immediate
+    // menu rebuild.  `redisplay_internal` calls `prepare_menu_bars` before
+    // `run_window_change_functions` promotes that frame flag to
+    // `windows_or_buffers_changed`, so the selected window's previously
+    // prepared menu survives this redisplay.  Explicit update-mode-lines and
+    // actual nonselected-window redisplay events remain the typed rebuild
+    // boundaries in `MenuBarRebuildReason`.
     if run_buffer_list_hook {
         super::builtins::run_buffer_list_update_hook(eval)?;
     }
