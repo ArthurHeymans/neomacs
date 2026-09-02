@@ -1,9 +1,9 @@
 use crate::backend::{
-    CompletedFrameTransfer, DecodedFrame, FrameImportOutcome, FrameImporter, ImportedFrame,
+    CompletedFrameImport, DecodedFrame, FrameImportOutcome, FrameImporter, ImportedFrame,
 };
 use crate::sampling::{GpuVideoContext, PreparedBiPlanarTexture, PreparedSampledTexture};
 use crate::surface_pool::{BoundedSurfacePool, SurfacePoolAcquire};
-use crate::{GpuVideoFrame, VideoFrameFormat, VideoTransferPath};
+use crate::{GpuVideoFrame, VideoCompositorImport, VideoFrameFormat};
 
 use super::dmabuf::{ImportedDmaBufSurface, import_dmabuf};
 use super::frame::{DmaBufSurfaceKey, LinuxFrameLease, LinuxFrameStorage, dmabuf_cache_key};
@@ -38,8 +38,8 @@ impl LinuxFrameImporter {
 impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
     type Sampled = GpuVideoFrame;
 
-    fn transfer_path(&self, frame: &DecodedFrame<LinuxFrameLease>) -> VideoTransferPath {
-        frame.lease.transfer_path
+    fn compositor_import(&self, frame: &DecodedFrame<LinuxFrameLease>) -> VideoCompositorImport {
+        frame.lease.compositor_import
     }
 
     fn import(
@@ -55,7 +55,7 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
         } = frame;
         match &lease.storage {
             LinuxFrameStorage::DmaBuf(surface) => {
-                let path = lease.transfer_path;
+                let path = lease.compositor_import;
                 let key = dmabuf_cache_key(
                     surface,
                     geometry.coded_width,
@@ -119,22 +119,22 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
                         )
                     }
                 };
-                let transfer = match path {
-                    VideoTransferPath::DirectExternalSurface => {
-                        CompletedFrameTransfer::DirectExternalSurface
+                let completed_import = match path {
+                    VideoCompositorImport::BorrowedNativeSurface => {
+                        CompletedFrameImport::BorrowedNativeSurface
                     }
-                    VideoTransferPath::GpuInteropCopy => CompletedFrameTransfer::GpuInteropCopy {
+                    VideoCompositorImport::GpuBlit => CompletedFrameImport::GpuBlit {
                         // A decoder-side conversion may have happened, but
                         // its byte volume is not exposed through this ABI.
                         reported_bytes: None,
                     },
-                    VideoTransferPath::CpuUpload => {
+                    VideoCompositorImport::CpuUpload => {
                         unreachable!("a DMA-BUF surface cannot be classified as a CPU upload")
                     }
                 };
                 Ok(FrameImportOutcome::Ready(ImportedFrame {
                     sampled,
-                    transfer,
+                    completed_import,
                 }))
             }
             LinuxFrameStorage::CpuPacked(surface) => {
@@ -143,7 +143,7 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
                         .upload_rgba(geometry, format, &surface.bytes, surface.stride)?;
                 Ok(FrameImportOutcome::Ready(ImportedFrame {
                     sampled,
-                    transfer: CompletedFrameTransfer::CpuUpload {
+                    completed_import: CompletedFrameImport::CpuUpload {
                         bytes: u64::from(surface.stride)
                             .saturating_mul(u64::from(geometry.coded_height)),
                     },

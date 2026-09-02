@@ -5,7 +5,7 @@ mod importer;
 
 use crate::backend::{Platform, ProductionPlatform};
 use crate::sampling::GpuVideoContext;
-use crate::{FrameTransferPolicy, GpuVideoFrame, VideoDecodeBackend, VideoInitError, VideoWake};
+use crate::{FrameImportPolicy, GpuVideoFrame, VideoDecodeBackend, VideoInitError, VideoWake};
 
 use decoder::{GstreamerDecoder, NativeVideoFormatSupport};
 use frame::LinuxFrameLease;
@@ -24,7 +24,7 @@ impl Platform for LinuxPlatform {
 impl ProductionPlatform for LinuxPlatform {
     fn create(
         gpu: GpuVideoContext,
-        policy: FrameTransferPolicy,
+        policy: FrameImportPolicy,
         wake: VideoWake,
     ) -> Result<(Self::Decoder, Self::Importer), VideoInitError> {
         let renderer_drm_device = gpu.linux_render_device();

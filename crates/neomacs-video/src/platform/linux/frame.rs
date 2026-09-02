@@ -2,7 +2,7 @@ use std::os::fd::{AsRawFd, OwnedFd};
 
 use gstreamer as gst;
 
-use crate::{VideoColorimetry, VideoTransferPath};
+use crate::{VideoColorimetry, VideoCompositorImport};
 
 pub(super) struct DmaBufObject {
     pub(super) fd: OwnedFd,
@@ -34,7 +34,7 @@ pub(super) enum LinuxFrameStorage {
 pub(crate) struct LinuxFrameLease {
     pub(super) _sample: gst::Sample,
     pub(super) storage: LinuxFrameStorage,
-    pub(super) transfer_path: VideoTransferPath,
+    pub(super) compositor_import: VideoCompositorImport,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

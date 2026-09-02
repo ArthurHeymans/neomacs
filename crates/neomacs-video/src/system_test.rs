@@ -6,16 +6,16 @@ use std::time::{Duration, Instant};
 use neomacs_display_protocol::types::VideoId;
 
 use super::backend::{
-    BackendEvent, CompletedFrameTransfer, DecodedFrame, DecodedFrameTransfer, DecoderBackend,
+    BackendEvent, CompletedFrameImport, DecodedFrame, DecodedFrameImport, DecoderBackend,
     DecoderReconfiguration, FrameImportOutcome, FrameImporter, ImportedFrame, Platform,
-    require_fixed_transfer_path,
+    require_fixed_compositor_import,
 };
 use super::system::VideoSystemImpl;
 use super::{
-    FrameTiming, FrameTransferPolicy, GpuGeneration, InitialPlayback, MediaTime, PackedVideoFormat,
-    PlaybackEpoch, PresentationVisibility, VideoColorimetry, VideoCommand, VideoEvent,
-    VideoFrameFormat, VideoFrameReady, VideoGeometry, VideoInitError, VideoSessionState,
-    VideoSource, VideoTransferPath,
+    FrameImportPolicy, FrameTiming, GpuGeneration, InitialPlayback, MediaTime, PackedVideoFormat,
+    PlaybackEpoch, PresentationVisibility, VideoColorimetry, VideoCommand, VideoCompositorImport,
+    VideoDecodeResidency, VideoEvent, VideoFrameFormat, VideoFramePath, VideoFrameReady,
+    VideoGeometry, VideoInitError, VideoPresentationPath, VideoSessionState, VideoSource,
 };
 
 #[test]
@@ -54,35 +54,36 @@ fn finite_loop_permission_is_consumed_without_an_untyped_counter_sentinel() {
 }
 
 #[test]
-fn transfer_policy_orders_direct_gpu_copy_and_cpu_fallback_explicitly() {
+fn import_policy_orders_direct_gpu_copy_and_cpu_fallback_explicitly() {
     assert!(
-        FrameTransferPolicy::RequireDirectSurface.permits(VideoTransferPath::DirectExternalSurface)
+        FrameImportPolicy::RequireDirectSurface
+            .permits(VideoCompositorImport::BorrowedNativeSurface)
     );
-    assert!(!FrameTransferPolicy::RequireDirectSurface.permits(VideoTransferPath::GpuInteropCopy));
-    assert!(FrameTransferPolicy::AllowGpuInteropCopy.permits(VideoTransferPath::GpuInteropCopy));
-    assert!(!FrameTransferPolicy::AllowGpuInteropCopy.permits(VideoTransferPath::CpuUpload));
-    assert!(FrameTransferPolicy::AllowCpuUpload.permits(VideoTransferPath::CpuUpload));
+    assert!(!FrameImportPolicy::RequireDirectSurface.permits(VideoCompositorImport::GpuBlit));
+    assert!(FrameImportPolicy::AllowGpuBlit.permits(VideoCompositorImport::GpuBlit));
+    assert!(!FrameImportPolicy::AllowGpuBlit.permits(VideoCompositorImport::CpuUpload));
+    assert!(FrameImportPolicy::AllowCpuUpload.permits(VideoCompositorImport::CpuUpload));
 }
 
 #[test]
 fn fixed_native_path_is_rejected_before_platform_startup() {
     assert_eq!(
-        require_fixed_transfer_path(
+        require_fixed_compositor_import(
             super::VideoDecodeBackend::MediaFoundation,
-            FrameTransferPolicy::RequireDirectSurface,
-            VideoTransferPath::GpuInteropCopy,
+            FrameImportPolicy::RequireDirectSurface,
+            VideoCompositorImport::GpuBlit,
         ),
-        Err(VideoInitError::TransferForbidden {
+        Err(VideoInitError::ImportForbidden {
             backend: super::VideoDecodeBackend::MediaFoundation,
-            policy: FrameTransferPolicy::RequireDirectSurface,
-            path: VideoTransferPath::GpuInteropCopy,
+            policy: FrameImportPolicy::RequireDirectSurface,
+            path: VideoCompositorImport::GpuBlit,
         })
     );
     assert_eq!(
-        require_fixed_transfer_path(
+        require_fixed_compositor_import(
             super::VideoDecodeBackend::MediaFoundation,
-            FrameTransferPolicy::AllowGpuInteropCopy,
-            VideoTransferPath::GpuInteropCopy,
+            FrameImportPolicy::AllowGpuBlit,
+            VideoCompositorImport::GpuBlit,
         ),
         Ok(())
     );
@@ -126,8 +127,8 @@ struct FakeImporter;
 impl FrameImporter<u64> for FakeImporter {
     type Sampled = u64;
 
-    fn transfer_path(&self, _frame: &DecodedFrame<u64>) -> VideoTransferPath {
-        VideoTransferPath::DirectExternalSurface
+    fn compositor_import(&self, _frame: &DecodedFrame<u64>) -> VideoCompositorImport {
+        VideoCompositorImport::BorrowedNativeSurface
     }
 
     fn import(
@@ -136,7 +137,7 @@ impl FrameImporter<u64> for FakeImporter {
     ) -> Result<FrameImportOutcome<Self::Sampled>, String> {
         Ok(FrameImportOutcome::Ready(ImportedFrame {
             sampled: frame.lease,
-            transfer: CompletedFrameTransfer::DirectExternalSurface,
+            completed_import: CompletedFrameImport::BorrowedNativeSurface,
         }))
     }
 }
@@ -156,8 +157,8 @@ struct GpuCopyImporter;
 impl FrameImporter<u64> for GpuCopyImporter {
     type Sampled = u64;
 
-    fn transfer_path(&self, _frame: &DecodedFrame<u64>) -> VideoTransferPath {
-        VideoTransferPath::GpuInteropCopy
+    fn compositor_import(&self, _frame: &DecodedFrame<u64>) -> VideoCompositorImport {
+        VideoCompositorImport::GpuBlit
     }
 
     fn import(
@@ -166,7 +167,7 @@ impl FrameImporter<u64> for GpuCopyImporter {
     ) -> Result<FrameImportOutcome<Self::Sampled>, String> {
         Ok(FrameImportOutcome::Ready(ImportedFrame {
             sampled: frame.lease,
-            transfer: CompletedFrameTransfer::GpuInteropCopy {
+            completed_import: CompletedFrameImport::GpuBlit {
                 reported_bytes: Some(4),
             },
         }))
@@ -191,7 +192,7 @@ fn fake_system() -> (VideoSystemImpl<FakePlatform>, FakeControl) {
                 events: Arc::clone(&events),
             },
             FakeImporter,
-            FrameTransferPolicy::RequireDirectSurface,
+            FrameImportPolicy::RequireDirectSurface,
         ),
         FakeControl { events },
     )
@@ -202,8 +203,8 @@ struct BackpressuredImporter;
 impl FrameImporter<u64> for BackpressuredImporter {
     type Sampled = u64;
 
-    fn transfer_path(&self, _frame: &DecodedFrame<u64>) -> VideoTransferPath {
-        VideoTransferPath::DirectExternalSurface
+    fn compositor_import(&self, _frame: &DecodedFrame<u64>) -> VideoCompositorImport {
+        VideoCompositorImport::BorrowedNativeSurface
     }
 
     fn import(
@@ -257,8 +258,8 @@ struct RecoveringImporter {
 impl FrameImporter<u64> for RecoveringImporter {
     type Sampled = u64;
 
-    fn transfer_path(&self, _frame: &DecodedFrame<u64>) -> VideoTransferPath {
-        VideoTransferPath::GpuInteropCopy
+    fn compositor_import(&self, _frame: &DecodedFrame<u64>) -> VideoCompositorImport {
+        VideoCompositorImport::GpuBlit
     }
 
     fn import(
@@ -274,7 +275,7 @@ impl FrameImporter<u64> for RecoveringImporter {
         }
         Ok(FrameImportOutcome::Ready(ImportedFrame {
             sampled: frame.lease,
-            transfer: CompletedFrameTransfer::GpuInteropCopy {
+            completed_import: CompletedFrameImport::GpuBlit {
                 reported_bytes: None,
             },
         }))
@@ -395,6 +396,7 @@ fn service_imports_only_the_latest_due_frame_and_reports_its_timestamp() {
         id,
         frame: DecodedFrame {
             lease: 1,
+            decode_residency: VideoDecodeResidency::Unknown,
             timing: FrameTiming {
                 pts: MediaTime::from_nanos(10),
                 duration: MediaTime::from_nanos(10),
@@ -403,13 +405,14 @@ fn service_imports_only_the_latest_due_frame_and_reports_its_timestamp() {
             geometry: VideoGeometry::packed(320, 200),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
-            decoder_transfer: DecodedFrameTransfer::Deferred,
+            decoder_import: DecodedFrameImport::Deferred,
         },
     });
     control.publish(BackendEvent::Frame {
         id,
         frame: DecodedFrame {
             lease: 2,
+            decode_residency: VideoDecodeResidency::Unknown,
             timing: FrameTiming {
                 pts: MediaTime::from_nanos(20),
                 duration: MediaTime::from_nanos(10),
@@ -418,7 +421,7 @@ fn service_imports_only_the_latest_due_frame_and_reports_its_timestamp() {
             geometry: VideoGeometry::packed(320, 200),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
-            decoder_transfer: DecodedFrameTransfer::Deferred,
+            decoder_import: DecodedFrameImport::Deferred,
         },
     });
 
@@ -436,7 +439,11 @@ fn service_imports_only_the_latest_due_frame_and_reports_its_timestamp() {
         vec![VideoFrameReady {
             id,
             pts: MediaTime::from_nanos(20),
-            transfer_path: VideoTransferPath::DirectExternalSurface,
+            frame_path: VideoFramePath::new(
+                VideoDecodeResidency::Unknown,
+                VideoCompositorImport::BorrowedNativeSurface,
+                VideoPresentationPath::WgpuComposited,
+            ),
         }]
     );
     assert_eq!(system.sampled(id), Some(&2));
@@ -446,7 +453,11 @@ fn service_imports_only_the_latest_due_frame_and_reports_its_timestamp() {
             id,
             backend: super::VideoDecodeBackend::GStreamer,
             state: VideoSessionState::Playing,
-            transfer_path: Some(VideoTransferPath::DirectExternalSurface),
+            frame_path: Some(VideoFramePath::new(
+                VideoDecodeResidency::Unknown,
+                VideoCompositorImport::BorrowedNativeSurface,
+                VideoPresentationPath::WgpuComposited,
+            )),
             frame_format: Some(VideoFrameFormat::Packed(PackedVideoFormat::Rgba8)),
             colorimetry: Some(VideoColorimetry::SRGB),
             decoded_frames: 2,
@@ -454,11 +465,11 @@ fn service_imports_only_the_latest_due_frame_and_reports_its_timestamp() {
             late_dropped_frames: 0,
             imported_frames: 1,
             backpressured_frames: 0,
-            transfer_counts: super::VideoTransferCounts {
-                direct_external_frames: 1,
-                gpu_interop_copy_frames: 0,
+            import_counts: super::VideoImportCounts {
+                borrowed_native_frames: 1,
+                gpu_blit_frames: 0,
                 cpu_upload_frames: 0,
-                reported_gpu_copy_bytes: 0,
+                reported_gpu_blit_bytes: 0,
                 cpu_upload_bytes: 0,
             },
         }]
@@ -466,7 +477,7 @@ fn service_imports_only_the_latest_due_frame_and_reports_its_timestamp() {
 }
 
 #[test]
-fn decoder_completed_transfers_are_counted_even_when_the_frame_is_replaced() {
+fn decoder_completed_imports_are_counted_even_when_the_frame_is_replaced() {
     let id = VideoId::new(82);
     let events = Arc::new(Mutex::new(VecDeque::new()));
     let control = FakeControl {
@@ -475,7 +486,7 @@ fn decoder_completed_transfers_are_counted_even_when_the_frame_is_replaced() {
     let mut system = VideoSystemImpl::<GpuCopyPlatform>::new(
         FakeDecoder { events },
         GpuCopyImporter,
-        FrameTransferPolicy::AllowGpuInteropCopy,
+        FrameImportPolicy::AllowGpuBlit,
     );
     system
         .command(VideoCommand::Open {
@@ -495,10 +506,9 @@ fn decoder_completed_transfers_are_counted_even_when_the_frame_is_replaced() {
         let BackendEvent::Frame { id, mut frame } = fake_frame(id, lease, 0) else {
             unreachable!("fake_frame always constructs a frame event");
         };
-        frame.decoder_transfer =
-            DecodedFrameTransfer::Completed(CompletedFrameTransfer::GpuInteropCopy {
-                reported_bytes: Some(4),
-            });
+        frame.decoder_import = DecodedFrameImport::Completed(CompletedFrameImport::GpuBlit {
+            reported_bytes: Some(4),
+        });
         control.publish(BackendEvent::Frame { id, frame });
     }
 
@@ -508,8 +518,8 @@ fn decoder_completed_transfers_are_counted_even_when_the_frame_is_replaced() {
     assert_eq!(diagnostics[0].decoded_frames, 2);
     assert_eq!(diagnostics[0].replaced_frames, 1);
     assert_eq!(diagnostics[0].imported_frames, 1);
-    assert_eq!(diagnostics[0].transfer_counts.gpu_interop_copy_frames, 2);
-    assert_eq!(diagnostics[0].transfer_counts.reported_gpu_copy_bytes, 8);
+    assert_eq!(diagnostics[0].import_counts.gpu_blit_frames, 2);
+    assert_eq!(diagnostics[0].import_counts.reported_gpu_blit_bytes, 8);
 }
 
 #[test]
@@ -522,7 +532,7 @@ fn bounded_importer_backpressure_drops_a_frame_without_failing_playback() {
     let mut system = VideoSystemImpl::<BackpressuredPlatform>::new(
         FakeDecoder { events },
         BackpressuredImporter,
-        FrameTransferPolicy::RequireDirectSurface,
+        FrameImportPolicy::RequireDirectSurface,
     );
     system
         .command(VideoCommand::Open {
@@ -542,6 +552,7 @@ fn bounded_importer_backpressure_drops_a_frame_without_failing_playback() {
         id,
         frame: DecodedFrame {
             lease: 1,
+            decode_residency: VideoDecodeResidency::Unknown,
             timing: FrameTiming {
                 pts: MediaTime::ZERO,
                 duration: MediaTime::from_nanos(16_666_667),
@@ -550,7 +561,7 @@ fn bounded_importer_backpressure_drops_a_frame_without_failing_playback() {
             geometry: VideoGeometry::packed(320, 200),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
-            decoder_transfer: DecodedFrameTransfer::Deferred,
+            decoder_import: DecodedFrameImport::Deferred,
         },
     });
 
@@ -585,7 +596,7 @@ fn recoverable_import_failure_reconfigures_decoder_without_poisoning_session() {
             reconfigurations: Arc::clone(&reconfigurations),
         },
         RecoveringImporter { attempts: 0 },
-        FrameTransferPolicy::AllowGpuInteropCopy,
+        FrameImportPolicy::AllowGpuBlit,
     );
     system
         .command(VideoCommand::Open {
@@ -646,6 +657,7 @@ fn a_new_session_anchors_decoder_pts_to_its_open_acknowledgement() {
         id,
         frame: DecodedFrame {
             lease: 11,
+            decode_residency: VideoDecodeResidency::Unknown,
             timing: FrameTiming {
                 pts: MediaTime::from_nanos(1_000_000_000),
                 duration: MediaTime::from_nanos(41_666_667),
@@ -654,7 +666,7 @@ fn a_new_session_anchors_decoder_pts_to_its_open_acknowledgement() {
             geometry: VideoGeometry::packed(320, 200),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
-            decoder_transfer: DecodedFrameTransfer::Deferred,
+            decoder_import: DecodedFrameImport::Deferred,
         },
     });
 
@@ -751,6 +763,7 @@ fn closing_a_presented_video_retires_its_native_lease_after_gpu_submission() {
         id,
         frame: DecodedFrame {
             lease: 41,
+            decode_residency: VideoDecodeResidency::Unknown,
             timing: FrameTiming {
                 pts: MediaTime::ZERO,
                 duration: MediaTime::from_nanos(1),
@@ -759,7 +772,7 @@ fn closing_a_presented_video_retires_its_native_lease_after_gpu_submission() {
             geometry: VideoGeometry::packed(1, 1),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
-            decoder_transfer: DecodedFrameTransfer::Deferred,
+            decoder_import: DecodedFrameImport::Deferred,
         },
     });
     system.service(Instant::now());
@@ -780,7 +793,7 @@ fn close_cleans_local_state_even_if_the_native_decoder_already_failed() {
     let mut system = VideoSystemImpl::<CloseFailPlatform>::new(
         CloseFailDecoder { events },
         FakeImporter,
-        FrameTransferPolicy::RequireDirectSurface,
+        FrameImportPolicy::RequireDirectSurface,
     );
     system
         .command(VideoCommand::Open {
@@ -812,6 +825,7 @@ fn fake_frame(id: VideoId, lease: u64, pts: u64) -> BackendEvent<u64> {
         id,
         frame: DecodedFrame {
             lease,
+            decode_residency: VideoDecodeResidency::Unknown,
             timing: FrameTiming {
                 pts: MediaTime::from_nanos(pts),
                 duration: MediaTime::from_nanos(1),
@@ -820,7 +834,7 @@ fn fake_frame(id: VideoId, lease: u64, pts: u64) -> BackendEvent<u64> {
             geometry: VideoGeometry::packed(1, 1),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
-            decoder_transfer: DecodedFrameTransfer::Deferred,
+            decoder_import: DecodedFrameImport::Deferred,
         },
     }
 }
@@ -832,8 +846,8 @@ struct ForbiddenImporter {
 impl FrameImporter<u64> for ForbiddenImporter {
     type Sampled = u64;
 
-    fn transfer_path(&self, _frame: &DecodedFrame<u64>) -> VideoTransferPath {
-        VideoTransferPath::CpuUpload
+    fn compositor_import(&self, _frame: &DecodedFrame<u64>) -> VideoCompositorImport {
+        VideoCompositorImport::CpuUpload
     }
 
     fn import(
@@ -844,7 +858,7 @@ impl FrameImporter<u64> for ForbiddenImporter {
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Ok(FrameImportOutcome::Ready(ImportedFrame {
             sampled: frame.lease,
-            transfer: CompletedFrameTransfer::CpuUpload { bytes: 4 },
+            completed_import: CompletedFrameImport::CpuUpload { bytes: 4 },
         }))
     }
 }
@@ -878,7 +892,7 @@ impl Platform for ForbiddenPlatform {
 }
 
 #[test]
-fn strict_transfer_policy_rejects_a_frame_before_import_side_effects() {
+fn strict_import_policy_rejects_a_frame_before_import_side_effects() {
     let id = VideoId::new(91);
     let events = Arc::new(Mutex::new(VecDeque::new()));
     let control = FakeControl {
@@ -894,7 +908,7 @@ fn strict_transfer_policy_rejects_a_frame_before_import_side_effects() {
         ForbiddenImporter {
             calls: Arc::clone(&calls),
         },
-        FrameTransferPolicy::RequireDirectSurface,
+        FrameImportPolicy::RequireDirectSurface,
     );
     system
         .command(VideoCommand::Open {
@@ -919,9 +933,9 @@ fn strict_transfer_policy_rejects_a_frame_before_import_side_effects() {
     assert!(matches!(
         result.events.last(),
         Some(VideoEvent::Failed {
-            error: super::VideoCommandError::TransferForbidden {
-                policy: FrameTransferPolicy::RequireDirectSurface,
-                path: VideoTransferPath::CpuUpload,
+            error: super::VideoCommandError::ImportForbidden {
+                policy: FrameImportPolicy::RequireDirectSurface,
+                path: VideoCompositorImport::CpuUpload,
             },
             ..
         })
@@ -977,6 +991,7 @@ fn expired_frame_is_dropped_before_native_import() {
         id,
         frame: DecodedFrame {
             lease: 2,
+            decode_residency: VideoDecodeResidency::Unknown,
             timing: FrameTiming {
                 pts: MediaTime::from_nanos(10),
                 duration: MediaTime::from_nanos(5),
@@ -985,7 +1000,7 @@ fn expired_frame_is_dropped_before_native_import() {
             geometry: VideoGeometry::packed(1, 1),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
-            decoder_transfer: DecodedFrameTransfer::Deferred,
+            decoder_import: DecodedFrameImport::Deferred,
         },
     });
 
@@ -1075,6 +1090,7 @@ fn loop_boundary_rejects_a_terminal_frame_from_the_previous_epoch() {
         id,
         frame: DecodedFrame {
             lease: 8,
+            decode_residency: VideoDecodeResidency::Unknown,
             timing: FrameTiming {
                 pts: MediaTime::ZERO,
                 duration: MediaTime::from_nanos(1),
@@ -1083,7 +1099,7 @@ fn loop_boundary_rejects_a_terminal_frame_from_the_previous_epoch() {
             geometry: VideoGeometry::packed(1, 1),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
-            decoder_transfer: DecodedFrameTransfer::Deferred,
+            decoder_import: DecodedFrameImport::Deferred,
         },
     });
 
@@ -1094,7 +1110,11 @@ fn loop_boundary_rejects_a_terminal_frame_from_the_previous_epoch() {
         vec![VideoFrameReady {
             id,
             pts: MediaTime::ZERO,
-            transfer_path: VideoTransferPath::DirectExternalSurface,
+            frame_path: VideoFramePath::new(
+                VideoDecodeResidency::Unknown,
+                VideoCompositorImport::BorrowedNativeSurface,
+                VideoPresentationPath::WgpuComposited,
+            ),
         }]
     );
     assert_eq!(system.sampled(id), Some(&8));
@@ -1136,7 +1156,7 @@ fn presentation_visibility_is_a_deduplicated_native_decoder_input() {
             commands: Arc::clone(&commands),
         },
         FakeImporter,
-        FrameTransferPolicy::RequireDirectSurface,
+        FrameImportPolicy::RequireDirectSurface,
     );
     system
         .command(VideoCommand::Open {
@@ -1237,6 +1257,7 @@ fn hidden_presentation_freezes_media_time_until_the_decoder_is_presented_again()
         id,
         frame: DecodedFrame {
             lease: 1,
+            decode_residency: VideoDecodeResidency::Unknown,
             timing: FrameTiming {
                 pts: MediaTime::from_nanos(20),
                 duration: MediaTime::from_nanos(1_000),
@@ -1245,7 +1266,7 @@ fn hidden_presentation_freezes_media_time_until_the_decoder_is_presented_again()
             geometry: VideoGeometry::packed(1, 1),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
-            decoder_transfer: DecodedFrameTransfer::Deferred,
+            decoder_import: DecodedFrameImport::Deferred,
         },
     });
     system
@@ -1293,6 +1314,7 @@ fn hidden_presentation_freezes_media_time_until_the_decoder_is_presented_again()
         id,
         frame: DecodedFrame {
             lease: 2,
+            decode_residency: VideoDecodeResidency::Unknown,
             timing: FrameTiming {
                 pts: MediaTime::from_nanos(20),
                 duration: MediaTime::from_nanos(1_000),
@@ -1301,7 +1323,7 @@ fn hidden_presentation_freezes_media_time_until_the_decoder_is_presented_again()
             geometry: VideoGeometry::packed(1, 1),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
-            decoder_transfer: DecodedFrameTransfer::Deferred,
+            decoder_import: DecodedFrameImport::Deferred,
         },
     });
     assert_eq!(
@@ -1309,7 +1331,11 @@ fn hidden_presentation_freezes_media_time_until_the_decoder_is_presented_again()
         vec![VideoFrameReady {
             id,
             pts: MediaTime::from_nanos(20),
-            transfer_path: VideoTransferPath::DirectExternalSurface,
+            frame_path: VideoFramePath::new(
+                VideoDecodeResidency::Unknown,
+                VideoCompositorImport::BorrowedNativeSurface,
+                VideoPresentationPath::WgpuComposited,
+            ),
         }]
     );
 }
@@ -1350,6 +1376,7 @@ fn hidden_autoplay_open_acknowledgement_keeps_the_media_clock_frozen() {
         id,
         frame: DecodedFrame {
             lease: 1,
+            decode_residency: VideoDecodeResidency::Unknown,
             timing: FrameTiming {
                 pts: MediaTime::from_nanos(20),
                 duration: MediaTime::from_nanos(1_000),
@@ -1358,7 +1385,7 @@ fn hidden_autoplay_open_acknowledgement_keeps_the_media_clock_frozen() {
             geometry: VideoGeometry::packed(1, 1),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
-            decoder_transfer: DecodedFrameTransfer::Deferred,
+            decoder_import: DecodedFrameImport::Deferred,
         },
     });
 

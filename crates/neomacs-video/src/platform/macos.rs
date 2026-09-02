@@ -43,18 +43,18 @@ use objc2_foundation::{NSDictionary, NSNumber, NSString, NSURL};
 use objc2_metal::{MTLPixelFormat, MTLTextureType};
 
 use crate::backend::{
-    BackendEvent, CompletedFrameTransfer, DecodedFrame, DecodedFrameTransfer, DecoderBackend,
+    BackendEvent, CompletedFrameImport, DecodedFrame, DecodedFrameImport, DecoderBackend,
     DecoderReconfiguration, FrameImportOutcome, FrameImporter, ImportedFrame, Platform,
-    ProductionPlatform, require_fixed_transfer_path,
+    ProductionPlatform, require_fixed_compositor_import,
 };
 use crate::sampling::{GpuVideoContext, PreparedBiPlanarTexture, PreparedSampledTexture};
 use crate::surface_pool::{BoundedSurfacePool, SurfacePoolAcquire};
 use crate::{
     BiPlanarVideoFormat, FrameTiming, GpuVideoFrame, InitialPlayback, LoopMode, MediaTime,
     PackedVideoFormat, PlaybackAction, PlaybackEpoch, VideoChromaLocation, VideoColorPrimaries,
-    VideoColorRange, VideoColorimetry, VideoCommand, VideoDecodeBackend, VideoFrameFormat,
-    VideoGeometry, VideoInitError, VideoMatrixCoefficients, VideoSessionState, VideoSource,
-    VideoTransferCharacteristic, VideoTransferPath, VideoWake,
+    VideoColorRange, VideoColorimetry, VideoCommand, VideoCompositorImport, VideoDecodeBackend,
+    VideoDecodeResidency, VideoFrameFormat, VideoGeometry, VideoInitError, VideoMatrixCoefficients,
+    VideoSessionState, VideoSource, VideoTransferCharacteristic, VideoWake,
 };
 
 pub(crate) struct MacPlatform;
@@ -344,6 +344,7 @@ impl MacDecoder {
                             id,
                             frame: DecodedFrame {
                                 lease: MacFrame { pixel_buffer },
+                                decode_residency: VideoDecodeResidency::Unknown,
                                 timing: FrameTiming {
                                     pts,
                                     duration,
@@ -352,7 +353,7 @@ impl MacDecoder {
                                 geometry,
                                 format,
                                 colorimetry,
-                                decoder_transfer: DecodedFrameTransfer::Completed(output.transfer),
+                                decoder_import: DecodedFrameImport::Deferred,
                             },
                         });
                     }
@@ -735,16 +736,6 @@ impl MacOutputFormat {
         }
     }
 
-    const fn completed_transfer(self) -> CompletedFrameTransfer {
-        // AVPlayerItemVideoOutput does not expose current source/output
-        // identity for adaptive media, nor whether it materialized a new
-        // CVPixelBuffer. Plane wrapping is zero-copy after this boundary, but
-        // the decoder-side transfer cannot be proven direct.
-        CompletedFrameTransfer::GpuInteropCopy {
-            reported_bytes: None,
-        }
-    }
-
     const fn allows_wide_color(self) -> bool {
         // Bi-planar frames retain their tagged source colorimetry for the
         // shared shader.  The terminal BGRA fallback is an explicit SDR RGB
@@ -785,7 +776,6 @@ impl MacOutputFormat {
 struct MacNegotiatedOutput {
     video_output: Retained<AVPlayerItemVideoOutput>,
     format: MacOutputFormat,
-    transfer: CompletedFrameTransfer,
 }
 
 const fn select_mac_output_format(
@@ -829,7 +819,6 @@ fn create_player_item_output(format: MacOutputFormat) -> Result<MacNegotiatedOut
     Ok(MacNegotiatedOutput {
         video_output,
         format,
-        transfer: format.completed_transfer(),
     })
 }
 
@@ -1240,11 +1229,9 @@ unsafe impl Sync for MetalFrameLease {}
 impl FrameImporter<MacFrame> for MacImporter {
     type Sampled = GpuVideoFrame;
 
-    fn transfer_path(&self, frame: &DecodedFrame<MacFrame>) -> VideoTransferPath {
-        frame
-            .decoder_transfer
-            .path()
-            .expect("AVFoundation completes its transfer before frame publication")
+    fn compositor_import(&self, frame: &DecodedFrame<MacFrame>) -> VideoCompositorImport {
+        debug_assert_eq!(frame.decode_residency, VideoDecodeResidency::Unknown);
+        VideoCompositorImport::BorrowedNativeSurface
     }
 
     fn import(
@@ -1253,7 +1240,6 @@ impl FrameImporter<MacFrame> for MacImporter {
     ) -> Result<FrameImportOutcome<Self::Sampled>, String> {
         let width = frame.geometry.coded_width;
         let height = frame.geometry.coded_height;
-        let path = self.transfer_path(&frame);
         let key = MacSurfaceKey {
             pixel_buffer: (&*frame.lease.pixel_buffer as *const CVPixelBuffer) as usize,
             width,
@@ -1282,10 +1268,6 @@ impl FrameImporter<MacFrame> for MacImporter {
         };
         let geometry = frame.geometry;
         let prepared = surface.value().prepared();
-        let transfer = frame
-            .decoder_transfer
-            .completed()
-            .expect("AVFoundation completes its transfer before frame publication");
         let lease = MetalFrameLease {
             _frame: frame.lease,
             _surface: surface,
@@ -1298,10 +1280,9 @@ impl FrameImporter<MacFrame> for MacImporter {
                 .gpu
                 .wrap_prepared_bi_planar_texture(geometry, prepared, lease),
         };
-        debug_assert_eq!(transfer.path(), path);
         Ok(FrameImportOutcome::Ready(ImportedFrame {
             sampled,
-            transfer,
+            completed_import: CompletedFrameImport::BorrowedNativeSurface,
         }))
     }
 }
@@ -1317,13 +1298,13 @@ impl Platform for MacPlatform {
 impl ProductionPlatform for MacPlatform {
     fn create(
         gpu: GpuVideoContext,
-        policy: crate::FrameTransferPolicy,
+        policy: crate::FrameImportPolicy,
         wake: VideoWake,
     ) -> Result<(Self::Decoder, Self::Importer), VideoInitError> {
-        require_fixed_transfer_path(
+        require_fixed_compositor_import(
             VideoDecodeBackend::AvFoundation,
             policy,
-            VideoTransferPath::GpuInteropCopy,
+            VideoCompositorImport::BorrowedNativeSurface,
         )?;
         let supports_p010 = gpu
             .device()
@@ -1368,7 +1349,7 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_ten_bit_sampling_selects_an_explicit_conversion() {
+    fn unsupported_ten_bit_sampling_selects_a_supported_surface_format() {
         let output = select_mac_output_format(
             false,
             MacSourceMetadata {
@@ -1382,16 +1363,10 @@ mod tests {
             VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12)
         );
         assert_eq!(output.range, VideoColorRange::Limited);
-        assert_eq!(
-            output.completed_transfer(),
-            CompletedFrameTransfer::GpuInteropCopy {
-                reported_bytes: None
-            }
-        );
     }
 
     #[test]
-    fn ordinary_eight_bit_video_keeps_the_native_nv12_surface() {
+    fn ordinary_eight_bit_video_selects_nv12() {
         let output = select_mac_output_format(
             true,
             MacSourceMetadata {
@@ -1404,16 +1379,10 @@ mod tests {
             output.frame_format(),
             VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12)
         );
-        assert_eq!(
-            output.completed_transfer(),
-            CompletedFrameTransfer::GpuInteropCopy {
-                reported_bytes: None
-            }
-        );
     }
 
     #[test]
-    fn unknown_source_depth_is_not_reported_as_proven_direct_import() {
+    fn unknown_source_depth_selects_the_eight_bit_surface() {
         let output = select_mac_output_format(
             true,
             MacSourceMetadata {
@@ -1426,16 +1395,10 @@ mod tests {
             output.frame_format(),
             VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12)
         );
-        assert_eq!(
-            output.completed_transfer(),
-            CompletedFrameTransfer::GpuInteropCopy {
-                reported_bytes: None
-            }
-        );
     }
 
     #[test]
-    fn twelve_bit_source_to_p010_is_reported_as_conversion() {
+    fn twelve_bit_source_selects_the_supported_p010_surface() {
         let output = select_mac_output_format(
             true,
             MacSourceMetadata {
@@ -1447,12 +1410,6 @@ mod tests {
         assert_eq!(
             output.frame_format(),
             VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::P010)
-        );
-        assert_eq!(
-            output.completed_transfer(),
-            CompletedFrameTransfer::GpuInteropCopy {
-                reported_bytes: None
-            }
         );
     }
 

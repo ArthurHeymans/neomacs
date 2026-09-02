@@ -5,19 +5,19 @@ use std::time::Instant;
 use neomacs_display_protocol::types::VideoId;
 
 use crate::backend::{
-    BackendEvent, CompletedFrameTransfer, DecodedFrameTransfer, DecoderBackend,
-    DecoderReconfiguration, FrameImportOutcome, FrameImporter, Platform, ProductionPlatform,
+    BackendEvent, CompletedFrameImport, DecodedFrameImport, DecoderBackend, DecoderReconfiguration,
+    FrameImportOutcome, FrameImporter, Platform, ProductionPlatform,
 };
 use crate::clock::PlaybackClock;
 use crate::mailbox::{LatestFrameMailbox, PendingFrame};
 use crate::platform::CurrentPlatform;
 use crate::sampling::{GpuVideoContext, PreparedVideoDraws, VideoSamplingResources};
 use crate::{
-    FrameTransferPolicy, GpuGeneration, MediaTime, PlaybackAction, PlaybackEpoch, PlaybackRate,
+    FrameImportPolicy, GpuGeneration, MediaTime, PlaybackAction, PlaybackEpoch, PlaybackRate,
     PresentationVisibility, VideoCommand, VideoCommandError, VideoDiagnostics, VideoEvent,
-    VideoFrameFormat, VideoFrameReady, VideoInitError, VideoRecoveryManifest, VideoServiceResult,
-    VideoSessionDiagnostics, VideoSessionRecovery, VideoSessionState, VideoSource,
-    VideoTransferCounts,
+    VideoFrameFormat, VideoFramePath, VideoFrameReady, VideoImportCounts, VideoInitError,
+    VideoPresentationPath, VideoRecoveryManifest, VideoServiceResult, VideoSessionDiagnostics,
+    VideoSessionRecovery, VideoSessionState, VideoSource,
 };
 
 /// Cross-thread wake callback invoked after a native adapter publishes new
@@ -59,7 +59,7 @@ struct Session<F, S> {
 
 #[derive(Debug, Default)]
 struct SessionCounters {
-    transfer_path: Option<crate::VideoTransferPath>,
+    frame_path: Option<VideoFramePath>,
     frame_format: Option<VideoFrameFormat>,
     colorimetry: Option<crate::VideoColorimetry>,
     decoded_frames: u64,
@@ -67,47 +67,43 @@ struct SessionCounters {
     late_dropped_frames: u64,
     imported_frames: u64,
     backpressured_frames: u64,
-    transfer_counts: VideoTransferCounts,
+    import_counts: VideoImportCounts,
 }
 
 impl SessionCounters {
-    fn record_transfer(&mut self, transfer: CompletedFrameTransfer) {
-        match transfer {
-            CompletedFrameTransfer::DirectExternalSurface => {
-                self.transfer_counts.direct_external_frames = self
-                    .transfer_counts
-                    .direct_external_frames
-                    .saturating_add(1);
+    fn record_compositor_import(&mut self, completed_import: CompletedFrameImport) {
+        match completed_import {
+            CompletedFrameImport::BorrowedNativeSurface => {
+                self.import_counts.borrowed_native_frames =
+                    self.import_counts.borrowed_native_frames.saturating_add(1);
             }
-            CompletedFrameTransfer::GpuInteropCopy { reported_bytes } => {
-                self.transfer_counts.gpu_interop_copy_frames = self
-                    .transfer_counts
-                    .gpu_interop_copy_frames
-                    .saturating_add(1);
+            CompletedFrameImport::GpuBlit { reported_bytes } => {
+                self.import_counts.gpu_blit_frames =
+                    self.import_counts.gpu_blit_frames.saturating_add(1);
                 if let Some(bytes) = reported_bytes {
-                    self.transfer_counts.reported_gpu_copy_bytes = self
-                        .transfer_counts
-                        .reported_gpu_copy_bytes
+                    self.import_counts.reported_gpu_blit_bytes = self
+                        .import_counts
+                        .reported_gpu_blit_bytes
                         .saturating_add(bytes);
                 }
             }
-            CompletedFrameTransfer::CpuUpload { bytes } => {
-                self.transfer_counts.cpu_upload_frames =
-                    self.transfer_counts.cpu_upload_frames.saturating_add(1);
-                self.transfer_counts.cpu_upload_bytes =
-                    self.transfer_counts.cpu_upload_bytes.saturating_add(bytes);
+            CompletedFrameImport::CpuUpload { bytes } => {
+                self.import_counts.cpu_upload_frames =
+                    self.import_counts.cpu_upload_frames.saturating_add(1);
+                self.import_counts.cpu_upload_bytes =
+                    self.import_counts.cpu_upload_bytes.saturating_add(bytes);
             }
         }
     }
 
     fn record_import(
         &mut self,
-        transfer: CompletedFrameTransfer,
-        decoder_transfer: DecodedFrameTransfer,
+        completed_import: CompletedFrameImport,
+        decoder_import: DecodedFrameImport,
     ) {
         self.imported_frames = self.imported_frames.saturating_add(1);
-        if matches!(decoder_transfer, DecodedFrameTransfer::Deferred) {
-            self.record_transfer(transfer);
+        if matches!(decoder_import, DecodedFrameImport::Deferred) {
+            self.record_compositor_import(completed_import);
         }
     }
 }
@@ -186,7 +182,7 @@ impl VideoSystem {
         queue: wgpu::Queue,
         sampling: VideoSamplingResources,
         generation: GpuGeneration,
-        policy: FrameTransferPolicy,
+        policy: FrameImportPolicy,
         wake: VideoWake,
     ) -> Result<Self, VideoInitError> {
         let gpu = GpuVideoContext::with_sampling_resources(
@@ -297,7 +293,7 @@ impl Drop for VideoSystem {
 pub(crate) struct VideoSystemImpl<P: Platform> {
     decoder: P::Decoder,
     importer: P::Importer,
-    policy: FrameTransferPolicy,
+    policy: FrameImportPolicy,
     sessions: HashMap<VideoId, Session<P::Frame, P::Sampled>>,
     retired: Vec<P::Sampled>,
 }
@@ -306,7 +302,7 @@ impl<P: Platform> VideoSystemImpl<P> {
     pub(crate) fn new(
         decoder: P::Decoder,
         importer: P::Importer,
-        policy: FrameTransferPolicy,
+        policy: FrameImportPolicy,
     ) -> Self {
         Self {
             decoder,
@@ -630,7 +626,8 @@ impl<P: Platform> VideoSystemImpl<P> {
                 .take()
                 .expect("mailbox timing came from a pending frame");
             let timing = pending.frame.timing;
-            let decoder_transfer = pending.frame.decoder_transfer;
+            let decoder_import = pending.frame.decoder_import;
+            let decode_residency = pending.frame.decode_residency;
             if timing.duration != MediaTime::ZERO
                 && timing.pts.saturating_add(timing.duration) <= media_now
             {
@@ -638,15 +635,14 @@ impl<P: Platform> VideoSystemImpl<P> {
                     session.diagnostics.late_dropped_frames.saturating_add(1);
                 continue;
             }
-            let planned_path = decoder_transfer
+            let planned_path = decoder_import
                 .path()
-                .unwrap_or_else(|| self.importer.transfer_path(&pending.frame));
-            session.diagnostics.transfer_path = Some(planned_path);
+                .unwrap_or_else(|| self.importer.compositor_import(&pending.frame));
             if !self.policy.permits(planned_path) {
                 terminal_failures.push(*id);
                 result.events.push(VideoEvent::Failed {
                     id: *id,
-                    error: VideoCommandError::TransferForbidden {
+                    error: VideoCommandError::ImportForbidden {
                         policy: self.policy,
                         path: planned_path,
                     },
@@ -655,29 +651,35 @@ impl<P: Platform> VideoSystemImpl<P> {
             }
             match self.importer.import(pending.frame) {
                 Ok(FrameImportOutcome::Ready(imported))
-                    if imported.transfer.path() == planned_path =>
+                    if imported.completed_import.path() == planned_path =>
                 {
-                    let actual_path = imported.transfer.path();
+                    let actual_path = imported.completed_import.path();
+                    let frame_path = VideoFramePath::new(
+                        decode_residency,
+                        actual_path,
+                        VideoPresentationPath::WgpuComposited,
+                    );
                     if let Some(previous) = session.sampled.replace(imported.sampled) {
                         self.retired.push(previous);
                     }
                     result.ready_frames.push(VideoFrameReady {
                         id: *id,
                         pts: timing.pts,
-                        transfer_path: actual_path,
+                        frame_path,
                     });
+                    session.diagnostics.frame_path = Some(frame_path);
                     session
                         .diagnostics
-                        .record_import(imported.transfer, decoder_transfer);
+                        .record_import(imported.completed_import, decoder_import);
                     session.last_pts = timing.pts;
                 }
                 Ok(FrameImportOutcome::Ready(imported)) => {
                     terminal_failures.push(*id);
                     result.events.push(VideoEvent::Failed {
                         id: *id,
-                        error: VideoCommandError::TransferContract {
+                        error: VideoCommandError::ImportContract {
                             planned: planned_path,
-                            actual: imported.transfer.path(),
+                            actual: imported.completed_import.path(),
                         },
                     });
                 }
@@ -783,7 +785,7 @@ impl<P: Platform> VideoSystemImpl<P> {
                 id,
                 backend: P::BACKEND,
                 state: session.state,
-                transfer_path: session.diagnostics.transfer_path,
+                frame_path: session.diagnostics.frame_path,
                 frame_format: session.diagnostics.frame_format,
                 colorimetry: session.diagnostics.colorimetry,
                 decoded_frames: session.diagnostics.decoded_frames,
@@ -791,7 +793,7 @@ impl<P: Platform> VideoSystemImpl<P> {
                 late_dropped_frames: session.diagnostics.late_dropped_frames,
                 imported_frames: session.diagnostics.imported_frames,
                 backpressured_frames: session.diagnostics.backpressured_frames,
-                transfer_counts: session.diagnostics.transfer_counts,
+                import_counts: session.diagnostics.import_counts,
             })
             .collect();
         sessions.sort_unstable_by_key(|session| session.id.get());
@@ -849,8 +851,10 @@ impl<P: Platform> VideoSystemImpl<P> {
                     session.diagnostics.decoded_frames.saturating_add(1);
                 session.diagnostics.frame_format = Some(frame.format);
                 session.diagnostics.colorimetry = Some(frame.colorimetry);
-                if let Some(transfer) = frame.decoder_transfer.completed() {
-                    session.diagnostics.record_transfer(transfer);
+                if let Some(completed_import) = frame.decoder_import.completed() {
+                    session
+                        .diagnostics
+                        .record_compositor_import(completed_import);
                 }
                 if session.presentation == PresentationVisibility::Hidden {
                     // Native pause is asynchronous; discard a racing sample

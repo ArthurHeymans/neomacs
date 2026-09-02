@@ -1,13 +1,13 @@
 use super::{
     DmaBufMemoryLayout, NativeVideoFormatSupport, ParsedDrmFormat, PipelineDrmIdentity,
-    PipelineDrmTopology, classify_pipeline_error, dma_buf_transfer_path, frame_format_from_fourcc,
-    missing_video_plugin, preferred_sink_caps, retain_unready_decoder_writes,
-    rotation_from_gstreamer_tag,
+    PipelineDrmTopology, classify_pipeline_error, dma_buf_compositor_import,
+    frame_format_from_fourcc, missing_video_plugin, preferred_sink_caps,
+    retain_unready_decoder_writes, rotation_from_gstreamer_tag,
 };
 use crate::sampling::LinuxDrmDevice;
 use crate::{
-    FrameTransferPolicy, LoopMode, MissingVideoPlugin, MissingVideoPlugins, VideoCommandError,
-    VideoInstallerHint, VideoRotation, VideoTransferPath,
+    FrameImportPolicy, LoopMode, MissingVideoPlugin, MissingVideoPlugins, VideoCommandError,
+    VideoCompositorImport, VideoInstallerHint, VideoRotation,
 };
 use std::num::NonZeroU32;
 
@@ -98,7 +98,7 @@ fn dmabuf_wait_requires_every_memory_object_to_finish() {
 fn packed_dmabuf_fallback_retains_its_srgb_contract() {
     gstreamer::init().unwrap();
     let caps = preferred_sink_caps(
-        FrameTransferPolicy::AllowCpuUpload,
+        FrameImportPolicy::AllowCpuUpload,
         NativeVideoFormatSupport {
             nv12: true,
             p010: true,
@@ -139,7 +139,7 @@ fn packed_dmabuf_fallback_retains_its_srgb_contract() {
 fn sink_caps_offer_only_native_formats_the_renderer_can_sample() {
     gstreamer::init().unwrap();
     let caps = preferred_sink_caps(
-        FrameTransferPolicy::AllowGpuInteropCopy,
+        FrameImportPolicy::AllowGpuBlit,
         NativeVideoFormatSupport {
             nv12: true,
             p010: false,
@@ -170,7 +170,7 @@ fn sink_caps_offer_only_native_formats_the_renderer_can_sample() {
     assert_eq!(caps.size(), 4);
 
     let packed_only = preferred_sink_caps(
-        FrameTransferPolicy::AllowGpuInteropCopy,
+        FrameImportPolicy::AllowGpuBlit,
         NativeVideoFormatSupport {
             nv12: false,
             p010: false,
@@ -231,7 +231,7 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
     let other_decoder = LinuxDrmDevice::from_device_numbers(226, 129);
 
     assert_eq!(
-        dma_buf_transfer_path(
+        dma_buf_compositor_import(
             Some(renderer),
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(same_decoder),
@@ -242,11 +242,11 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
             crate::VideoFrameFormat::Packed(crate::PackedVideoFormat::Bgra8),
         )
         .unwrap(),
-        VideoTransferPath::GpuInteropCopy,
+        VideoCompositorImport::GpuBlit,
         "the packed sink can require a native GPU colorspace conversion"
     );
     assert_eq!(
-        dma_buf_transfer_path(
+        dma_buf_compositor_import(
             Some(renderer),
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(same_decoder),
@@ -257,10 +257,10 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
             crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
         )
         .unwrap(),
-        VideoTransferPath::DirectExternalSurface,
+        VideoCompositorImport::BorrowedNativeSurface,
     );
     assert_eq!(
-        dma_buf_transfer_path(
+        dma_buf_compositor_import(
             Some(renderer),
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(same_decoder),
@@ -271,11 +271,11 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
             crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
         )
         .unwrap(),
-        VideoTransferPath::GpuInteropCopy,
+        VideoCompositorImport::GpuBlit,
         "a same-adapter postprocessor still performs a GPU conversion"
     );
     assert!(
-        dma_buf_transfer_path(
+        dma_buf_compositor_import(
             Some(renderer),
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(other_decoder),
@@ -289,7 +289,7 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
         "a proven cross-adapter DMA-BUF must not be imported by the renderer"
     );
     assert!(
-        dma_buf_transfer_path(
+        dma_buf_compositor_import(
             Some(renderer),
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Conflict,
@@ -303,16 +303,16 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
         "a pipeline that reports multiple DRM devices is a proven conflict"
     );
     assert_eq!(
-        dma_buf_transfer_path(
+        dma_buf_compositor_import(
             Some(renderer),
             PipelineDrmTopology::UNKNOWN,
             crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
         )
         .unwrap(),
-        VideoTransferPath::GpuInteropCopy
+        VideoCompositorImport::GpuBlit
     );
     assert_eq!(
-        dma_buf_transfer_path(
+        dma_buf_compositor_import(
             None,
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(same_decoder),
@@ -323,11 +323,11 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
             crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
         )
         .unwrap(),
-        VideoTransferPath::GpuInteropCopy
+        VideoCompositorImport::GpuBlit
     );
 
     assert!(
-        dma_buf_transfer_path(
+        dma_buf_compositor_import(
             Some(renderer),
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(same_decoder),
@@ -341,7 +341,7 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
         "a same-GPU decoder cannot hide a cross-GPU packed-surface producer"
     );
     assert!(
-        dma_buf_transfer_path(
+        dma_buf_compositor_import(
             Some(renderer),
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(same_decoder),

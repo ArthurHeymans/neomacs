@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use neomacs_display_protocol::types::VideoId;
 use neomacs_video::{
-    FrameTransferPolicy, GpuGeneration, InitialPlayback, LoopMode, PlaybackAction,
+    FrameImportPolicy, GpuGeneration, InitialPlayback, LoopMode, PlaybackAction,
     PresentationVisibility, VideoCommand, VideoCommandError, VideoEvent, VideoOpenRequest,
     VideoSamplingResources, VideoServiceResult, VideoSessionState, VideoSource, VideoSystem,
     VideoWake,
@@ -348,7 +348,7 @@ impl VideoCache {
                 queue,
                 system_sampling,
                 generation,
-                FrameTransferPolicy::AllowCpuUpload,
+                FrameImportPolicy::AllowCpuUpload,
                 wake,
             )
             .map_err(|error| error.to_string())
@@ -810,7 +810,7 @@ impl VideoCache {
             ready_frames.push(neomacs_video::VideoFrameReady {
                 id: external_id,
                 pts: ready.pts,
-                transfer_path: ready.transfer_path,
+                frame_path: ready.frame_path,
             });
         }
         match self.gpu_accounting.observe(system.gpu_memory_bytes()) {

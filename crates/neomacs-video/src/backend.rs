@@ -11,44 +11,42 @@ use crossbeam_channel::{Receiver, Sender};
 use crate::sampling::GpuVideoContext;
 use crate::system::VideoWake;
 use crate::{
-    FrameTiming, VideoColorimetry, VideoCommand, VideoCommandError, VideoFrameFormat,
-    VideoGeometry, VideoInitError, VideoSessionState, VideoTransferPath,
+    FrameTiming, VideoColorimetry, VideoCommand, VideoCommandError, VideoCompositorImport,
+    VideoFrameFormat, VideoGeometry, VideoInitError, VideoSessionState,
 };
 
 /// Decoder output with all information needed to replay the exact frame.
 pub(crate) struct DecodedFrame<F> {
     pub(crate) lease: F,
+    pub(crate) decode_residency: crate::VideoDecodeResidency,
     pub(crate) timing: FrameTiming,
     pub(crate) geometry: VideoGeometry,
     pub(crate) format: VideoFrameFormat,
     pub(crate) colorimetry: VideoColorimetry,
-    /// Native transfer work already completed before this frame entered the
+    /// Compositor import work already completed before this frame entered the
     /// common latest-frame mailbox.  Keeping this state on the affine frame
     /// prevents replacement or late-drop paths from hiding real GPU work.
-    pub(crate) decoder_transfer: DecodedFrameTransfer,
+    pub(crate) decoder_import: DecodedFrameImport,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum DecodedFrameTransfer {
+pub(crate) enum DecodedFrameImport {
     Deferred,
-    #[cfg_attr(
-        not(any(target_os = "macos", target_os = "windows", test)),
-        allow(dead_code)
-    )]
-    Completed(CompletedFrameTransfer),
+    #[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
+    Completed(CompletedFrameImport),
 }
 
-impl DecodedFrameTransfer {
-    pub(crate) const fn completed(self) -> Option<CompletedFrameTransfer> {
+impl DecodedFrameImport {
+    pub(crate) const fn completed(self) -> Option<CompletedFrameImport> {
         match self {
             Self::Deferred => None,
-            Self::Completed(transfer) => Some(transfer),
+            Self::Completed(completed_import) => Some(completed_import),
         }
     }
 
-    pub(crate) const fn path(self) -> Option<VideoTransferPath> {
+    pub(crate) const fn path(self) -> Option<VideoCompositorImport> {
         match self.completed() {
-            Some(transfer) => Some(transfer.path()),
+            Some(completed_import) => Some(completed_import.path()),
             None => None,
         }
     }
@@ -248,30 +246,39 @@ pub(crate) enum DecoderReconfiguration {
 
 pub(crate) struct ImportedFrame<S> {
     pub(crate) sampled: S,
-    pub(crate) transfer: CompletedFrameTransfer,
+    pub(crate) completed_import: CompletedFrameImport,
 }
 
 /// What the importer actually did, including byte volume only where the
 /// platform API makes it observable. The enum prevents impossible states such
 /// as reporting CPU-upload bytes for a direct external surface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum CompletedFrameTransfer {
-    DirectExternalSurface,
-    GpuInteropCopy { reported_bytes: Option<u64> },
+pub(crate) enum CompletedFrameImport {
+    #[cfg_attr(
+        not(any(target_os = "linux", target_os = "macos", test)),
+        allow(dead_code)
+    )]
+    BorrowedNativeSurface,
+    #[cfg_attr(
+        not(any(target_os = "linux", target_os = "windows", test)),
+        allow(dead_code)
+    )]
+    GpuBlit { reported_bytes: Option<u64> },
+    #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
     CpuUpload { bytes: u64 },
 }
 
-impl CompletedFrameTransfer {
-    pub(crate) const fn path(self) -> VideoTransferPath {
+impl CompletedFrameImport {
+    pub(crate) const fn path(self) -> VideoCompositorImport {
         match self {
-            Self::DirectExternalSurface => VideoTransferPath::DirectExternalSurface,
-            Self::GpuInteropCopy { .. } => VideoTransferPath::GpuInteropCopy,
-            Self::CpuUpload { .. } => VideoTransferPath::CpuUpload,
+            Self::BorrowedNativeSurface => VideoCompositorImport::BorrowedNativeSurface,
+            Self::GpuBlit { .. } => VideoCompositorImport::GpuBlit,
+            Self::CpuUpload { .. } => VideoCompositorImport::CpuUpload,
         }
     }
 }
 
-/// Validate a platform whose native API has one unavoidable transfer path.
+/// Validate a platform whose native API has one unavoidable compositor import.
 ///
 /// This check belongs before decoder construction because some native
 /// decoders materialize their output before the common importer is called.
@@ -279,15 +286,15 @@ impl CompletedFrameTransfer {
     not(any(target_os = "macos", target_os = "windows", test)),
     allow(dead_code)
 )]
-pub(crate) fn require_fixed_transfer_path(
+pub(crate) fn require_fixed_compositor_import(
     backend: crate::VideoDecodeBackend,
-    policy: crate::FrameTransferPolicy,
-    path: VideoTransferPath,
+    policy: crate::FrameImportPolicy,
+    path: VideoCompositorImport,
 ) -> Result<(), VideoInitError> {
     if policy.permits(path) {
         Ok(())
     } else {
-        Err(VideoInitError::TransferForbidden {
+        Err(VideoInitError::ImportForbidden {
             backend,
             policy,
             path,
@@ -295,7 +302,7 @@ pub(crate) fn require_fixed_transfer_path(
     }
 }
 
-/// Result of attempting to transfer one decoded frame into compositor-owned
+/// Result of attempting to import one decoded frame into compositor-owned
 /// GPU state. Backpressure is an expected bounded-resource condition: the
 /// caller drops this already-stale decoded frame and waits for the next one
 /// instead of poisoning the playback session.
@@ -316,10 +323,10 @@ pub(crate) enum FrameImportOutcome<S> {
 pub(crate) trait FrameImporter<F> {
     type Sampled;
 
-    /// Classify the transfer before performing native import, mapping, copy,
+    /// Classify compositor work before performing native import, mapping, copy,
     /// or upload work. The policy boundary uses this to reject forbidden
     /// fallback paths without causing their side effects first.
-    fn transfer_path(&self, frame: &DecodedFrame<F>) -> VideoTransferPath;
+    fn compositor_import(&self, frame: &DecodedFrame<F>) -> VideoCompositorImport;
 
     fn import(
         &mut self,
@@ -338,7 +345,7 @@ pub(crate) trait Platform {
 pub(crate) trait ProductionPlatform: Platform {
     fn create(
         gpu: GpuVideoContext,
-        policy: crate::FrameTransferPolicy,
+        policy: crate::FrameImportPolicy,
         wake: VideoWake,
     ) -> Result<(Self::Decoder, Self::Importer), VideoInitError>;
 }

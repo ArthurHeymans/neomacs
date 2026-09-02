@@ -15,17 +15,17 @@ use gstreamer_video as gst_video;
 use neomacs_display_protocol::types::VideoId;
 
 use crate::backend::{
-    BackendEvent, BackendInbox, BackendPublisher, DecodedFrame, DecodedFrameTransfer,
-    DecoderBackend, backend_bridge,
+    BackendEvent, BackendInbox, BackendPublisher, DecodedFrame, DecodedFrameImport, DecoderBackend,
+    backend_bridge,
 };
 use crate::sampling::LinuxDrmDevice;
 use crate::{
-    BiPlanarVideoFormat, FrameTiming, FrameTransferPolicy, InitialPlayback, LoopMode, MediaTime,
+    BiPlanarVideoFormat, FrameImportPolicy, FrameTiming, InitialPlayback, LoopMode, MediaTime,
     MissingVideoPlugin, MissingVideoPlugins, PackedVideoFormat, PixelAspectRatio, PlaybackAction,
     PlaybackEpoch, VideoChromaLocation, VideoColorPrimaries, VideoColorRange, VideoColorimetry,
-    VideoCommand, VideoCommandError, VideoFrameFormat, VideoGeometry, VideoInstallerHint,
-    VideoMatrixCoefficients, VideoRotation, VideoSessionState, VideoSource,
-    VideoTransferCharacteristic, VideoTransferPath, VideoWake,
+    VideoCommand, VideoCommandError, VideoCompositorImport, VideoDecodeResidency, VideoFrameFormat,
+    VideoGeometry, VideoInstallerHint, VideoMatrixCoefficients, VideoRotation, VideoSessionState,
+    VideoSource, VideoTransferCharacteristic, VideoWake,
 };
 
 use super::frame::{
@@ -61,7 +61,7 @@ pub(crate) struct GstreamerDecoder {
     workers: HashMap<VideoId, Worker>,
     worker_reaper: Option<Sender<Worker>>,
     reaper_join: Option<thread::JoinHandle<()>>,
-    transfer_policy: FrameTransferPolicy,
+    import_policy: FrameImportPolicy,
     renderer_drm_device: Option<LinuxDrmDevice>,
     native_formats: NativeVideoFormatSupport,
 }
@@ -77,7 +77,7 @@ struct WorkerStartup {
     source: VideoSource,
     initial_playback: InitialPlayback,
     loop_mode: LoopMode,
-    transfer_policy: FrameTransferPolicy,
+    import_policy: FrameImportPolicy,
     renderer_drm_device: Option<LinuxDrmDevice>,
     native_formats: NativeVideoFormatSupport,
 }
@@ -98,7 +98,7 @@ impl Worker {
 impl GstreamerDecoder {
     pub(super) fn new(
         wake: VideoWake,
-        transfer_policy: FrameTransferPolicy,
+        import_policy: FrameImportPolicy,
         renderer_drm_device: Option<LinuxDrmDevice>,
         native_formats: NativeVideoFormatSupport,
     ) -> Result<Self, String> {
@@ -119,7 +119,7 @@ impl GstreamerDecoder {
             workers: HashMap::new(),
             worker_reaper: Some(worker_reaper),
             reaper_join: Some(reaper_join),
-            transfer_policy,
+            import_policy,
             renderer_drm_device,
             native_formats,
         })
@@ -137,7 +137,7 @@ impl GstreamerDecoder {
         }
         let (command_tx, command_rx) = crossbeam_channel::unbounded();
         let output = self.output.clone();
-        let transfer_policy = self.transfer_policy;
+        let import_policy = self.import_policy;
         let renderer_drm_device = self.renderer_drm_device;
         let native_formats = self.native_formats;
         let shutting_down = Arc::new(AtomicBool::new(false));
@@ -151,7 +151,7 @@ impl GstreamerDecoder {
                         source,
                         initial_playback,
                         loop_mode,
-                        transfer_policy,
+                        import_policy,
                         renderer_drm_device,
                         native_formats,
                     },
@@ -256,12 +256,12 @@ fn run_worker_inner(
         source,
         initial_playback,
         mut loop_mode,
-        transfer_policy,
+        import_policy,
         renderer_drm_device,
         native_formats,
     } = startup;
     let uri = source_uri(source)?;
-    let caps = preferred_sink_caps(transfer_policy, native_formats);
+    let caps = preferred_sink_caps(import_policy, native_formats);
     let appsink = gst_app::AppSink::builder()
         .caps(&caps)
         .max_buffers(2)
@@ -403,7 +403,7 @@ fn run_worker_inner(
                 shutting_down,
                 epoch,
                 rotation,
-                transfer_policy,
+                import_policy,
                 renderer_drm_device,
                 pipeline_drm_identity(&pipeline),
             )?
@@ -603,7 +603,7 @@ fn source_uri(source: VideoSource) -> Result<String, String> {
 }
 
 fn preferred_sink_caps(
-    policy: FrameTransferPolicy,
+    policy: FrameImportPolicy,
     native_formats: NativeVideoFormatSupport,
 ) -> gst::Caps {
     let mut builder = gst::Caps::builder_full();
@@ -659,7 +659,7 @@ fn preferred_sink_caps(
             .build(),
         gst::CapsFeatures::new(["memory:DMABuf"]),
     );
-    if matches!(policy, FrameTransferPolicy::AllowCpuUpload) {
+    if matches!(policy, FrameImportPolicy::AllowCpuUpload) {
         builder
             .structure(
                 gst::Structure::builder("video/x-raw")
@@ -678,7 +678,7 @@ fn decode_sample(
     shutting_down: &AtomicBool,
     epoch: PlaybackEpoch,
     rotation: VideoRotation,
-    transfer_policy: FrameTransferPolicy,
+    import_policy: FrameImportPolicy,
     renderer_drm_device: Option<LinuxDrmDevice>,
     pipeline_drm_topology: PipelineDrmTopology,
 ) -> Result<Option<DecodedFrame<LinuxFrameLease>>, crate::VideoCommandError> {
@@ -700,11 +700,11 @@ fn decode_sample(
             geometry_from_info(&info, buffer.meta::<gst_video::VideoCropMeta>(), rotation);
         let surface = extract_dmabuf(buffer, &info, dmabuf.fourcc, dmabuf.modifier)?;
         let format = frame_format_from_fourcc(dmabuf.fourcc)?;
-        let transfer_path =
-            dma_buf_transfer_path(renderer_drm_device, pipeline_drm_topology, format)?;
-        if !transfer_policy.permits(transfer_path) {
+        let compositor_import =
+            dma_buf_compositor_import(renderer_drm_device, pipeline_drm_topology, format)?;
+        if !import_policy.permits(compositor_import) {
             return Err(format!(
-                "decoded video requires {transfer_path:?}, forbidden by {transfer_policy:?}"
+                "decoded video requires {compositor_import:?}, forbidden by {import_policy:?}"
             )
             .into());
         }
@@ -716,13 +716,14 @@ fn decode_sample(
             lease: LinuxFrameLease {
                 _sample: sample,
                 storage: LinuxFrameStorage::DmaBuf(surface),
-                transfer_path,
+                compositor_import,
             },
+            decode_residency: VideoDecodeResidency::Unknown,
             timing,
             geometry,
             format,
             colorimetry,
-            decoder_transfer: DecodedFrameTransfer::Deferred,
+            decoder_import: DecodedFrameImport::Deferred,
         }));
     }
 
@@ -745,10 +746,10 @@ fn decode_sample(
         stride: u32::try_from(info.stride()[0])
             .map_err(|_| "negative video row stride is unsupported".to_string())?,
     };
-    if !transfer_policy.permits(VideoTransferPath::CpuUpload) {
+    if !import_policy.permits(VideoCompositorImport::CpuUpload) {
         return Err(format!(
-            "decoded video requires {:?}, forbidden by {transfer_policy:?}",
-            VideoTransferPath::CpuUpload
+            "decoded video requires {:?}, forbidden by {import_policy:?}",
+            VideoCompositorImport::CpuUpload
         )
         .into());
     }
@@ -756,13 +757,14 @@ fn decode_sample(
         lease: LinuxFrameLease {
             _sample: sample,
             storage: LinuxFrameStorage::CpuPacked(storage),
-            transfer_path: VideoTransferPath::CpuUpload,
+            compositor_import: VideoCompositorImport::CpuUpload,
         },
+        decode_residency: VideoDecodeResidency::Unknown,
         timing,
         geometry,
         format,
         colorimetry: VideoColorimetry::SRGB,
-        decoder_transfer: DecodedFrameTransfer::Deferred,
+        decoder_import: DecodedFrameImport::Deferred,
     }))
 }
 
@@ -969,11 +971,11 @@ fn element_may_postprocess_video(element: &gst::Element) -> bool {
         })
 }
 
-fn dma_buf_transfer_path(
+fn dma_buf_compositor_import(
     renderer: Option<LinuxDrmDevice>,
     pipeline: PipelineDrmTopology,
     format: VideoFrameFormat,
-) -> Result<VideoTransferPath, crate::VideoCommandError> {
+) -> Result<VideoCompositorImport, crate::VideoCommandError> {
     if pipeline.inspection_failed {
         return Err(crate::VideoCommandError::AdapterMismatch {
             details: "GStreamer pipeline device inspection failed before the DMA-BUF producer topology could be proven".into(),
@@ -1012,9 +1014,9 @@ fn dma_buf_transfer_path(
     );
     Ok(
         if native_planes && same_proven_device && !pipeline.postprocess {
-            VideoTransferPath::DirectExternalSurface
+            VideoCompositorImport::BorrowedNativeSurface
         } else {
-            VideoTransferPath::GpuInteropCopy
+            VideoCompositorImport::GpuBlit
         },
     )
 }

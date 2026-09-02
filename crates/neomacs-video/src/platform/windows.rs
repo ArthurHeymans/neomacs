@@ -1,4 +1,4 @@
-//! Media Foundation playback and GPU-only D3D11-on-12 frame transfer.
+//! Media Foundation playback and GPU-only D3D11-on-12 frame import.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -48,18 +48,18 @@ use windows::Win32::System::Com::{
 use windows::core::{BSTR, IUnknown, Interface, implement};
 
 use crate::backend::{
-    BackendEvent, CompletedFrameTransfer, DecodedFrame, DecodedFrameTransfer, DecoderBackend,
+    BackendEvent, CompletedFrameImport, DecodedFrame, DecodedFrameImport, DecoderBackend,
     DecoderReconfiguration, FrameImportOutcome, FrameImporter, ImportedFrame, Platform,
-    ProductionPlatform, require_fixed_transfer_path,
+    ProductionPlatform, require_fixed_compositor_import,
 };
 use crate::sampling::{GpuVideoContext, PreparedBiPlanarTexture, PreparedSampledTexture};
 use crate::surface_pool::{BoundedSurfacePool, SurfaceLease, SurfacePoolAcquire};
 use crate::{
     BiPlanarVideoFormat, FrameTiming, GpuVideoFrame, InitialPlayback, LoopMode, MediaTime,
     PackedVideoFormat, PlaybackAction, PlaybackEpoch, VideoChromaLocation, VideoColorPrimaries,
-    VideoColorRange, VideoColorimetry, VideoCommand, VideoDecodeBackend, VideoFrameFormat,
-    VideoGeometry, VideoInitError, VideoMatrixCoefficients, VideoSessionState, VideoSource,
-    VideoTransferCharacteristic, VideoTransferPath, VideoWake,
+    VideoColorRange, VideoColorimetry, VideoCommand, VideoCompositorImport, VideoDecodeBackend,
+    VideoDecodeResidency, VideoFrameFormat, VideoGeometry, VideoInitError, VideoMatrixCoefficients,
+    VideoSessionState, VideoSource, VideoTransferCharacteristic, VideoWake,
 };
 
 const EVENT_READY: u32 = 1 << 0;
@@ -185,11 +185,11 @@ impl WindowsOutputFormat {
         }
     }
 
-    const fn completed_transfer(self) -> CompletedFrameTransfer {
+    const fn completed_import(self) -> CompletedFrameImport {
         // Media Engine documents TransferVideoFrame as a blit, but does not
         // expose the number of bytes copied by the driver. Destination
         // allocation size is not an observed transfer count.
-        CompletedFrameTransfer::GpuInteropCopy {
+        CompletedFrameImport::GpuBlit {
             reported_bytes: None,
         }
     }
@@ -684,11 +684,12 @@ impl WindowsDecoder {
                         let captured =
                             self.capture
                                 .capture(&session.engine, geometry, format, colorimetry);
-                        let decoder_transfer = captured.decoder_transfer(session.output_format);
+                        let decoder_import = captured.decoder_import(session.output_format);
                         events.push(BackendEvent::Frame {
                             id,
                             frame: DecodedFrame {
                                 lease: WindowsFrame { captured },
+                                decode_residency: VideoDecodeResidency::HardwareUnverified,
                                 timing: FrameTiming {
                                     pts,
                                     duration,
@@ -697,7 +698,7 @@ impl WindowsDecoder {
                                 geometry,
                                 format,
                                 colorimetry,
-                                decoder_transfer,
+                                decoder_import,
                             },
                         });
                     }
@@ -1066,10 +1067,10 @@ enum CapturedWindowsFrame {
 }
 
 impl CapturedWindowsFrame {
-    const fn decoder_transfer(&self, output_format: WindowsOutputFormat) -> DecodedFrameTransfer {
+    const fn decoder_import(&self, output_format: WindowsOutputFormat) -> DecodedFrameImport {
         match self {
-            Self::Surface(_) => DecodedFrameTransfer::Completed(output_format.completed_transfer()),
-            Self::Backpressured | Self::Rejected(_) => DecodedFrameTransfer::Deferred,
+            Self::Surface(_) => DecodedFrameImport::Completed(output_format.completed_import()),
+            Self::Backpressured | Self::Rejected(_) => DecodedFrameImport::Deferred,
         }
     }
 }
@@ -1295,8 +1296,8 @@ impl WindowsImporter {
 impl FrameImporter<WindowsFrame> for WindowsImporter {
     type Sampled = GpuVideoFrame;
 
-    fn transfer_path(&self, _frame: &DecodedFrame<WindowsFrame>) -> VideoTransferPath {
-        VideoTransferPath::GpuInteropCopy
+    fn compositor_import(&self, _frame: &DecodedFrame<WindowsFrame>) -> VideoCompositorImport {
+        VideoCompositorImport::GpuBlit
     }
 
     fn import(
@@ -1318,7 +1319,7 @@ impl FrameImporter<WindowsFrame> for WindowsImporter {
         };
         let prepared = surface.value().sampled.clone();
         let transfer = frame
-            .decoder_transfer
+            .decoder_import
             .completed()
             .expect("a captured Media Engine surface completed its transfer");
         let sampled = match prepared {
@@ -1333,7 +1334,7 @@ impl FrameImporter<WindowsFrame> for WindowsImporter {
         };
         Ok(FrameImportOutcome::Ready(ImportedFrame {
             sampled,
-            transfer,
+            completed_import: transfer,
         }))
     }
 }
@@ -1349,13 +1350,13 @@ impl Platform for WindowsPlatform {
 impl ProductionPlatform for WindowsPlatform {
     fn create(
         gpu: GpuVideoContext,
-        policy: crate::FrameTransferPolicy,
+        policy: crate::FrameImportPolicy,
         wake: VideoWake,
     ) -> Result<(Self::Decoder, Self::Importer), VideoInitError> {
-        require_fixed_transfer_path(
+        require_fixed_compositor_import(
             VideoDecodeBackend::MediaFoundation,
             policy,
-            VideoTransferPath::GpuInteropCopy,
+            VideoCompositorImport::GpuBlit,
         )?;
         let bridge = WindowsGpuBridge::new(&gpu).map_err(|message| VideoInitError::Backend {
             backend: VideoDecodeBackend::MediaFoundation,
@@ -1437,8 +1438,8 @@ mod tests {
             wgpu::TextureFormat::Bgra8UnormSrgb
         );
         assert_eq!(
-            WindowsOutputFormat::Nv12.completed_transfer(),
-            CompletedFrameTransfer::GpuInteropCopy {
+            WindowsOutputFormat::Nv12.completed_import(),
+            CompletedFrameImport::GpuBlit {
                 reported_bytes: None
             }
         );

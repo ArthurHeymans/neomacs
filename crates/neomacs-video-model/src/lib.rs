@@ -828,22 +828,6 @@ impl FrameImportPolicy {
     }
 }
 
-/// How far the importer may fall back from direct native-surface sampling.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FrameTransferPolicy {
-    RequireDirectSurface,
-    AllowGpuInteropCopy,
-    AllowCpuUpload,
-}
-
-/// Transfer path actually selected for a presented frame.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum VideoTransferPath {
-    DirectExternalSurface,
-    GpuInteropCopy,
-    CpuUpload,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VideoDecodeBackend {
     GStreamer,
@@ -855,22 +839,22 @@ pub enum VideoDecodeBackend {
 /// Per-path frame counts and byte volumes that the platform could actually
 /// observe. Unknown upstream conversion volume is deliberately not estimated.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct VideoTransferCounts {
-    pub direct_external_frames: u64,
-    pub gpu_interop_copy_frames: u64,
+pub struct VideoImportCounts {
+    pub borrowed_native_frames: u64,
+    pub gpu_blit_frames: u64,
     pub cpu_upload_frames: u64,
-    pub reported_gpu_copy_bytes: u64,
+    pub reported_gpu_blit_bytes: u64,
     pub cpu_upload_bytes: u64,
 }
 
-/// Truthful counters and effective transfer state for one playback session.
+/// Truthful counters and effective frame-path evidence for one playback session.
 /// Platform handles stay private; absent native details are never fabricated.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VideoSessionDiagnostics {
     pub id: VideoId,
     pub backend: VideoDecodeBackend,
     pub state: VideoSessionState,
-    pub transfer_path: Option<VideoTransferPath>,
+    pub frame_path: Option<VideoFramePath>,
     pub frame_format: Option<VideoFrameFormat>,
     pub colorimetry: Option<VideoColorimetry>,
     pub decoded_frames: u64,
@@ -878,7 +862,7 @@ pub struct VideoSessionDiagnostics {
     pub late_dropped_frames: u64,
     pub imported_frames: u64,
     pub backpressured_frames: u64,
-    pub transfer_counts: VideoTransferCounts,
+    pub import_counts: VideoImportCounts,
 }
 
 /// Point-in-time diagnostics owned by the authoritative video system.
@@ -892,11 +876,11 @@ pub struct VideoDiagnostics {
 pub enum VideoInitError {
     #[error("video playback is unsupported on this platform")]
     UnsupportedPlatform,
-    #[error("{backend:?} requires video transfer path {path:?}, forbidden by {policy:?}")]
-    TransferForbidden {
+    #[error("{backend:?} requires compositor import {path:?}, forbidden by {policy:?}")]
+    ImportForbidden {
         backend: VideoDecodeBackend,
-        policy: FrameTransferPolicy,
-        path: VideoTransferPath,
+        policy: FrameImportPolicy,
+        path: VideoCompositorImport,
     },
     #[error("failed to initialize {backend:?}: {message}")]
     Backend {
@@ -997,15 +981,15 @@ pub enum VideoCommandError {
     SessionFailed { id: u32 },
     #[error("video decoder and compositor adapters are incompatible: {details}")]
     AdapterMismatch { details: String },
-    #[error("video transfer path {path:?} is forbidden by {policy:?}")]
-    TransferForbidden {
-        policy: FrameTransferPolicy,
-        path: VideoTransferPath,
+    #[error("video compositor import {path:?} is forbidden by {policy:?}")]
+    ImportForbidden {
+        policy: FrameImportPolicy,
+        path: VideoCompositorImport,
     },
     #[error("video importer classified {planned:?} but produced {actual:?}")]
-    TransferContract {
-        planned: VideoTransferPath,
-        actual: VideoTransferPath,
+    ImportContract {
+        planned: VideoCompositorImport,
+        actual: VideoCompositorImport,
     },
     #[error("video source requires unavailable media components: {plugins}")]
     MissingPlugins { plugins: MissingVideoPlugins },
@@ -1025,16 +1009,6 @@ impl From<&str> for VideoCommandError {
     fn from(message: &str) -> Self {
         Self::Backend {
             message: message.to_owned(),
-        }
-    }
-}
-
-impl FrameTransferPolicy {
-    pub const fn permits(self, path: VideoTransferPath) -> bool {
-        match self {
-            Self::RequireDirectSurface => matches!(path, VideoTransferPath::DirectExternalSurface),
-            Self::AllowGpuInteropCopy => !matches!(path, VideoTransferPath::CpuUpload),
-            Self::AllowCpuUpload => true,
         }
     }
 }
@@ -1076,7 +1050,7 @@ pub enum VideoEvent {
 pub struct VideoFrameReady {
     pub id: VideoId,
     pub pts: MediaTime,
-    pub transfer_path: VideoTransferPath,
+    pub frame_path: VideoFramePath,
 }
 
 /// Work discovered by one non-blocking service pass.

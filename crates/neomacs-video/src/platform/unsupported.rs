@@ -24,8 +24,11 @@ impl DecoderBackend for UnsupportedDecoder {
 impl FrameImporter<UnsupportedFrame> for UnsupportedImporter {
     type Sampled = GpuVideoFrame;
 
-    fn transfer_path(&self, _frame: &DecodedFrame<UnsupportedFrame>) -> crate::VideoTransferPath {
-        crate::VideoTransferPath::CpuUpload
+    fn compositor_import(
+        &self,
+        _frame: &DecodedFrame<UnsupportedFrame>,
+    ) -> crate::VideoCompositorImport {
+        crate::VideoCompositorImport::CpuUpload
     }
 
     fn import(
@@ -47,7 +50,7 @@ impl Platform for UnsupportedPlatform {
 impl ProductionPlatform for UnsupportedPlatform {
     fn create(
         _gpu: GpuVideoContext,
-        _policy: crate::FrameTransferPolicy,
+        _policy: crate::FrameImportPolicy,
         _wake: VideoWake,
     ) -> Result<(Self::Decoder, Self::Importer), VideoInitError> {
         Err(VideoInitError::UnsupportedPlatform)

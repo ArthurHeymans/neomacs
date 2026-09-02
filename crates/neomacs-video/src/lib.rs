@@ -16,16 +16,17 @@ mod system;
 
 pub(crate) use model::FrameTiming;
 pub use model::{
-    BiPlanarVideoFormat, FrameTransferPolicy, InitialPlayback, LoopMode, MediaTime,
+    BiPlanarVideoFormat, FrameImportPolicy, InitialPlayback, LoopMode, MediaTime,
     MissingVideoPlugin, MissingVideoPlugins, PackedVideoFormat, PixelAspectRatio, PixelRect,
     PlaybackAction, PlaybackEpoch, PlaybackRate, PresentationVisibility, VideoChromaLocation,
     VideoColorPrimaries, VideoColorRange, VideoColorimetry, VideoCommand, VideoCommandError,
-    VideoDecodeBackend, VideoDiagnostics, VideoEvent, VideoFrameFormat, VideoFrameLayoutError,
-    VideoFrameReady, VideoGeometry, VideoInitError, VideoInstallerHint, VideoMatrixCoefficients,
-    VideoModelError, VideoOpenRequest, VideoPlaneFormat, VideoRecoveryManifest, VideoRotation,
-    VideoSampleKind, VideoSamplingTransform, VideoServiceResult, VideoSessionDiagnostics,
-    VideoSessionRecovery, VideoSessionState, VideoSource, VideoTextureCoordinates,
-    VideoTransferCharacteristic, VideoTransferCounts, VideoTransferPath,
+    VideoCompositorImport, VideoDecodeBackend, VideoDecodeResidency, VideoDiagnostics, VideoEvent,
+    VideoFrameFormat, VideoFrameLayoutError, VideoFramePath, VideoFrameReady, VideoGeometry,
+    VideoImportCounts, VideoInitError, VideoInstallerHint, VideoMatrixCoefficients,
+    VideoModelError, VideoOpenRequest, VideoPlaneFormat, VideoPresentationPath,
+    VideoRecoveryManifest, VideoRotation, VideoSampleKind, VideoSamplingTransform,
+    VideoServiceResult, VideoSessionDiagnostics, VideoSessionRecovery, VideoSessionState,
+    VideoSource, VideoTextureCoordinates, VideoTransferCharacteristic,
 };
 pub(crate) use sampling::GpuVideoFrame;
 pub use sampling::{GpuGeneration, PreparedVideoDraw, PreparedVideoDraws, VideoSamplingResources};
