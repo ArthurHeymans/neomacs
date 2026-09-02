@@ -7,7 +7,9 @@ use neomacs_tui_tests::TuiSession;
 
 use crate::{CachedMelpaOracle, HELM_GITIGNORE_MELPA_PIN};
 
-use super::support::PackageTuiPair;
+use neomacs_melpa_test_support::{
+    PackageTuiPair, PackageTuiScenario, PairTimeout, ReadinessCheckpoint,
+};
 
 /// `helm-gitignore' is a thin interactive client, so its public seam is the
 /// complete `M-x helm-gitignore' session.  The package, Helm, Request,
@@ -784,27 +786,22 @@ fn assert_gnu_literal_and_parity(
     }
 }
 
-fn spawn_helm_gitignore_pair(label: &str) -> PackageTuiPair {
+fn ready_helm_gitignore_pair(label: &str) -> PackageTuiPair {
     let oracle = CachedMelpaOracle::new(HELM_GITIGNORE_MELPA_PIN, "helm-gitignore.el")
         .expect("prepare exact revision-pinned helm-gitignore source")
         .with_prelude(HELM_GITIGNORE_TUI_PRELUDE);
-    PackageTuiPair::spawn(label, oracle.prepared_packages())
-        .expect("spawn helm-gitignore GNU/Neomacs TUI pair")
-}
-
-fn ready_helm_gitignore_pair(label: &str, divergences: &mut Vec<String>) -> PackageTuiPair {
-    let mut pair = spawn_helm_gitignore_pair(label);
-    wait_for_progress(
-        &mut pair,
-        "fixture startup",
-        Duration::from_secs(20),
-        |grid| {
-            grid.iter()
-                .any(|row| row.contains("Release engineering scratchpad"))
-        },
-        divergences,
-    );
-    pair
+    PackageTuiScenario::new(label, oracle.prepared_packages())
+        .spawn_when_ready(
+            ReadinessCheckpoint::new(
+                "release engineering fixture",
+                PairTimeout::same(Duration::from_secs(20)),
+            ),
+            |grid| {
+                grid.iter()
+                    .any(|row| row.contains("Release engineering scratchpad"))
+            },
+        )
+        .expect("spawn ready helm-gitignore GNU/Neomacs TUI pair")
 }
 
 fn assert_no_divergences(divergences: &[String]) {
@@ -818,7 +815,7 @@ fn assert_no_divergences(divergences: &[String]) {
 #[test]
 fn helm_gitignore_public_workflows_match_gnu() {
     let mut divergences = Vec::new();
-    let mut pair = ready_helm_gitignore_pair("helm-gitignore-workflows", &mut divergences);
+    let mut pair = ready_helm_gitignore_pair("helm-gitignore-workflows");
 
     // A blank pattern is not a service request: the source requires one input
     // character before it contacts the dropdown API.
@@ -1347,7 +1344,7 @@ release-output/
 
     // Failure callbacks can leave asynchronous state behind, so failures use
     // scoped fresh editor pairs while still sharing this package-level test.
-    let mut pair = ready_helm_gitignore_pair("helm-gitignore-list-failure", &mut divergences);
+    let mut pair = ready_helm_gitignore_pair("helm-gitignore-list-failure");
     eval_both(
         &mut pair,
         r#"(neomacs-helm-gitignore-tui-expect '("/dropdown/templates.json?term=visual" legacy-redirect) '("/developers/gitignore/dropdown/templates.json?term=visual" connection-close))"#,
@@ -1390,7 +1387,7 @@ release-output/
     );
     drop(pair);
 
-    let mut pair = ready_helm_gitignore_pair("helm-gitignore-generation-failure", &mut divergences);
+    let mut pair = ready_helm_gitignore_pair("helm-gitignore-generation-failure");
     eval_both(
         &mut pair,
         "(neomacs-helm-gitignore-tui-seed-unsaved-buffer)",

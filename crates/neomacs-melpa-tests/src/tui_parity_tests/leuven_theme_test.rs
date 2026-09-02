@@ -5,7 +5,9 @@ use neomacs_tui_tests::{RawTerminalSnapshot, TuiSession};
 
 use crate::{CachedMelpaOracle, LEUVEN_THEME_MELPA_PIN};
 
-use super::support::PackageTuiPair;
+use neomacs_melpa_test_support::{
+    PackageTuiPair, PackageTuiScenario, PairTimeout, ReadinessCheckpoint,
+};
 
 const LEUVEN_TUI_PRELUDE: &str = r####"
 (require 'cl-lib)
@@ -520,23 +522,17 @@ fn leuven_theme_real_color_lifecycle_matches_gnu() {
     let oracle = CachedMelpaOracle::new(LEUVEN_THEME_MELPA_PIN, "leuven-theme.el")
         .expect("prepare exact Leuven Theme source below ./tmp")
         .with_prelude(LEUVEN_TUI_PRELUDE);
-    let mut pair = PackageTuiPair::spawn("leuven-theme-lifecycle", oracle.prepared_packages())
-        .expect("spawn real Leuven Theme PTY pair");
-    let mut neo_mismatches = Vec::new();
-
     let ready = |grid: &[String]| grid.iter().any(|row| row.contains("LEUVEN-TUI-READY"));
-    wait_for(
-        &mut pair.gnu,
-        Duration::from_secs(20),
-        "Leuven lifecycle readiness",
-        ready,
-    );
-    wait_for(
-        &mut pair.neo,
-        Duration::from_secs(30),
-        "Leuven lifecycle readiness",
-        ready,
-    );
+    let mut pair = PackageTuiScenario::new("leuven-theme-lifecycle", oracle.prepared_packages())
+        .spawn_when_ready(
+            ReadinessCheckpoint::new(
+                "Leuven lifecycle readiness marker",
+                PairTimeout::per_editor(Duration::from_secs(20), Duration::from_secs(30)),
+            ),
+            ready,
+        )
+        .expect("spawn ready real Leuven Theme PTY pair");
+    let mut neo_mismatches = Vec::new();
 
     let gnu_report = lifecycle_report(&pair, true);
     let neo_report = lifecycle_report(&pair, false);

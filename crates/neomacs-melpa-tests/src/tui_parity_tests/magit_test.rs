@@ -1,11 +1,13 @@
 use std::time::Duration;
 
 use expect_test::expect;
-use neomacs_tui_tests::{RawTerminalSnapshot, assert_raw_terminal_snapshots_eq};
+use neomacs_tui_tests::RawTerminalSnapshot;
 
 use crate::{CachedMelpaOracle, MAGIT_MELPA_PIN};
 
-use super::support::PackageTuiPair;
+use neomacs_melpa_test_support::{
+    DisplayCheckpoint, PackageTuiScenario, PairTimeout, ReadinessCheckpoint,
+};
 
 const MAGIT_LOG_TUI_PRELUDE: &str = r#"
 (require 'magit)
@@ -56,19 +58,22 @@ fn magit_log_buffer_file_margin_columns_match_gnu_full_screen() {
     let oracle = CachedMelpaOracle::new(MAGIT_MELPA_PIN, "magit.el")
         .expect("prepare revision-pinned Magit source")
         .with_prelude(MAGIT_LOG_TUI_PRELUDE);
-    let mut pair = PackageTuiPair::spawn("magit-log-margin", oracle.prepared_packages())
-        .expect("spawn package TUI pair");
-
     let ready = |grid: &[String]| {
         grid.iter().any(|row| {
             row.contains("medium subject") && row.contains("A U Thor") && row.contains("2003-04-05")
         })
     };
-    pair.gnu.read_until(Duration::from_secs(20), ready);
-    pair.neo.read_until(Duration::from_secs(30), ready);
+    let pair = PackageTuiScenario::new("magit-log-margin", oracle.prepared_packages())
+        .spawn_when_ready(
+            ReadinessCheckpoint::new(
+                "Magit log rows",
+                PairTimeout::per_editor(Duration::from_secs(20), Duration::from_secs(30)),
+            ),
+            ready,
+        )
+        .expect("spawn ready package TUI pair");
 
     let gnu_snapshot = RawTerminalSnapshot::capture_full_screen(pair.gnu.screen());
-    let neo_snapshot = RawTerminalSnapshot::capture_full_screen(pair.neo.screen());
 
     let expected_ansi_grid = expect![[r#"
         [0;3mFile Edit Options Buffers Tools Magit Help                                                                                                                      [0m
@@ -177,9 +182,10 @@ fn magit_log_buffer_file_margin_columns_match_gnu_full_screen() {
     "#]];
     expected_plain_grid.assert_eq(&gnu_snapshot.plain_grid());
 
-    assert_raw_terminal_snapshots_eq(
+    pair.assert_display(DisplayCheckpoint::new(
         "Magit log full-screen terminal state",
-        &gnu_snapshot,
-        &neo_snapshot,
-    );
+    ));
+    pair.assert_display(DisplayCheckpoint::raw_terminal(
+        "Magit log full-screen terminal wire state",
+    ));
 }

@@ -9,5 +9,4 @@ mod helm_pydoc_test;
 mod leuven_theme_test;
 mod magit_test;
 mod mwim_test;
-mod support;
 mod vertico_test;

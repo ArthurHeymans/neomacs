@@ -7046,9 +7046,6 @@ mod direct_adapter_tests;
 #[cfg(all(test, target_os = "linux"))]
 mod gui_parity_tests;
 
-#[cfg(all(test, unix))]
-mod tui_parity_tests;
-
 /// The exact dashboard package selected for practical startup screen widgets and buffer name.
 /// MELPA built this archive from upstream commit `176d641a55543bda1f0c7506fb954702350c1857`.
 pub const DASHBOARD_MELPA_PIN: (&str, &str) = ("dashboard", "20260402.436");

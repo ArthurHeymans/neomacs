@@ -8,7 +8,9 @@ use neomacs_tui_tests::{RawTerminalSnapshot, TuiSession};
 
 use crate::{CachedMelpaOracle, HELM_CORE_MELPA_PIN, HELM_PYDOC_MELPA_PIN};
 
-use super::support::PackageTuiPair;
+use neomacs_melpa_test_support::{
+    PackageTuiPair, PackageTuiScenario, PairTimeout, ReadinessCheckpoint,
+};
 
 const HELM_PYDOC_TUI_PRELUDE: &str = r####"
 (defun neomacs-helm-pydoc-tui-write (path contents)
@@ -335,13 +337,16 @@ fn helm_pydoc_real_helm_workflows_match_gnu_terminal_and_filesystem() {
         .with_melpa_dependency(HELM_CORE_MELPA_PIN)
         .expect("prepare exact Helm Core dependency")
         .with_prelude(HELM_PYDOC_TUI_PRELUDE);
-    let mut pair = PackageTuiPair::spawn("helm-pydoc-workflows", oracle.prepared_packages())
-        .expect("spawn Helm Pydoc package TUI pair");
+    let mut pair = PackageTuiScenario::new("helm-pydoc-workflows", oracle.prepared_packages())
+        .spawn_when_ready(
+            ReadinessCheckpoint::new(
+                "Python module fixture",
+                PairTimeout::same(Duration::from_secs(20)),
+            ),
+            |grid| grid.iter().any(|row| row.contains("candidate-42")),
+        )
+        .expect("spawn ready Helm Pydoc package TUI pair");
     let mut divergences = Vec::new();
-
-    wait_for_both(&mut pair, Duration::from_secs(20), |grid| {
-        grid.iter().any(|row| row.contains("candidate-42"))
-    });
 
     open_pydoc(&mut pair);
     assert_stage(

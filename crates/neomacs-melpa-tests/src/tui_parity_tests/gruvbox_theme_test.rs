@@ -12,7 +12,9 @@ use crate::{
     PreparedPackageSet,
 };
 
-use super::support::{DisplayEnvOverride, PackageTuiPair};
+use neomacs_melpa_test_support::{
+    PackageTuiPair, PackageTuiScenario, PairTimeout, ReadinessCheckpoint, TerminalProfile,
+};
 
 const GRUVBOX_TUI_PRELUDE: &str = r####"
 (require 'ansi-color)
@@ -1200,9 +1202,17 @@ fn initialize_consumer(
 fn spawn_profile(
     label: &str,
     packages: &PreparedPackageSet,
-    display: DisplayEnvOverride<'_>,
+    terminal_profile: TerminalProfile,
 ) -> Result<PackageTuiPair, String> {
-    PackageTuiPair::spawn_with_display_env(label, packages, &[display])
+    PackageTuiScenario::new(label, packages)
+        .terminal_profile(terminal_profile)
+        .spawn_when_ready(
+            ReadinessCheckpoint::new(
+                "initial scratch buffer",
+                PairTimeout::same(Duration::from_secs(20)),
+            ),
+            |grid| grid.iter().any(|row| row.contains("*scratch*")),
+        )
 }
 
 fn capture_matrix_pair(pair: &mut PackageTuiPair) -> (String, String) {
@@ -1695,10 +1705,10 @@ fn exercise_stack_rendering(
 fn run_profile(
     label: &str,
     packages: &PreparedPackageSet,
-    display: DisplayEnvOverride<'_>,
+    terminal_profile: TerminalProfile,
     body: impl FnOnce(&mut PackageTuiPair, &mut Vec<String>),
 ) -> Result<(), String> {
-    let mut pair = spawn_profile(label, packages, display)?;
+    let mut pair = spawn_profile(label, packages, terminal_profile)?;
     let mut mismatches = Vec::new();
     let body_result = catch_phase(&format!("{label} body"), || {
         wait_for_boot_both(&mut pair);
@@ -1723,10 +1733,7 @@ fn default_org_consumer(packages: &PreparedPackageSet) -> Result<(), String> {
     run_profile(
         "gruvbox-theme-default-org-consumer",
         packages,
-        DisplayEnvOverride::Set {
-            key: "COLORTERM",
-            value: "truecolor",
-        },
+        TerminalProfile::TrueColor,
         |pair, mismatches| {
             record_pair(
                 pair,
@@ -1810,10 +1817,7 @@ fn truecolor(packages: &PreparedPackageSet) -> Result<(), String> {
     run_profile(
         "gruvbox-theme-truecolor",
         packages,
-        DisplayEnvOverride::Set {
-            key: "COLORTERM",
-            value: "truecolor",
-        },
+        TerminalProfile::TrueColor,
         |pair, mismatches| {
             record_pair(
                 pair,
@@ -2862,7 +2866,7 @@ fn color256(packages: &PreparedPackageSet) -> Result<(), String> {
     run_profile(
         "gruvbox-theme-color256",
         packages,
-        DisplayEnvOverride::Remove { key: "COLORTERM" },
+        TerminalProfile::Indexed256,
         |pair, mismatches| {
             record_pair(
                 pair,

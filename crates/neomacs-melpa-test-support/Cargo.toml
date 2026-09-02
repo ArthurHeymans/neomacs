@@ -6,6 +6,9 @@ authors.workspace = true
 license.workspace = true
 publish = false
 
+[features]
+tui = ["dep:neomacs-tui-tests"]
+
 [dependencies]
 command-group.workspace = true
 fs4.workspace = true
@@ -13,3 +16,6 @@ neomacs-parity-reference.workspace = true
 sha2.workspace = true
 tempfile.workspace = true
 wait-timeout.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+neomacs-tui-tests = { workspace = true, optional = true }

@@ -1,9 +1,11 @@
 //! Shared preparation support for Neomacs MELPA compatibility tests.
 //!
 //! This crate owns revision-pinned package acquisition, deterministic package
-//! process setup, and filesystem isolation. Test adapters remain in their
-//! respective crates: batch/value comparison in `neomacs-melpa-tests` and PTY
-//! grid comparison in `neomacs-tui-tests`.
+//! process setup, and filesystem isolation. Its opt-in `tui` feature composes
+//! those package fixtures with `neomacs-tui-tests` into a reusable, symmetric
+//! GNU Emacs/Neomacs scenario pipeline. Batch/value comparison remains in
+//! `neomacs-melpa-tests`, while the generic PTY/grid adapter remains in
+//! `neomacs-tui-tests`.
 
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -19,6 +21,8 @@ use wait_timeout::ChildExt;
 mod prepared_package_set;
 mod source_lock;
 mod tree_sitter_grammar;
+#[cfg(all(unix, feature = "tui"))]
+mod tui_scenario;
 
 pub use prepared_package_set::{PackageActivation, PreparedPackageSet, package_activation_elisp};
 pub use source_lock::{
@@ -28,6 +32,11 @@ pub use source_lock::{
 };
 pub use tree_sitter_grammar::{
     prepare_cached_tree_sitter_grammar, prepare_cached_tree_sitter_grammar_from_subdirectory,
+};
+#[cfg(all(unix, feature = "tui"))]
+pub use tui_scenario::{
+    DisplayCheckpoint, PackageTuiPair, PackageTuiScenario, PairTimeout, ReadinessCheckpoint,
+    TerminalProfile,
 };
 
 pub const DEFAULT_PROCESS_TIMEOUT: Duration = Duration::from_secs(300);

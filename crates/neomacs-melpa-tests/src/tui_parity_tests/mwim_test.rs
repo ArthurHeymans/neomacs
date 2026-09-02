@@ -7,7 +7,9 @@ use neomacs_tui_tests::TuiSession;
 
 use crate::{CachedMelpaOracle, MWIM_MELPA_PIN};
 
-use super::support::PackageTuiPair;
+use neomacs_melpa_test_support::{
+    PackageTuiPair, PackageTuiScenario, PairTimeout, ReadinessCheckpoint,
+};
 
 const MWIM_VISUAL_TUI_PRELUDE: &str = r####"
 (require 'cl-lib)
@@ -592,8 +594,15 @@ fn mwim_real_visual_and_logical_line_keys_match_gnu() {
     let oracle = CachedMelpaOracle::new(MWIM_MELPA_PIN, "mwim.el")
         .expect("prepare exact shallow MWIM source below ./tmp")
         .with_prelude(MWIM_VISUAL_TUI_PRELUDE);
-    let mut pair = PackageTuiPair::spawn("mwim-visual-lines", oracle.prepared_packages())
-        .expect("spawn real MWIM visual PTY pair");
+    let mut pair = PackageTuiScenario::new("mwim-visual-lines", oracle.prepared_packages())
+        .spawn_when_ready(
+            ReadinessCheckpoint::new(
+                "initial scratch buffer",
+                PairTimeout::per_editor(Duration::from_secs(20), Duration::from_secs(30)),
+            ),
+            |grid| grid.iter().any(|row| row.contains("*scratch*")),
+        )
+        .expect("spawn ready real MWIM visual PTY pair");
 
     let body = catch_phase("MWIM visual body", || run_visual_body(&mut pair));
     let cleanup = catch_phase("MWIM visual cleanup", || run_visual_cleanup(&mut pair));

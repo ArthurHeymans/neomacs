@@ -496,16 +496,16 @@ jobs:
       matrix:
         include:
           - suite: batch
-            libtest_args: "--skip tui_parity_tests:: --skip gui_parity_tests::"
+            filter: binary_id(=neomacs-melpa-test-support)|(binary_id(=neomacs-melpa-tests)-test(~gui_parity_tests::))
           - suite: tui
-            libtest_args: "tui_parity_tests::"
+            filter: binary_id(=neomacs-melpa-tests::melpa_tui)
           - suite: gui
-            libtest_args: "gui_parity_tests::"
+            filter: binary_id(=neomacs-melpa-tests)&test(~gui_parity_tests::)
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
       TMPDIR: ${{ github.workspace }}/tmp
-      LIBTEST_ARGS: ${{ matrix.libtest_args }}
+      NEXTEST_FILTER: ${{ matrix.filter }}
       NEOMACS_BIN: ${{ github.workspace }}/target/release/neomacs
       NEOMACS_RUNTIME_ROOT: ${{ github.workspace }}
       NEOMACS_MELPA_ORACLE_EMACS: /usr/bin/emacs
@@ -556,18 +556,13 @@ jobs:
 
       - name: Run deterministic package ecosystem compatibility tests
         run: |
-          # LIBTEST_ARGS is a space-separated libtest argument list from the
-          # matrix; split it once into an array so the words reach libtest
-          # verbatim without unquoted expansion.
-          read -r -a libtest_args <<<"$LIBTEST_ARGS"
           cargo nextest run \
             --archive-file neomacs-workspace-tests.tar.zst \
             --extract-to "$TMPDIR/nextest" \
-            -E 'package(neomacs-melpa-tests)' \
+            -E "$NEXTEST_FILTER" \
             --workspace-remap "$GITHUB_WORKSPACE" \
             --success-output immediate \
-            --no-fail-fast \
-            -- "${libtest_args[@]}"
+            --no-fail-fast
 
   neomacs-display-tests:
     name: display stack tests (linux x86_64)

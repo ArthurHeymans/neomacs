@@ -5,7 +5,7 @@ use neomacs_tui_tests::RawTerminalSnapshot;
 
 use crate::{COMPAT_GNU_ELPA_PIN, CORFU_MELPA_PIN, CachedMelpaOracle};
 
-use super::support::PackageTuiPair;
+use neomacs_melpa_test_support::{PackageTuiScenario, PairTimeout, ReadinessCheckpoint};
 
 const CORFU_TUI_PRELUDE: &str = r#"
 (require 'corfu)
@@ -77,13 +77,17 @@ fn corfu_real_tty_popup_candidates_navigation_and_insertion_match_gnu() {
         .with_gnu_elpa_dependency(COMPAT_GNU_ELPA_PIN)
         .expect("prepare exact Compat dependency")
         .with_prelude(CORFU_TUI_PRELUDE);
-    let mut pair = PackageTuiPair::spawn("corfu-popup", oracle.prepared_packages())
-        .expect("spawn package TUI pair");
+    let mut pair = PackageTuiScenario::new("corfu-popup", oracle.prepared_packages())
+        .spawn_when_ready(
+            ReadinessCheckpoint::new(
+                "Corfu fixture buffer",
+                PairTimeout::same(Duration::from_secs(20)),
+            ),
+            |grid| grid.iter().any(|row| row.trim_start().starts_with("ca")),
+        )
+        .expect("spawn ready package TUI pair");
 
     for session in [&mut pair.gnu, &mut pair.neo] {
-        session.read_until(Duration::from_secs(20), |grid| {
-            grid.iter().any(|row| row.trim_start().starts_with("ca"))
-        });
         session.send_keys("C-c c");
         session.read_until(Duration::from_secs(8), |grid| {
             candidate_rows(grid).len() == 3

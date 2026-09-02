@@ -7,7 +7,9 @@ use neomacs_tui_tests::{RawTerminalSnapshot, TuiSession};
 
 use crate::{BEACON_MELPA_PIN, CachedMelpaOracle};
 
-use super::support::{DisplayEnvOverride, PackageTuiPair};
+use neomacs_melpa_test_support::{
+    PackageTuiPair, PackageTuiScenario, PairTimeout, ReadinessCheckpoint, TerminalProfile,
+};
 
 const BEACON_TUI_PRELUDE: &str = r####"
 (require 'cl-lib)
@@ -1633,21 +1635,19 @@ fn beacon_real_truecolor_automated_display_and_timer_lifecycle_match_gnu() {
     let oracle = CachedMelpaOracle::new(BEACON_MELPA_PIN, "beacon.el")
         .expect("prepare exact shallow Beacon source below ./tmp")
         .with_prelude(BEACON_TUI_PRELUDE);
-    let mut pair = PackageTuiPair::spawn_with_display_env(
-        "beacon-real-display",
-        oracle.prepared_packages(),
-        &[DisplayEnvOverride::Set {
-            key: "COLORTERM",
-            value: "truecolor",
-        }],
-    )
-    .expect("spawn real truecolor Beacon PTY pair");
-    both(&mut pair, "real terminal profile prime", |session| {
-        session.resize(24, 80);
-        session.send(b"\x1b[O");
-        session.read(Duration::from_millis(500));
-    })
-    .expect("establish the exact real 80x24 unfocused terminal baseline");
+    let mut pair = PackageTuiScenario::new("beacon-real-display", oracle.prepared_packages())
+        .terminal_profile(TerminalProfile::TrueColor)
+        .spawn_when_ready(
+            ReadinessCheckpoint::new(
+                "initial scratch buffer",
+                PairTimeout::per_editor(Duration::from_secs(20), Duration::from_secs(30)),
+            ),
+            |grid| grid.iter().any(|row| row.contains("*scratch*")),
+        )
+        .expect("spawn ready real truecolor Beacon PTY pair");
+    pair.resize_both(24, 80);
+    pair.send_both(b"\x1b[O");
+    pair.settle_both(Duration::from_millis(500));
 
     let mut mismatches = Vec::new();
     let body = catch_phase("Beacon TUI body", || run_body(&mut pair, &mut mismatches))

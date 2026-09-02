@@ -3886,6 +3886,7 @@ dependencies = [
  "command-group",
  "fs4",
  "neomacs-parity-reference",
+ "neomacs-tui-tests",
  "sha2",
  "tempfile",
  "wait-timeout",

@@ -6,7 +6,7 @@ use neomacs_tui_tests::{RawTerminalSnapshot, TuiSession};
 
 use crate::{CachedMelpaOracle, HELM_CSS_SCSS_MELPA_PIN};
 
-use super::support::PackageTuiPair;
+use neomacs_melpa_test_support::{PackageTuiScenario, PairTimeout, ReadinessCheckpoint};
 
 const HELM_CSS_SCSS_DEFAULT_TUI_PRELUDE: &str = r####"
 (require 'cl-lib)
@@ -997,15 +997,15 @@ fn helm_css_scss_unadapted_public_command_preserves_exact_helm_arity_failure() {
         .expect("prepare exact revision-pinned helm-css-scss source")
         .with_prelude(HELM_CSS_SCSS_DEFAULT_TUI_PRELUDE);
     let mut pair =
-        PackageTuiPair::spawn("helm-css-scss-default-failure", oracle.prepared_packages())
-            .expect("spawn fresh helm-css-scss GNU/Neomacs PTY pair");
-
-    wait_for(&mut pair.gnu, "GNU fixture startup", |grid| {
-        grid.iter().any(|row| row.contains("padding: 1rem"))
-    });
-    wait_for(&mut pair.neo, "Neomacs fixture startup", |grid| {
-        grid.iter().any(|row| row.contains("padding: 1rem"))
-    });
+        PackageTuiScenario::new("helm-css-scss-default-failure", oracle.prepared_packages())
+            .spawn_when_ready(
+                ReadinessCheckpoint::new(
+                    "stylesheet fixture",
+                    PairTimeout::same(Duration::from_secs(20)),
+                ),
+                |grid| grid.iter().any(|row| row.contains("padding: 1rem")),
+            )
+            .expect("spawn ready helm-css-scss GNU/Neomacs PTY pair");
 
     send_default_probe(&mut pair.gnu);
     send_default_probe(&mut pair.neo);
@@ -1057,15 +1057,15 @@ fn helm_css_scss_named_display_adapter_drives_real_single_buffer_helm() {
     let oracle = CachedMelpaOracle::new(HELM_CSS_SCSS_MELPA_PIN, "helm-css-scss.el")
         .expect("prepare exact revision-pinned helm-css-scss source")
         .with_prelude(HELM_CSS_SCSS_SINGLE_TUI_PRELUDE);
-    let mut pair = PackageTuiPair::spawn("helm-css-scss-single", oracle.prepared_packages())
-        .expect("spawn fresh configured helm-css-scss GNU/Neomacs PTY pair");
-
-    wait_for(&mut pair.gnu, "GNU single fixture startup", |grid| {
-        grid.iter().any(|row| row.contains("padding: 1rem"))
-    });
-    wait_for(&mut pair.neo, "Neomacs single fixture startup", |grid| {
-        grid.iter().any(|row| row.contains("padding: 1rem"))
-    });
+    let mut pair = PackageTuiScenario::new("helm-css-scss-single", oracle.prepared_packages())
+        .spawn_when_ready(
+            ReadinessCheckpoint::new(
+                "single-buffer stylesheet fixture",
+                PairTimeout::same(Duration::from_secs(20)),
+            ),
+            |grid| grid.iter().any(|row| row.contains("padding: 1rem")),
+        )
+        .expect("spawn ready configured helm-css-scss GNU/Neomacs PTY pair");
 
     invoke(&mut pair.gnu, "neomacs-hcss-single-start");
     invoke(&mut pair.neo, "neomacs-hcss-single-start");
@@ -2019,15 +2019,15 @@ fn helm_css_scss_named_display_adapter_drives_real_multi_buffer_helm() {
     let oracle = CachedMelpaOracle::new(HELM_CSS_SCSS_MELPA_PIN, "helm-css-scss.el")
         .expect("prepare exact revision-pinned helm-css-scss source")
         .with_prelude(HELM_CSS_SCSS_MULTI_TUI_PRELUDE);
-    let mut pair = PackageTuiPair::spawn("helm-css-scss-multi", oracle.prepared_packages())
-        .expect("spawn fresh configured multi-buffer GNU/Neomacs PTY pair");
-
-    wait_for(&mut pair.gnu, "GNU multi fixture startup", |grid| {
-        grid.iter().any(|row| row.contains("padding: 1rem"))
-    });
-    wait_for(&mut pair.neo, "Neomacs multi fixture startup", |grid| {
-        grid.iter().any(|row| row.contains("padding: 1rem"))
-    });
+    let mut pair = PackageTuiScenario::new("helm-css-scss-multi", oracle.prepared_packages())
+        .spawn_when_ready(
+            ReadinessCheckpoint::new(
+                "multi-buffer stylesheet fixture",
+                PairTimeout::same(Duration::from_secs(20)),
+            ),
+            |grid| grid.iter().any(|row| row.contains("padding: 1rem")),
+        )
+        .expect("spawn ready configured multi-buffer GNU/Neomacs PTY pair");
     invoke(&mut pair.gnu, "neomacs-hcss-multi-start");
     invoke(&mut pair.neo, "neomacs-hcss-multi-start");
     wait_for(&mut pair.gnu, "GNU real multi-source Helm", |grid| {

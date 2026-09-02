@@ -58,10 +58,20 @@ phase-specific failures.
 - `package_vc.rs` installs from a workspace-local Git repository, restarts,
   upgrades to a new commit, restarts again, deletes the package, and verifies
   that deletion survives one more restart. It never contacts a remote host.
-All Rust tests are library unit-test modules loaded from the
-`src/parity_tests/` and `src/tui_parity_tests/` trees; the latter contains
-packages whose public workflow requires a real interactive terminal. This
-crate has no Cargo integration-test targets.
+- `src/tui_parity_tests/` contains packages whose public workflow requires a
+  real interactive terminal. Cargo exposes those scenarios through the
+  dedicated `melpa_tui` integration-test target, while the batch and GUI
+  corpora remain in the library test target. This gives CI and local runs a
+  stable target boundary rather than depending on Rust module-name filters.
+  The opt-in `tui` module in `neomacs-melpa-test-support` supplies the reusable
+  scenario pipeline. Every package TUI scenario launches the same prepared
+  package set in GNU Emacs and Neomacs, declares a closed terminal profile, and
+  must observe the same readiness checkpoint in both editors before the
+  sessions can be driven.
+  Complete-screen checkpoints default to exact visible display parity: text,
+  geometry, cursor, face/style classes, and resolved RGB colors. A deliberately
+  named raw-terminal checkpoint remains available for tests whose subject is
+  the terminal wire representation itself, such as indexed palette values.
 The GNU package-resource contracts are required CI checks. The current MELPA
 oracle runs on scheduled and explicitly dispatched CI workflows.
 
@@ -128,6 +138,16 @@ TMPDIR="$PWD/tmp" \
 NEOMACS_BIN="$PWD/target/release/neomacs" \
 NEOMACS_MELPA_ORACLE_EMACS="/home/exec/Projects/github.com/emacs-mirror/emacs/src/emacs" \
 cargo nextest run -p neomacs-melpa-tests --no-fail-fast
+```
+
+Run only real-terminal package workflows after building the release runtime:
+
+```sh
+TMPDIR="$PWD/tmp" \
+NEOMACS_BIN="$PWD/target/release/neomacs" \
+NEOMACS_MELPA_ORACLE_EMACS="/home/exec/Projects/github.com/emacs-mirror/emacs/src/emacs" \
+cargo nextest run -p neomacs-melpa-tests --release --test melpa_tui \
+  --no-fail-fast
 ```
 
 Run the live lifecycle canary explicitly:

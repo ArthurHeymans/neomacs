@@ -1,11 +1,13 @@
 use std::time::Duration;
 
 use expect_test::expect;
-use neomacs_tui_tests::{RawTerminalSnapshot, assert_raw_terminal_snapshots_eq};
+use neomacs_tui_tests::RawTerminalSnapshot;
 
 use crate::{COMPAT_GNU_ELPA_PIN, CachedMelpaOracle, VERTICO_MELPA_PIN};
 
-use super::support::PackageTuiPair;
+use neomacs_melpa_test_support::{
+    DisplayCheckpoint, PackageTuiScenario, PairTimeout, ReadinessCheckpoint,
+};
 
 const VERTICO_TUI_PRELUDE: &str = r#"
 (require 'vertico)
@@ -39,19 +41,25 @@ fn vertico_real_minibuffer_candidates_and_selection_match_gnu_grid() {
         .with_gnu_elpa_dependency(COMPAT_GNU_ELPA_PIN)
         .expect("prepare exact Compat dependency")
         .with_prelude(VERTICO_TUI_PRELUDE);
-    let mut pair = PackageTuiPair::spawn("vertico-minibuffer", oracle.prepared_packages())
-        .expect("spawn package TUI pair");
-
     let ready = |grid: &[String]| grid.iter().any(|row| row.contains("*scratch*"));
-    pair.gnu.read_until(Duration::from_secs(15), ready);
-    pair.neo.read_until(Duration::from_secs(20), ready);
+    let mut pair = PackageTuiScenario::new("vertico-minibuffer", oracle.prepared_packages())
+        .spawn_when_ready(
+            ReadinessCheckpoint::new(
+                "initial scratch buffer",
+                PairTimeout::per_editor(Duration::from_secs(15), Duration::from_secs(20)),
+            ),
+            ready,
+        )
+        .expect("spawn ready package TUI pair");
 
+    pair.send_keys_both("C-x b");
     for session in [&mut pair.gnu, &mut pair.neo] {
-        session.send_keys("C-x b");
         session.read_until(Duration::from_secs(8), |grid| {
             grid.iter().any(|row| row.contains("Switch to buffer"))
         });
-        session.send(b"project-");
+    }
+    pair.send_both(b"project-");
+    for session in [&mut pair.gnu, &mut pair.neo] {
         session.read_until(Duration::from_secs(8), |grid| {
             candidate_rows(grid).len() >= 3
         });
@@ -61,7 +69,6 @@ fn vertico_real_minibuffer_candidates_and_selection_match_gnu_grid() {
     let neo_rows = candidate_rows(&pair.neo.text_grid());
     assert_eq!(neo_rows, gnu_rows, "Vertico candidate rows differ from GNU");
     let gnu_snapshot = RawTerminalSnapshot::capture_full_screen(pair.gnu.screen());
-    let neo_snapshot = RawTerminalSnapshot::capture_full_screen(pair.neo.screen());
 
     let expected_ansi_grid = expect![[r#"
         [0;3mFile Edit Options Buffers Tools Minibuf Help                                                                                                                    [0m
@@ -170,15 +177,11 @@ fn vertico_real_minibuffer_candidates_and_selection_match_gnu_grid() {
     "#]];
     expected_plain_grid.assert_eq(&gnu_snapshot.plain_grid());
 
-    assert_raw_terminal_snapshots_eq(
-        "Vertico full-screen terminal state",
-        &gnu_snapshot,
-        &neo_snapshot,
-    );
+    pair.assert_display(DisplayCheckpoint::new("Vertico full-screen terminal state"));
 
+    pair.send_both(b"beta");
+    pair.send_key_both("RET");
     for session in [&mut pair.gnu, &mut pair.neo] {
-        session.send(b"beta");
-        session.send_key("RET");
         session.read_until(Duration::from_secs(8), |grid| {
             grid.iter().any(|row| row.contains("BETA BUFFER"))
         });
