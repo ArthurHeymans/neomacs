@@ -512,14 +512,15 @@ scripts/probe-linux-native-video.sh /path/to/video.mp4
 ```
 
 The probe rejects GPU blits, CPU uploads, packed output, non-wgpu presentation,
-session failure, missing or inconsistent import counters, missing or pressured
-compositor-pool telemetry, and timeouts. Success requires an observed NV12 or
-P010 frame, positive decoded/imported/direct-frame counts, and a coherent
-bounded compositor-import pool. It writes logs and the explicit result channel
-below `target/neomacs-video-probe/`, so no binary fixture is tracked. The
-remaining steps are optional negotiated tiers that require representative
-hardware measurement; they should not replace the broad player backends
-speculatively.
+session failure, missing or inconsistent import/presentation counters, missing
+or pressured compositor-pool telemetry, and timeouts. Success requires an
+observed NV12 or P010 frame, positive decoded/imported/direct-frame counts,
+renderer-owned evidence of both GPU submission and swapchain presentation, and
+a coherent bounded compositor-import pool. It writes logs and the explicit
+result channel below `target/neomacs-video-probe/`, so no binary fixture is
+tracked. The remaining steps are optional negotiated tiers that require
+representative hardware measurement; they should not replace the broad player
+backends speculatively.
 
 1. Split decoder provenance, compositor import, and presentation path in the
    shared model; keep the existing public `VideoId` session API stable.
@@ -592,11 +593,16 @@ guessing: independent decode/import/presentation path tags, current format and
 colorimetry, decoded/replaced/late-dropped/imported/backpressured frame counts,
 format reconfiguration count, per-path frame and known-byte totals, native
 surface-pool allocation/reuse/backpressure/occupancy/high-water, and retained
-GPU bytes. CPU upload compatibility use is additionally warned for every
-frame. Hardware decode state remains `Unknown` where the broad native player
-API does not report it. CPU/GPU duration, bandwidth, and power still require
-platform profilers and representative hardware gates before any path can be
-promoted as a measured performance tier.
+GPU bytes. Renderer-owned counters separately prove that a sampled frame was
+included in a submitted command buffer and that its swapchain image was handed
+to the window system. A failed native incarnation leaves a stable, typed
+diagnostic tombstone with its last path evidence and terminal
+`VideoCommandError`, even after its platform resources are closed. CPU upload
+compatibility use is additionally warned for every frame. Hardware decode
+state remains `Unknown` where the broad native player API does not report it.
+CPU/GPU duration, bandwidth, and power still require platform profilers and
+representative hardware gates before any path can be promoted as a measured
+performance tier.
 
 The Linux probe was also the red test for four integration defects that unit
 tests could not expose alone:
@@ -615,6 +621,11 @@ The fixes keep those responsibilities at narrow seams: allocation negotiation
 in the Linux decoder adapter, modifier parsing in the typed sample boundary, a
 bounded two-frame presentation queue in the common scheduler, and one shared
 renderer-device factory that conditionally enables the complete Linux external
-memory extension set. The last seam contains the unavoidable wgpu-hal unsafe
-operation and falls back to ordinary device creation so optional video support
-cannot prevent editor startup.
+memory extension set. Modifier-bearing `DMA_DRM` is initially negotiated when
+a native YUV route exists, then the fixed sample format is validated before
+import. An incompatible fourcc triggers one typed, bounded renegotiation to
+explicit linear YUV/packed DMA-BUF caps and an upstream `RECONFIGURE`; a second
+incompatibility is terminal instead of becoming a per-frame retry loop. The
+device-factory seam contains the unavoidable wgpu-hal unsafe operation and
+falls back to ordinary device creation so optional video support cannot prevent
+editor startup.

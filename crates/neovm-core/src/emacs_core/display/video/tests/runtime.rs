@@ -71,6 +71,11 @@ impl DisplayHost for RecordingVideoDisplayHost {
                     borrowed_native_frames: 4,
                     ..VideoImportCounts::default()
                 },
+                presentation_counts: neomacs_video_model::VideoPresentationCounts {
+                    submitted_frames: 3,
+                    presented_frames: 2,
+                },
+                terminal_error: None,
             }],
             surface_pools: vec![VideoSurfacePoolDiagnostics {
                 role: VideoSurfacePoolRole::CompositorImport,
@@ -144,8 +149,13 @@ fn diagnostics_reports_the_observed_end_to_end_path_and_pool_pressure() {
                      (plist-get path :presentation)
                      (plist-get session :frame-format)
                      (plist-get session :decoded-frames)
-                     (plist-get session :imported-frames)
-                     (plist-get snapshot :gpu-memory-bytes)
+                    (plist-get session :imported-frames)
+                    (plist-get (plist-get session :presentation-counts)
+                               :submitted-frames)
+                    (plist-get (plist-get session :presentation-counts)
+                               :presented-frames)
+                    (plist-get session :terminal-error)
+                    (plist-get snapshot :gpu-memory-bytes)
                      (plist-get pool :role)
                      (plist-get pool :capacity)
                      (plist-get pool :allocated)
@@ -158,7 +168,7 @@ fn diagnostics_reports_the_observed_end_to_end_path_and_pool_pressure() {
             .and_then(|value| value.as_utf8_str()),
         Some(
             "(42 gstreamer playing hardware-shared-pool borrowed-native-surface \
-             wgpu-composited nv12 9 4 4096 compositor-import 64 3 2 1)"
+             wgpu-composited nv12 9 4 3 2 nil 4096 compositor-import 64 3 2 1)"
         )
     );
 }

@@ -18,8 +18,8 @@ use neomacs_video_model::{
     VideoChromaLocation, VideoColorPrimaries, VideoColorRange, VideoColorimetry,
     VideoCompositorImport, VideoDecodeBackend, VideoDecodeResidency, VideoDiagnostics,
     VideoFrameFormat, VideoFramePath, VideoImportCounts, VideoMatrixCoefficients, VideoOpenRequest,
-    VideoPresentationPath, VideoSessionDiagnostics, VideoSessionState, VideoSource,
-    VideoSurfacePoolDiagnostics, VideoSurfacePoolRole, VideoTransferCharacteristic,
+    VideoPresentationCounts, VideoPresentationPath, VideoSessionDiagnostics, VideoSessionState,
+    VideoSource, VideoSurfacePoolDiagnostics, VideoSurfacePoolRole, VideoTransferCharacteristic,
 };
 use std::path::PathBuf;
 
@@ -402,8 +402,21 @@ fn import_counts_to_lisp(counts: VideoImportCounts) -> Value {
     plist.finish()
 }
 
+fn presentation_counts_to_lisp(counts: VideoPresentationCounts) -> Value {
+    let mut plist = RootedListBuilder::with_capacity(4);
+    plist.field(
+        "submitted-frames",
+        diagnostic_integer(counts.submitted_frames),
+    );
+    plist.field(
+        "presented-frames",
+        diagnostic_integer(counts.presented_frames),
+    );
+    plist.finish()
+}
+
 fn session_diagnostics_to_lisp(session: VideoSessionDiagnostics) -> Value {
-    let mut plist = RootedListBuilder::with_capacity(28);
+    let mut plist = RootedListBuilder::with_capacity(32);
     plist.field("id", diagnostic_integer(session.id.get()));
     plist.field(
         "backend",
@@ -463,6 +476,16 @@ fn session_diagnostics_to_lisp(session: VideoSessionDiagnostics) -> Value {
     plist.field(
         "import-counts",
         import_counts_to_lisp(session.import_counts),
+    );
+    plist.field(
+        "presentation-counts",
+        presentation_counts_to_lisp(session.presentation_counts),
+    );
+    plist.field(
+        "terminal-error",
+        session
+            .terminal_error
+            .map_or(Value::NIL, |error| Value::string(error.to_string())),
     );
     plist.finish()
 }

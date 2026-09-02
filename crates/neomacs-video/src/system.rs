@@ -174,6 +174,8 @@ pub struct VideoSystem {
 }
 
 impl VideoSystem {
+    pub const BACKEND: crate::VideoDecodeBackend = <CurrentPlatform as Platform>::BACKEND;
+
     /// Construct with compositor-owned sampling resources. Imported video
     /// bind groups are then compatible with the renderer's textured-quad
     /// pipeline without duplicating that pipeline.
@@ -850,6 +852,8 @@ impl<P: Platform> VideoSystemImpl<P> {
                 backpressured_frames: session.diagnostics.backpressured_frames,
                 output_reconfigurations: session.diagnostics.output_reconfigurations,
                 import_counts: session.diagnostics.import_counts,
+                presentation_counts: crate::VideoPresentationCounts::default(),
+                terminal_error: None,
             })
             .collect();
         sessions.sort_unstable_by_key(|session| session.id.get());

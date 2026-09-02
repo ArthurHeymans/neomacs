@@ -95,10 +95,18 @@
                (backpressured
                 (and session (plist-get session :backpressured-frames)))
                (counts (and session (plist-get session :import-counts)))
+               (presentation-counts
+                (and session (plist-get session :presentation-counts)))
                (borrowed
                 (and counts (plist-get counts :borrowed-native-frames)))
                (gpu-blits (and counts (plist-get counts :gpu-blit-frames)))
                (cpu-uploads (and counts (plist-get counts :cpu-upload-frames)))
+               (submitted
+                (and presentation-counts
+                     (plist-get presentation-counts :submitted-frames)))
+               (presented
+                (and presentation-counts
+                     (plist-get presentation-counts :presented-frames)))
                (pools
                 (seq-filter
                  (lambda (pool)
@@ -130,9 +138,12 @@
                     (= borrowed imported)
                     (neomacs-video-path-probe--zero-p gpu-blits)
                     (neomacs-video-path-probe--zero-p cpu-uploads)
-                    (neomacs-video-path-probe--zero-p backpressured)))
+                    (neomacs-video-path-probe--zero-p backpressured)
+                    (neomacs-video-path-probe--positive-integer-p submitted)
+                    (neomacs-video-path-probe--positive-integer-p presented)
+                    (<= presented submitted)))
               (neomacs-video-path-probe--finish
-               1 "FAIL incoherent-import-counts" snapshot))
+               1 "FAIL incoherent-import-or-presentation-counts" snapshot))
              ((/= (length pools) 1)
               (neomacs-video-path-probe--finish
                1 (format "FAIL compositor-pool-count=%s" (length pools))

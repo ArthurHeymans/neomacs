@@ -1445,6 +1445,8 @@ impl RenderApp {
         let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) else {
             return PresentResult::Timeout;
         };
+        #[cfg(feature = "video")]
+        renderer.begin_video_surface_render();
         window_state
             .render
             .compositor
@@ -1466,7 +1468,11 @@ impl RenderApp {
         );
         let (output, frame) = match rendered {
             Ok(rendered) => rendered,
-            Err(failure) => return failure.present_result(),
+            Err(failure) => {
+                #[cfg(feature = "video")]
+                renderer.cancel_video_surface_render();
+                return failure.present_result();
+            }
         };
         if is_primary_frame {
             let (w, h) = self
@@ -1528,6 +1534,8 @@ impl RenderApp {
             window.pre_present_notify();
         }
         renderer.queue().present(output);
+        #[cfg(feature = "video")]
+        renderer.finish_presented_video_surface();
         super::frame_stats::note_present(std::time::Instant::now());
 
         if !child_frame_ids.is_empty() || !removed_child_frame_ids.is_empty() {

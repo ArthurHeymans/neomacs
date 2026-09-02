@@ -70,6 +70,8 @@ fn absent_optional_backend_is_logged_once_across_media_requests() {
         native_to_video: HashMap::new(),
         accounting: Vec::new(),
         gpu_accounting: VideoGpuAccounting::default(),
+        presentation: Default::default(),
+        terminal_diagnostics: HashMap::new(),
         last_service: Default::default(),
     };
 
@@ -163,6 +165,41 @@ fn native_session_identity_is_distinct_from_stable_video_identity() {
 }
 
 #[test]
+fn presentation_tracker_distinguishes_gpu_submission_from_surface_present() {
+    let id = VideoId::new(17);
+    let mut tracker = super::VideoPresentationTracker::default();
+
+    tracker.begin_surface();
+    tracker.record_submitted([id, id]);
+    assert_eq!(
+        tracker.counts(id),
+        neomacs_video::VideoPresentationCounts {
+            submitted_frames: 1,
+            presented_frames: 0,
+        }
+    );
+    tracker.finish_presented_surface();
+    assert_eq!(
+        tracker.counts(id),
+        neomacs_video::VideoPresentationCounts {
+            submitted_frames: 1,
+            presented_frames: 1,
+        }
+    );
+
+    tracker.begin_surface();
+    tracker.record_submitted([id]);
+    tracker.cancel_surface();
+    assert_eq!(
+        tracker.counts(id),
+        neomacs_video::VideoPresentationCounts {
+            submitted_frames: 2,
+            presented_frames: 1,
+        }
+    );
+}
+
+#[test]
 fn reopening_stable_session_detaches_the_previous_native_incarnation() {
     let stable = VideoId::new(7);
     let previous_native = NativeVideoSessionId(VideoId::new(41));
@@ -188,6 +225,8 @@ fn reopening_stable_session_detaches_the_previous_native_incarnation() {
         native_to_video: HashMap::from([(previous_native, stable)]),
         accounting: Vec::new(),
         gpu_accounting: VideoGpuAccounting::default(),
+        presentation: Default::default(),
+        terminal_diagnostics: HashMap::new(),
         last_service: Default::default(),
     };
 
@@ -232,6 +271,8 @@ fn terminal_failure_detaches_the_ephemeral_native_incarnation() {
         native_to_video: HashMap::from([(native, stable)]),
         accounting: Vec::new(),
         gpu_accounting: VideoGpuAccounting::default(),
+        presentation: Default::default(),
+        terminal_diagnostics: HashMap::new(),
         last_service: Default::default(),
     };
 
@@ -242,6 +283,22 @@ fn terminal_failure_detaches_the_ephemeral_native_incarnation() {
     assert_eq!(video.native_id, None);
     assert_eq!(video.parked, None);
     assert!(!cache.native_to_video.contains_key(&native));
+
+    let diagnostics = cache
+        .diagnostics()
+        .expect("a stable failure tombstone remains diagnosable");
+    assert_eq!(diagnostics.sessions.len(), 1);
+    assert_eq!(diagnostics.sessions[0].id, stable);
+    assert_eq!(
+        diagnostics.sessions[0].state,
+        neomacs_video::VideoSessionState::Failed
+    );
+    assert_eq!(
+        diagnostics.sessions[0].terminal_error,
+        Some(VideoCommandError::Backend {
+            message: "import failed".to_owned(),
+        })
+    );
 }
 
 #[test]
@@ -270,6 +327,8 @@ fn typed_missing_plugin_failure_survives_the_renderer_cache_boundary() {
         native_to_video: HashMap::from([(native, stable)]),
         accounting: Vec::new(),
         gpu_accounting: VideoGpuAccounting::default(),
+        presentation: Default::default(),
+        terminal_diagnostics: HashMap::new(),
         last_service: Default::default(),
     };
     let failure = VideoCommandError::MissingPlugins {

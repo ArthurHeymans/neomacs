@@ -1288,6 +1288,8 @@ impl WgpuRenderer {
             None
         };
 
+        #[cfg(feature = "video")]
+        let mut submitted_video_ids = Vec::new();
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -1658,6 +1660,7 @@ impl WgpuRenderer {
                     if let Some(upload) =
                         prepared.upload(&mut self.arenas.image, &self.device, &self.queue)
                     {
+                        submitted_video_ids.extend(prepared.quads.iter().map(|quad| quad.id));
                         prepared.draw(&mut pass, &upload, image_pl, bi_planar_video_pl);
                     }
                 }
@@ -1815,6 +1818,10 @@ impl WgpuRenderer {
         stats.log_if_enabled();
 
         self.queue.submit(std::iter::once(encoder.finish()));
+        #[cfg(feature = "video")]
+        self.caches
+            .video
+            .record_submitted_frames(submitted_video_ids);
         tracing::debug!("render_frame_content: submitted (1 encoder, 1 pass)");
     }
 

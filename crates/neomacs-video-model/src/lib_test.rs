@@ -130,6 +130,8 @@ fn diagnostic_identity_remapping_drops_stale_native_sessions() {
         backpressured_frames: 0,
         output_reconfigurations: 0,
         import_counts: VideoImportCounts::default(),
+        presentation_counts: super::VideoPresentationCounts::default(),
+        terminal_error: None,
     };
     let diagnostics = VideoDiagnostics {
         sessions: vec![session(current_native), session(stale_native)],

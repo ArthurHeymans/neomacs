@@ -270,6 +270,24 @@ impl WgpuRenderer {
         self.caches.video.diagnostics()
     }
 
+    /// Begin evidence collection for one swapchain-bound render transaction.
+    #[cfg(feature = "video")]
+    pub fn begin_video_surface_render(&mut self) {
+        self.caches.video.begin_surface_render();
+    }
+
+    /// Discard presentation evidence when the swapchain render did not finish.
+    #[cfg(feature = "video")]
+    pub fn cancel_video_surface_render(&mut self) {
+        self.caches.video.cancel_surface_render();
+    }
+
+    /// Promote submitted video draws after their swapchain image is presented.
+    #[cfg(feature = "video")]
+    pub fn finish_presented_video_surface(&mut self) {
+        self.caches.video.finish_presented_surface();
+    }
+
     /// Get video dimensions
     #[cfg(feature = "video")]
     pub fn get_video_size(&self, id: u32) -> Option<(u32, u32)> {

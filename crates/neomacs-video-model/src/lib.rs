@@ -853,6 +853,18 @@ pub struct VideoImportCounts {
     pub cpu_upload_bytes: u64,
 }
 
+/// Renderer-owned evidence that imported frames reached the GPU and surface.
+///
+/// Import success alone does not prove a draw was submitted or that its target
+/// swapchain image was handed to the window system. Keeping those observations
+/// separate prevents diagnostics from upgrading an intended path into an
+/// end-to-end claim.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct VideoPresentationCounts {
+    pub submitted_frames: u64,
+    pub presented_frames: u64,
+}
+
 /// Truthful counters and effective frame-path evidence for one playback session.
 /// Platform handles stay private; absent native details are never fabricated.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -870,6 +882,8 @@ pub struct VideoSessionDiagnostics {
     pub backpressured_frames: u64,
     pub output_reconfigurations: u64,
     pub import_counts: VideoImportCounts,
+    pub presentation_counts: VideoPresentationCounts,
+    pub terminal_error: Option<VideoCommandError>,
 }
 
 /// Which native-video stage owns a bounded surface pool.

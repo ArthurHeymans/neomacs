@@ -524,6 +524,8 @@ fn service_preserves_the_next_future_frame_then_imports_the_latest_due_frame() {
                 reported_gpu_blit_bytes: 0,
                 cpu_upload_bytes: 0,
             },
+            presentation_counts: super::VideoPresentationCounts::default(),
+            terminal_error: None,
         }]
     );
 

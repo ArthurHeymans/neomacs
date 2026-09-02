@@ -1,6 +1,6 @@
 //! Renderer-facing facade over the cross-platform native video subsystem.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use neomacs_display_protocol::types::VideoId;
 use neomacs_video::{
@@ -45,6 +45,66 @@ struct NativeVideoSessionId(VideoId);
 impl NativeVideoSessionId {
     const fn protocol(self) -> VideoId {
         self.0
+    }
+}
+
+#[derive(Default)]
+enum SurfacePresentationState {
+    #[default]
+    Inactive,
+    Recording(HashSet<VideoId>),
+}
+
+/// Renderer-owned submission and surface-presentation evidence.
+///
+/// A surface transaction is explicit: submissions outside one are still
+/// counted, but only IDs recorded between begin and successful present can
+/// advance the presented count. Cancellation drops that pending evidence.
+#[derive(Default)]
+struct VideoPresentationTracker {
+    counts: HashMap<VideoId, neomacs_video::VideoPresentationCounts>,
+    surface: SurfacePresentationState,
+}
+
+impl VideoPresentationTracker {
+    fn begin_surface(&mut self) {
+        self.surface = SurfacePresentationState::Recording(HashSet::new());
+    }
+
+    fn record_submitted(&mut self, ids: impl IntoIterator<Item = VideoId>) {
+        let unique: HashSet<_> = ids.into_iter().collect();
+        for id in unique {
+            let counts = self.counts.entry(id).or_default();
+            counts.submitted_frames = counts.submitted_frames.saturating_add(1);
+            if let SurfacePresentationState::Recording(pending) = &mut self.surface {
+                pending.insert(id);
+            }
+        }
+    }
+
+    fn finish_presented_surface(&mut self) {
+        let SurfacePresentationState::Recording(pending) = std::mem::take(&mut self.surface) else {
+            return;
+        };
+        for id in pending {
+            let counts = self.counts.entry(id).or_default();
+            counts.presented_frames = counts.presented_frames.saturating_add(1);
+        }
+    }
+
+    fn cancel_surface(&mut self) {
+        self.surface = SurfacePresentationState::Inactive;
+    }
+
+    fn counts(&self, id: VideoId) -> neomacs_video::VideoPresentationCounts {
+        self.counts.get(&id).copied().unwrap_or_default()
+    }
+
+    fn remove(&mut self, id: VideoId) {
+        self.counts.remove(&id);
+        if let SurfacePresentationState::Recording(pending) = &mut self.surface {
+            pending.remove(&id);
+        }
     }
 }
 
@@ -337,6 +397,8 @@ pub struct VideoCache {
     native_to_video: HashMap<NativeVideoSessionId, VideoId>,
     accounting: Vec<crate::media_budget::MediaAccounting>,
     gpu_accounting: VideoGpuAccounting,
+    presentation: VideoPresentationTracker,
+    terminal_diagnostics: HashMap<VideoId, neomacs_video::VideoSessionDiagnostics>,
     last_service: VideoServiceResult,
 }
 
@@ -375,6 +437,8 @@ impl VideoCache {
             native_to_video: HashMap::new(),
             accounting: Vec::new(),
             gpu_accounting: VideoGpuAccounting::default(),
+            presentation: VideoPresentationTracker::default(),
+            terminal_diagnostics: HashMap::new(),
             last_service: VideoServiceResult::default(),
         }
     }
@@ -425,7 +489,7 @@ impl VideoCache {
                         parked: None,
                     },
                 );
-                self.fail(id, error.to_string().into());
+                self.fail(typed_id, error.to_string().into());
                 return;
             }
         };
@@ -480,7 +544,7 @@ impl VideoCache {
             if let Some(video) = self.videos.get_mut(&id) {
                 video.native_id = None;
             }
-            self.fail(id.get(), error);
+            self.fail(id, error);
         }
     }
 
@@ -504,7 +568,7 @@ impl VideoCache {
                         })
                     });
                 if let Err(error) = result {
-                    self.fail(id.get(), error);
+                    self.fail(id, error);
                 }
             }
         }
@@ -558,6 +622,22 @@ impl VideoCache {
         Some(PreparedVideoDraws { native, native_ids })
     }
 
+    pub(crate) fn begin_surface_render(&mut self) {
+        self.presentation.begin_surface();
+    }
+
+    pub(crate) fn cancel_surface_render(&mut self) {
+        self.presentation.cancel_surface();
+    }
+
+    pub(crate) fn finish_presented_surface(&mut self) {
+        self.presentation.finish_presented_surface();
+    }
+
+    pub(crate) fn record_submitted_frames(&mut self, ids: impl IntoIterator<Item = VideoId>) {
+        self.presentation.record_submitted(ids);
+    }
+
     pub fn play(&mut self, id: u32) {
         let typed_id = VideoId::new(id);
         let result = if let Some(native_id) = self.videos.get(&typed_id).and_then(|v| v.native_id) {
@@ -570,7 +650,7 @@ impl VideoCache {
         };
         match result {
             Ok(()) => self.set_state(typed_id, VideoState::Playing),
-            Err(error) => self.fail(id, error),
+            Err(error) => self.fail(typed_id, error),
         }
     }
 
@@ -586,7 +666,7 @@ impl VideoCache {
         };
         match result {
             Ok(()) => self.set_state(typed_id, VideoState::Paused),
-            Err(error) => self.fail(id, error),
+            Err(error) => self.fail(typed_id, error),
         }
     }
 
@@ -602,14 +682,14 @@ impl VideoCache {
         };
         match result {
             Ok(()) => self.set_state(typed_id, VideoState::Stopped),
-            Err(error) => self.fail(id, error),
+            Err(error) => self.fail(typed_id, error),
         }
     }
 
     pub fn set_loop(&mut self, id: u32, count: i32) {
         match LoopMode::from_legacy(count) {
             Ok(mode) => self.set_loop_mode(VideoId::new(id), mode),
-            Err(error) => self.fail(id, error.to_string().into()),
+            Err(error) => self.fail(VideoId::new(id), error.to_string().into()),
         }
     }
 
@@ -631,7 +711,7 @@ impl VideoCache {
             })
         };
         if let Err(error) = result {
-            self.fail(id.get(), error);
+            self.fail(id, error);
         }
     }
 
@@ -647,6 +727,8 @@ impl VideoCache {
             self.native_to_video.remove(&native_id);
         }
         self.videos.remove(&id);
+        self.presentation.remove(id);
+        self.terminal_diagnostics.remove(&id);
         if self
             .channel_targets
             .as_mut()
@@ -786,7 +868,7 @@ impl VideoCache {
                 self.park_hidden(&mut system, external_id)
             };
             if let Err(error) = result {
-                self.fail(external_id.get(), error);
+                self.fail(external_id, error);
             }
         }
 
@@ -950,11 +1032,27 @@ impl VideoCache {
     /// loss. Stale native sessions are therefore filtered instead of leaking
     /// their private IDs across the renderer seam.
     pub fn diagnostics(&self) -> Result<VideoDiagnostics, String> {
-        self.system.diagnostics().map(|diagnostics| {
-            diagnostics.filter_map_session_ids(|id| {
-                self.native_to_video.get(&NativeVideoSessionId(id)).copied()
-            })
-        })
+        let mut diagnostics = match self.system.diagnostics() {
+            Ok(diagnostics) => diagnostics,
+            Err(_) if !self.terminal_diagnostics.is_empty() => VideoDiagnostics {
+                sessions: Vec::new(),
+                surface_pools: Vec::new(),
+                gpu_memory_bytes: 0,
+            },
+            Err(message) => return Err(message),
+        }
+        .filter_map_session_ids(|id| self.native_to_video.get(&NativeVideoSessionId(id)).copied());
+        for session in &mut diagnostics.sessions {
+            session.presentation_counts = self.presentation.counts(session.id);
+        }
+        diagnostics.sessions.extend(
+            self.terminal_diagnostics
+                .iter()
+                .filter(|(id, _)| self.videos.contains_key(id))
+                .map(|(_, session)| session.clone()),
+        );
+        diagnostics.sessions.sort_by_key(|session| session.id);
+        Ok(diagnostics)
     }
 
     pub fn drain_accounting(&mut self) -> Vec<crate::media_budget::MediaAccounting> {
@@ -1012,7 +1110,7 @@ impl VideoCache {
                             parked: Some(manifest.playback),
                         },
                     );
-                    self.fail(external_id.get(), message.clone().into());
+                    self.fail(external_id, message.clone().into());
                 }
                 return;
             }
@@ -1037,7 +1135,7 @@ impl VideoCache {
                 },
             );
             if is_presented && let Err(error) = self.resume_presented(&mut system, external_id) {
-                self.fail(external_id.get(), error);
+                self.fail(external_id, error);
             }
         }
         self.system.put_ready(system);
@@ -1105,6 +1203,18 @@ impl VideoCache {
         // its failed session for diagnostics. Remove that ephemeral
         // incarnation now: a presented stable video must not try to resume a
         // decoder that terminal cleanup closed.
+        if let Some(mut diagnostic) = system
+            .diagnostics()
+            .sessions
+            .into_iter()
+            .find(|session| session.id == native_id.protocol())
+        {
+            diagnostic.id = id;
+            diagnostic.state = VideoSessionState::Failed;
+            diagnostic.presentation_counts = self.presentation.counts(id);
+            diagnostic.terminal_error = Some(error.clone());
+            self.terminal_diagnostics.insert(id, diagnostic);
+        }
         if let Err(close_error) = system.command(VideoCommand::Close {
             id: native_id.protocol(),
         }) {
@@ -1132,18 +1242,42 @@ impl VideoCache {
             video.native_id = None;
             video.parked = None;
         }
-        self.fail(id.get(), error);
+        self.fail(id, error);
     }
 
-    fn fail(&mut self, id: u32, error: VideoCommandError) {
+    fn fail(&mut self, id: VideoId, error: VideoCommandError) {
+        let presentation_counts = self.presentation.counts(id);
+        self.terminal_diagnostics
+            .entry(id)
+            .and_modify(|diagnostic| {
+                diagnostic.state = VideoSessionState::Failed;
+                diagnostic.terminal_error = Some(error.clone());
+            })
+            .or_insert_with(|| neomacs_video::VideoSessionDiagnostics {
+                id,
+                backend: VideoSystem::BACKEND,
+                state: VideoSessionState::Failed,
+                frame_path: None,
+                frame_format: None,
+                colorimetry: None,
+                decoded_frames: 0,
+                replaced_frames: 0,
+                late_dropped_frames: 0,
+                imported_frames: 0,
+                backpressured_frames: 0,
+                output_reconfigurations: 0,
+                import_counts: Default::default(),
+                presentation_counts,
+                terminal_error: Some(error.clone()),
+            });
         let already_diagnosed = match &error {
             VideoCommandError::Backend { message } => self.system.already_diagnosed(message),
             _ => false,
         };
         if !already_diagnosed {
-            tracing::error!(video_id = id, %error, "video playback failed");
+            tracing::error!(video_id = id.get(), %error, "video playback failed");
         }
-        if let Some(video) = self.videos.get_mut(&VideoId::new(id)) {
+        if let Some(video) = self.videos.get_mut(&id) {
             video.state = VideoState::Error;
             video.failure = Some(error);
         }
