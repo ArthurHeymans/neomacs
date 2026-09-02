@@ -489,7 +489,7 @@ impl VideoCache {
                         parked: None,
                     },
                 );
-                self.fail(typed_id, error.to_string().into());
+                self.handle_operation_error(typed_id, error.to_string().into());
                 return;
             }
         };
@@ -544,7 +544,7 @@ impl VideoCache {
             if let Some(video) = self.videos.get_mut(&id) {
                 video.native_id = None;
             }
-            self.fail(id, error);
+            self.handle_operation_error(id, error);
         }
     }
 
@@ -568,7 +568,7 @@ impl VideoCache {
                         })
                     });
                 if let Err(error) = result {
-                    self.fail(id, error);
+                    self.handle_operation_error(id, error);
                 }
             }
         }
@@ -650,7 +650,7 @@ impl VideoCache {
         };
         match result {
             Ok(()) => self.set_state(typed_id, VideoState::Playing),
-            Err(error) => self.fail(typed_id, error),
+            Err(error) => self.handle_operation_error(typed_id, error),
         }
     }
 
@@ -666,7 +666,7 @@ impl VideoCache {
         };
         match result {
             Ok(()) => self.set_state(typed_id, VideoState::Paused),
-            Err(error) => self.fail(typed_id, error),
+            Err(error) => self.handle_operation_error(typed_id, error),
         }
     }
 
@@ -682,14 +682,14 @@ impl VideoCache {
         };
         match result {
             Ok(()) => self.set_state(typed_id, VideoState::Stopped),
-            Err(error) => self.fail(typed_id, error),
+            Err(error) => self.handle_operation_error(typed_id, error),
         }
     }
 
     pub fn set_loop(&mut self, id: u32, count: i32) {
         match LoopMode::from_legacy(count) {
             Ok(mode) => self.set_loop_mode(VideoId::new(id), mode),
-            Err(error) => self.fail(VideoId::new(id), error.to_string().into()),
+            Err(error) => self.handle_operation_error(VideoId::new(id), error.to_string().into()),
         }
     }
 
@@ -711,7 +711,7 @@ impl VideoCache {
             })
         };
         if let Err(error) = result {
-            self.fail(id, error);
+            self.handle_operation_error(id, error);
         }
     }
 
@@ -868,7 +868,7 @@ impl VideoCache {
                 self.park_hidden(&mut system, external_id)
             };
             if let Err(error) = result {
-                self.fail(external_id, error);
+                self.handle_operation_error(external_id, error);
             }
         }
 
@@ -1116,7 +1116,7 @@ impl VideoCache {
                             parked: Some(manifest.playback),
                         },
                     );
-                    self.fail(external_id, message.clone().into());
+                    self.handle_operation_error(external_id, message.clone().into());
                 }
                 return;
             }
@@ -1141,7 +1141,7 @@ impl VideoCache {
                 },
             );
             if is_presented && let Err(error) = self.resume_presented(&mut system, external_id) {
-                self.fail(external_id, error);
+                self.handle_operation_error(external_id, error);
             }
         }
         self.system.put_ready(system);
@@ -1248,40 +1248,57 @@ impl VideoCache {
             video.native_id = None;
             video.parked = None;
         }
-        self.fail(id, error);
+        self.handle_operation_error(id, error);
     }
 
-    fn fail(&mut self, id: VideoId, error: VideoCommandError) {
-        let is_detached = self
+    fn handle_operation_error(&mut self, id: VideoId, error: VideoCommandError) {
+        let is_attached = self
             .videos
             .get(&id)
-            .is_none_or(|video| video.native_id.is_none());
-        if is_detached {
-            let presentation_counts = self.presentation.counts(id);
-            self.terminal_diagnostics
-                .entry(id)
-                .and_modify(|diagnostic| {
-                    diagnostic.state = VideoSessionState::Failed;
-                    diagnostic.terminal_error = Some(error.clone());
-                })
-                .or_insert_with(|| neomacs_video::VideoSessionDiagnostics {
-                    id,
-                    backend: VideoSystem::BACKEND,
-                    state: VideoSessionState::Failed,
-                    frame_path: None,
-                    frame_format: None,
-                    colorimetry: None,
-                    decoded_frames: 0,
-                    replaced_frames: 0,
-                    late_dropped_frames: 0,
-                    imported_frames: 0,
-                    backpressured_frames: 0,
-                    output_reconfigurations: 0,
-                    import_counts: Default::default(),
-                    presentation_counts,
-                    terminal_error: Some(error.clone()),
-                });
+            .is_some_and(|video| video.native_id.is_some());
+        if is_attached {
+            tracing::error!(
+                video_id = id.get(),
+                %error,
+                "video command failed; native session remains active"
+            );
+            return;
         }
+
+        self.record_terminal_failure(id, error);
+    }
+
+    fn record_terminal_failure(&mut self, id: VideoId, error: VideoCommandError) {
+        debug_assert!(
+            self.videos
+                .get(&id)
+                .is_none_or(|video| video.native_id.is_none()),
+            "terminal video failure must detach its native incarnation first"
+        );
+        let presentation_counts = self.presentation.counts(id);
+        self.terminal_diagnostics
+            .entry(id)
+            .and_modify(|diagnostic| {
+                diagnostic.state = VideoSessionState::Failed;
+                diagnostic.terminal_error = Some(error.clone());
+            })
+            .or_insert_with(|| neomacs_video::VideoSessionDiagnostics {
+                id,
+                backend: VideoSystem::BACKEND,
+                state: VideoSessionState::Failed,
+                frame_path: None,
+                frame_format: None,
+                colorimetry: None,
+                decoded_frames: 0,
+                replaced_frames: 0,
+                late_dropped_frames: 0,
+                imported_frames: 0,
+                backpressured_frames: 0,
+                output_reconfigurations: 0,
+                import_counts: Default::default(),
+                presentation_counts,
+                terminal_error: Some(error.clone()),
+            });
         let already_diagnosed = match &error {
             VideoCommandError::Backend { message } => self.system.already_diagnosed(message),
             _ => false,

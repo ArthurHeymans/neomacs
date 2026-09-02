@@ -332,9 +332,11 @@ fn active_session_command_failure_does_not_create_a_terminal_tombstone() {
         last_service: Default::default(),
     };
 
-    cache.fail(stable, "command failed".into());
+    cache.handle_operation_error(stable, "command failed".into());
 
     assert_eq!(cache.videos[&stable].native_id, Some(native));
+    assert_eq!(cache.videos[&stable].state, VideoState::Playing);
+    assert_eq!(cache.videos[&stable].failure(), None);
     assert!(
         cache.terminal_diagnostics.is_empty(),
         "an attached decoder incarnation cannot also have a terminal tombstone"
