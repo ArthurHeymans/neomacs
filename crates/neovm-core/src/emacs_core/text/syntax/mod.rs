@@ -2837,18 +2837,43 @@ thread_local! {
     /// `char_table_write_tick`).
     static SYNTAX_FLAT_ASCII_CACHE: std::cell::Cell<Option<(usize, u64)>> =
         const { std::cell::Cell::new(None) };
-    static SYNTAX_FLAT_ASCII_ENTRIES: std::cell::RefCell<[SyntaxEntry; 128]> =
-        std::cell::RefCell::new([SyntaxEntry::simple(SyntaxClass::Whitespace); 128]);
+    static SYNTAX_FLAT_ASCII_ENTRIES: std::cell::RefCell<[ParseSyntaxEntry; 128]> =
+        std::cell::RefCell::new([ParseSyntaxEntry::WHITESPACE; 128]);
 }
 
-fn flat_ascii_entries_for_table(table: &SyntaxTable) -> [SyntaxEntry; 128] {
+/// The parser never consults a syntax entry's matching character.  Keeping its
+/// flat ASCII classifier to exactly the two fields the transition loop reads
+/// avoids copying and retaining a 1 KiB `[SyntaxEntry; 128]` in the parser's
+/// already-large stack frame.
+#[derive(Clone, Copy)]
+#[repr(C)]
+struct ParseSyntaxEntry {
+    class: SyntaxClass,
+    flags: SyntaxFlags,
+}
+
+impl ParseSyntaxEntry {
+    const WHITESPACE: Self = Self {
+        class: SyntaxClass::Whitespace,
+        flags: SyntaxFlags::empty(),
+    };
+}
+
+const _: () = assert!(std::mem::size_of::<ParseSyntaxEntry>() == 2);
+
+fn flat_ascii_entries_for_table(table: &SyntaxTable) -> [ParseSyntaxEntry; 128] {
     let tick = crate::emacs_core::chartable::char_table_write_tick();
     let key = (table.chartable.bits(), tick);
     if SYNTAX_FLAT_ASCII_CACHE.with(|c| c.get()) == Some(key) {
         return SYNTAX_FLAT_ASCII_ENTRIES.with(|e| *e.borrow());
     }
-    let entries: [SyntaxEntry; 128] =
-        std::array::from_fn(|cp| syntax_entry_from_table(table, cp as u8 as char));
+    let entries = std::array::from_fn(|cp| {
+        let entry = syntax_entry_from_table(table, cp as u8 as char);
+        ParseSyntaxEntry {
+            class: entry.class,
+            flags: entry.flags,
+        }
+    });
     SYNTAX_FLAT_ASCII_ENTRIES.with(|e| *e.borrow_mut() = entries);
     SYNTAX_FLAT_ASCII_CACHE.with(|c| c.set(Some(key)));
     entries
@@ -6286,7 +6311,7 @@ fn parse_state_from_range_core(
     // behavior-preserving by construction. (The fill was once gated on span
     // length behind an `Option`; the gate is long gone, so the discriminant
     // test was costing a branch on every character.)
-    let flat_ascii: [SyntaxEntry; 128] = flat_ascii_entries_for_table(table);
+    let flat_ascii = flat_ascii_entries_for_table(table);
 
     // An IGNORING scan's run cache is built by `PropRunCells::covering_everything`
     // — `start = 0`, `end = usize::MAX`, `value = None` — and can never refill
@@ -6333,16 +6358,17 @@ fn parse_state_from_range_core(
             } else {
                 false
             };
-        let entry = if flat_ok {
-            flat_ascii[ch as usize]
+        let (class, flags) = if flat_ok {
+            let entry = flat_ascii[ch as usize];
+            (entry.class, entry.flags)
         } else {
             // The classifier may refill the run cache, which retires the
             // memoized endpoint. Dropping it costs one re-probe on the next
             // character and keeps the memo an under-approximation.
             prop_free_until = 0;
-            effective_syntax_entry_for_abs_char(buf, table, ch, abs_char, &prop_cache)
+            let entry = effective_syntax_entry_for_abs_char(buf, table, ch, abs_char, &prop_cache);
+            (entry.class, entry.flags)
         };
-        let (class, flags) = (entry.class, entry.flags);
         let resumed_after = comment_resume_syntax.take();
 
         // GNU INC_FROM records `prev_from_syntax` for every position it steps
