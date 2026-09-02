@@ -1058,6 +1058,41 @@ pub enum VideoEvent {
     },
 }
 
+impl VideoEvent {
+    /// Return the session identity carried by this event.
+    pub const fn id(&self) -> VideoId {
+        match self {
+            Self::Ready { id, .. }
+            | Self::StateChanged { id, .. }
+            | Self::FramePathChanged { id, .. }
+            | Self::Ended { id }
+            | Self::Failed { id, .. } => *id,
+        }
+    }
+
+    /// Replace only the session identity while preserving the event payload.
+    ///
+    /// Renderer integrations use this at the boundary between ephemeral
+    /// native session identities and editor-stable video identities. Keeping
+    /// the exhaustive match here makes a new event variant a compile-time
+    /// obligation in the model instead of duplicated consumer bookkeeping.
+    pub fn with_id(self, id: VideoId) -> Self {
+        match self {
+            Self::Ready { width, height, .. } => Self::Ready { id, width, height },
+            Self::StateChanged { state, .. } => Self::StateChanged { id, state },
+            Self::FramePathChanged {
+                previous, current, ..
+            } => Self::FramePathChanged {
+                id,
+                previous,
+                current,
+            },
+            Self::Ended { .. } => Self::Ended { id },
+            Self::Failed { error, .. } => Self::Failed { id, error },
+        }
+    }
+}
+
 /// Work discovered by one non-blocking service pass.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VideoFrameReady {

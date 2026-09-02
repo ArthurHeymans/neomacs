@@ -790,11 +790,11 @@ impl VideoCache {
         let native_result = system.service_with_request(native_request);
         let mut events = Vec::with_capacity(native_result.events.len());
         for event in native_result.events {
-            let native_id = NativeVideoSessionId(event_id(&event));
+            let native_id = NativeVideoSessionId(event.id());
             let Some(&external_id) = self.native_to_video.get(&native_id) else {
                 continue;
             };
-            let event = remap_event(event, external_id);
+            let event = event.with_id(external_id);
             self.observe_event(&event, &mut system, native_id);
             events.push(event);
         }
@@ -1127,32 +1127,6 @@ impl VideoCache {
         if let Some(video) = self.videos.get_mut(&id) {
             video.state = state;
         }
-    }
-}
-
-fn event_id(event: &VideoEvent) -> VideoId {
-    match event {
-        VideoEvent::Ready { id, .. }
-        | VideoEvent::StateChanged { id, .. }
-        | VideoEvent::FramePathChanged { id, .. }
-        | VideoEvent::Ended { id }
-        | VideoEvent::Failed { id, .. } => *id,
-    }
-}
-
-fn remap_event(event: VideoEvent, id: VideoId) -> VideoEvent {
-    match event {
-        VideoEvent::Ready { width, height, .. } => VideoEvent::Ready { id, width, height },
-        VideoEvent::StateChanged { state, .. } => VideoEvent::StateChanged { id, state },
-        VideoEvent::FramePathChanged {
-            previous, current, ..
-        } => VideoEvent::FramePathChanged {
-            id,
-            previous,
-            current,
-        },
-        VideoEvent::Ended { .. } => VideoEvent::Ended { id },
-        VideoEvent::Failed { error, .. } => VideoEvent::Failed { id, error },
     }
 }
 

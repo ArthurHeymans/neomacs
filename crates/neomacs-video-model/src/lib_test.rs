@@ -1,5 +1,5 @@
 use super::{
-    FrameImportPolicy, VideoCompositorImport, VideoDecodeResidency, VideoFramePath,
+    FrameImportPolicy, VideoCompositorImport, VideoDecodeResidency, VideoEvent, VideoFramePath,
     VideoPresentationPath, VideoServiceRequest, VideoServiceTiming,
 };
 use neomacs_display_protocol::types::VideoId;
@@ -77,4 +77,35 @@ fn video_service_request_keeps_an_independent_earliest_target_per_video() {
     assert_eq!(request.timing_for(hidden).target_presentation_time(), now);
     assert!(request.is_presented(fast));
     assert!(!request.is_presented(hidden));
+}
+
+#[test]
+fn video_event_identity_is_remapped_without_rebuilding_its_payload() {
+    let native = VideoId::new(41);
+    let editor = VideoId::new(7);
+    let previous = VideoFramePath::new(
+        VideoDecodeResidency::Unknown,
+        VideoCompositorImport::GpuBlit,
+        VideoPresentationPath::WgpuComposited,
+    );
+    let current = VideoFramePath::new(
+        VideoDecodeResidency::HardwareSharedPool,
+        VideoCompositorImport::BorrowedNativeSurface,
+        VideoPresentationPath::WgpuComposited,
+    );
+    let event = VideoEvent::FramePathChanged {
+        id: native,
+        previous: Some(previous),
+        current,
+    };
+
+    assert_eq!(event.id(), native);
+    assert_eq!(
+        event.with_id(editor),
+        VideoEvent::FramePathChanged {
+            id: editor,
+            previous: Some(previous),
+            current,
+        }
+    );
 }
