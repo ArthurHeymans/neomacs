@@ -7129,7 +7129,22 @@ impl Context {
         self.sync_current_buffer_runtime_state()
     }
 
+    /// GNU `set_buffer_if_live` for an unwind: re-select `id` unless it was
+    /// killed meanwhile.
+    ///
+    /// Mirrors `set_buffer_internal_1`'s first line, `if (current_buffer ==
+    /// b) return;`: the overwhelmingly common unwind (every
+    /// `save-current-buffer` body that never switched, every
+    /// `put-text-property` on the current buffer) restores the buffer that
+    /// is still current.  Its runtime state was synced when it became
+    /// current, and the sync below is a thread-slot write plus two
+    /// seed-if-nil table reads, so redoing it bought nothing — at ~1,500
+    /// instructions a call it was 7% of a whole-buffer Org fontify (44,265
+    /// restores per five fontifies, all of them same-buffer).
     pub fn restore_current_buffer_if_live(&mut self, id: crate::buffer::BufferId) {
+        if self.buffers.current_buffer_id() == Some(id) {
+            return;
+        }
         if self.buffers.get(id).is_none() {
             return;
         }
