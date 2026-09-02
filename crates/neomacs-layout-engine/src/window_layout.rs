@@ -5,6 +5,7 @@
 //! metrics.  A mismatch is a layout invalidation: callers must discard the
 //! attempt and retry before publishing any body/cursor/spatial output.
 
+use crate::display_face_policy::EffectiveWindowDefaultFace;
 use crate::display_frame_output::WindowFrameGeometry;
 use crate::types::{FrameParams, WindowParams};
 use neomacs_display_protocol::types::Rect;
@@ -307,7 +308,10 @@ pub(crate) enum WindowLayoutOutcome {
     /// The window had no materializable body for this attempt.
     Skipped,
     /// Body, chrome, cursor, and spatial geometry use the same metrics.
-    Stable(WindowLayoutBox),
+    Stable {
+        layout_box: WindowLayoutBox,
+        effective_default_face: EffectiveWindowDefaultFace,
+    },
     /// Shaping discovered different intrinsic metrics.  The containing frame
     /// must discard the attempt and immediately relayout with `measured`.
     NeedsRelayout {
@@ -320,10 +324,14 @@ impl WindowLayoutOutcome {
     pub(crate) fn from_measurement(
         layout_box: WindowLayoutBox,
         measured: WindowChromeMetrics,
+        effective_default_face: EffectiveWindowDefaultFace,
     ) -> Self {
         let assumed = layout_box.chrome();
         if assumed.is_stable_with(measured) {
-            Self::Stable(layout_box)
+            Self::Stable {
+                layout_box,
+                effective_default_face,
+            }
         } else {
             Self::NeedsRelayout { assumed, measured }
         }

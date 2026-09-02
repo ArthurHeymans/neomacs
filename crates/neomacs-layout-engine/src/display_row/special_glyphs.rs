@@ -1,5 +1,6 @@
 //! Right-edge truncation/continuation markers and the right window border — GNU's special glyphs (`produce_special_glyphs`, xdisp.c; `IT_TRUNCATION`/`IT_CONTINUATION`). Relocated out of display_row_append.rs (pure move, no behavior change).
 
+use crate::display_face_policy::EffectiveWindowDefaultFace;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
@@ -15,7 +16,6 @@ use crate::display_text_output_install::install_output_resolved_face;
 use crate::neovm_bridge::ResolvedFace;
 use crate::output::builder::DisplayOutputBuilder;
 use crate::output::row_request::{DisplayWindowRowMutation, DisplayWindowRowsMutation};
-use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::FaceId;
 
@@ -320,7 +320,7 @@ fn install_right_border_from_source_request(
     target_col: usize,
     request: TextWindowRightBorder,
     border_face: &ResolvedFace,
-    padding_face: &ResolvedFace,
+    padding_face: &EffectiveWindowDefaultFace,
     matrix_cols: usize,
     render_services: &mut ChromeRowRenderServices<'_, '_>,
 ) {
@@ -343,7 +343,7 @@ fn install_right_border_from_source_request(
     trim_display_row_text_to_total_glyph_count(row, before_final_cols);
 
     let mut source_offset = 0usize;
-    let padding_face_id = FaceId::from(BasicFaceId::Default);
+    let padding_face_id = padding_face.face_id();
     let leading_padding = before_final_cols.saturating_sub(display_row_total_glyph_count(row));
     if leading_padding > 0 {
         render_right_border_text(
@@ -353,7 +353,7 @@ fn install_right_border_from_source_request(
                 text: " ".repeat(leading_padding),
                 area: GlyphArea::Text,
                 face_id: padding_face_id,
-                base_face: padding_face,
+                base_face: padding_face.face(),
                 char_width: request.char_width,
                 matrix_cols,
                 source_offset,
@@ -371,7 +371,7 @@ fn install_right_border_from_source_request(
                 text: "$".into(),
                 area: GlyphArea::Text,
                 face_id: glyph.face_id,
-                base_face: padding_face,
+                base_face: padding_face.face(),
                 char_width: request.char_width,
                 matrix_cols,
                 source_offset,
@@ -390,7 +390,7 @@ fn install_right_border_from_source_request(
                 text: " ".repeat(trailing_padding),
                 area: GlyphArea::Text,
                 face_id: padding_face_id,
-                base_face: padding_face,
+                base_face: padding_face.face(),
                 char_width: request.char_width,
                 matrix_cols,
                 source_offset,
@@ -421,7 +421,7 @@ struct TextWindowRightBorderRowsMutation<'base, 'emit, 'face> {
     render_services: ChromeRowRenderServices<'emit, 'face>,
     request: TextWindowRightBorder,
     border_face: &'base ResolvedFace,
-    padding_face: &'base ResolvedFace,
+    padding_face: &'base EffectiveWindowDefaultFace,
 }
 
 impl DisplayWindowRowsMutation for TextWindowRightBorderRowsMutation<'_, '_, '_> {
@@ -462,7 +462,7 @@ pub(crate) fn install_text_window_right_border_rows(
     render_services: ChromeRowRenderServices<'_, '_>,
     request: TextWindowRightBorder,
     border_face: &ResolvedFace,
-    padding_face: &ResolvedFace,
+    padding_face: &EffectiveWindowDefaultFace,
 ) {
     output_builder.apply_last_window_rows_mutation(TextWindowRightBorderRowsMutation {
         render_services,
@@ -476,8 +476,8 @@ pub(crate) fn install_text_window_terminal_right_border(
     output_builder: &mut DisplayOutputBuilder,
     request: TextWindowTerminalRightBorder,
     mut render_services: ChromeRowRenderServices<'_, '_>,
+    effective_default_face: &EffectiveWindowDefaultFace,
 ) -> FaceId {
-    let padding_face = render_services.frame_default_face().clone();
     let border_face = render_services.resolve_frame_named_face(request.face_name);
     // GNU draws every realized face id from the single per-frame face cache
     // counter (`face_cache->used`, xfaces.c `lookup_face`). Allocate the
@@ -497,7 +497,7 @@ pub(crate) fn install_text_window_terminal_right_border(
             char_width: request.char_width,
         },
         &border_face,
-        &padding_face,
+        effective_default_face,
     );
     border_face_id
 }

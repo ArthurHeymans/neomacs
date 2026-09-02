@@ -5,6 +5,7 @@ use crate::buffer_source::tail_render::{
 };
 use crate::buffer_source::window_source::ResolvedWindowStart;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
+use crate::display_face_policy::EffectiveWindowDefaultFace;
 use crate::display_frame_output::FrameOutputOwner;
 use crate::display_row::face_environment::WindowFaces;
 use crate::display_row::face_state::DisplayRowMeasurementMode;
@@ -128,7 +129,7 @@ pub(crate) struct BufferSourceRedisplayPublishRequest {
     publication: WindowPositionPublication,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum BufferSourceRenderAttemptOutcome {
     Skipped,
     /// Lisp evaluated by a buffer-owned display source changed the window's
@@ -157,6 +158,10 @@ pub(crate) enum BufferSourceRenderAttemptOutcome {
         /// Exact canonical inputs after body production and immediately before
         /// GNU's late `display_mode_lines` phase enters Lisp.
         freshness_before_chrome: neovm_core::window::WindowLayoutAttemptFreshness,
+        /// The exact window-local default face used to produce this accepted
+        /// body. Late TTY padding must consume this artifact rather than
+        /// independently falling back to the frame default.
+        effective_default_face: EffectiveWindowDefaultFace,
         /// Whether this window took the Phase 1 cursor-only fast path (body rows
         /// reused verbatim) rather than a full body walk.
         cursor_only: bool,
@@ -196,6 +201,10 @@ impl<'emit> BufferSourceOutputState<'emit> {
 
     pub(crate) fn evaluator(&mut self) -> &mut Context {
         self.evaluator
+    }
+
+    pub(crate) fn output_target(&mut self) -> TextWindowOutputTarget<'_> {
+        self.output.reborrow()
     }
 
     pub(crate) fn into_parts(self) -> (TextWindowOutputTarget<'emit>, &'emit mut Context) {

@@ -1,3 +1,4 @@
+use crate::display_face_policy::EffectiveWindowDefaultFace;
 use crate::display_status_line::{
     ChromeRowRenderServices, FrameChromeOutputTarget, FrameTabBarDisplayRowRender,
     FrameTabBarDisplayRowRenderState, FrameTabBarDisplayRowRequest,
@@ -926,6 +927,7 @@ pub(crate) struct WindowFrameDecorationsRenderRequest<'a> {
     frame_params: &'a FrameParams,
     geometry: WindowFrameGeometry,
     info: &'a WindowInfo,
+    effective_default_face: Option<&'a EffectiveWindowDefaultFace>,
 }
 
 impl<'a> WindowFrameDecorationsRenderRequest<'a> {
@@ -934,12 +936,14 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
         frame_params: &'a FrameParams,
         geometry: WindowFrameGeometry,
         info: &'a WindowInfo,
+        effective_default_face: Option<&'a EffectiveWindowDefaultFace>,
     ) -> Self {
         Self {
             params,
             frame_params,
             geometry,
             info,
+            effective_default_face,
         }
     }
 
@@ -994,8 +998,14 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
                 Color::from_pixel(self.frame_params.vertical_border_fg),
             );
         } else {
-            TextWindowTerminalRightBorderRequest::new(self.frame_params.char_width)
-                .install_and_apply(state.text_window_output_target(), render_services);
+            if let Some(effective_default_face) = self.effective_default_face {
+                TextWindowTerminalRightBorderRequest::new(self.frame_params.char_width)
+                    .install_and_apply(
+                        state.text_window_output_target(),
+                        render_services,
+                        effective_default_face,
+                    );
+            }
         }
     }
 

@@ -3348,6 +3348,155 @@ fn cursor_only_move_preserves_gnu_box_cursor_glyph_foreground() {
     );
 }
 
+/// GNU `init_iterator` resolves the displayed buffer's remapped default face
+/// for every window redisplay, including the blank cells owned by that window.
+/// Reusing body rows must therefore retain the same background-fill contract as
+/// a full walk; otherwise the glyphs keep their remapped face while the blank
+/// text area silently falls back to the frame background.
+#[test]
+fn cursor_only_replay_republishes_buffer_default_face_fill() {
+    let (mut eval, frame_id, buf_id, window_id) =
+        incr_editing_frame("remapped body\nsecond line\n", 800, 600);
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("default"),
+                Value::list(vec![
+                    Value::keyword("foreground"),
+                    Value::string("#ffffff"),
+                    Value::keyword("background"),
+                    Value::string("#000000"),
+                ]),
+                Value::symbol("default"),
+            ])]),
+        );
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let full_fill = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("full state")
+        .face_fills
+        .iter()
+        .find(|fill| fill.window_id.get() == window_id.0 as i64)
+        .cloned()
+        .expect("full redisplay publishes the remapped window background");
+
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .goto_emacs_byte_pos(EmacsBytePos::new(1));
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        engine.last_layout_stats().cursor_only_windows,
+        1,
+        "precondition: the second redisplay must reuse the body"
+    );
+    let replay_fill = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("cursor-only state")
+        .face_fills
+        .iter()
+        .find(|fill| fill.window_id.get() == window_id.0 as i64)
+        .cloned()
+        .expect("cursor-only redisplay republishes the remapped window background");
+    assert_eq!(replay_fill.face_id, full_fill.face_id);
+    assert_eq!(replay_fill.row_role, full_fill.row_role);
+    assert_eq!(replay_fill.bounds, full_fill.bounds);
+    assert_eq!(replay_fill.clip_rect, full_fill.clip_rect);
+}
+
+/// GNU's TTY iterator extends each short line with the effective window
+/// default face before `build_frame_matrix_from_leaf_window` installs the
+/// split's vertical border. Both split siblings must retain that same window
+/// background contract: the left window as explicit padding glyphs and the
+/// right window as a renderer-consumed face fill.
+#[test]
+fn tty_split_preserves_remapped_default_face_across_padding_and_blank_tail() {
+    let (mut eval, frame_id, buf_id, left_window) = incr_editing_frame("X\n", 160, 50);
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("default"),
+                Value::list(vec![
+                    Value::keyword("foreground"),
+                    Value::string("#ffffff"),
+                    Value::keyword("background"),
+                    Value::string("#000000"),
+                ]),
+                Value::symbol("default"),
+            ])]),
+        );
+    let right_window = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            left_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            buf_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split window onto the same buffer");
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state");
+    let fill_for = |window_id: neovm_core::window::WindowId| {
+        state
+            .face_fills
+            .iter()
+            .find(|fill| fill.window_id.get() == window_id.0 as i64)
+            .unwrap_or_else(|| panic!("remapped face fill for window {window_id:?}"))
+    };
+    let left_fill = fill_for(left_window);
+    let right_fill = fill_for(right_window);
+    assert_eq!(
+        left_fill.face_id, right_fill.face_id,
+        "same-buffer siblings must resolve one content-addressed remapped default face"
+    );
+
+    let left_matrix = &state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == left_window.0 as i64)
+        .expect("left window matrix")
+        .matrix;
+    let text_row = left_matrix
+        .rows
+        .iter()
+        .find(|row| {
+            row.role == GlyphRowRole::Text
+                && row.glyphs[GlyphArea::Text.index()]
+                    .iter()
+                    .any(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'X' }))
+        })
+        .expect("left body row containing X");
+    let text_glyphs = &text_row.glyphs[GlyphArea::Text.index()];
+    let x_col = text_glyphs
+        .iter()
+        .position(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'X' }))
+        .expect("X glyph");
+    assert!(
+        text_glyphs[x_col + 1..]
+            .iter()
+            .all(|glyph| glyph.face_id == left_fill.face_id),
+        "the split border's explicit line-tail spaces must keep the remapped default face"
+    );
+}
+
 #[test]
 fn cursor_only_replay_republishes_the_window_regions_with_the_new_presentation() {
     let text = "(defun f (a b) (+ a b))\n".repeat(40);

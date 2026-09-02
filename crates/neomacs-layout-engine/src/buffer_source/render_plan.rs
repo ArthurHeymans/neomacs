@@ -18,6 +18,7 @@ use crate::display_cursor::{
     CursorGlyphFaceColors, CursorVisualColumnResolutionRequest, ResolvedBoxCursorPaint,
     ResolvedCursorCoordinatePair,
 };
+use crate::display_face_policy::EffectiveWindowDefaultFace;
 use crate::display_row::append_context::DisplayRowAppendSurface;
 use crate::display_row::face_environment::FrameFaces;
 use crate::display_row::face_state::{
@@ -27,7 +28,6 @@ use crate::display_row::geometry::{DisplayRowLimit, DisplayRowVisibilityLimit};
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_row::overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row::walk_state::{FaceScanCheckpoint, LineNumberFieldLayout};
-use crate::display_source_resolver::same_resolved_face;
 use crate::display_status_line::{
     ChromeRowRenderServices, WindowChromeRowsRenderOutcome, WindowChromeRowsRenderRequest,
 };
@@ -46,12 +46,11 @@ use crate::window_output::{
     TextWindowRedisplayPositions, WindowOutputEmitter, publish_text_window_cursor,
     record_text_window_display_range, render_window_chrome_rows,
 };
-use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
 };
 use neomacs_display_protocol::glyph_matrix::{FaceFillItem, GlyphArea};
-use neomacs_display_protocol::types::{Color, DisplayWindowId, FaceId, Rect};
+use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::buffer::BufferId;
 use neovm_core::window::{FrameId, WindowId};
 
@@ -175,6 +174,63 @@ pub(crate) struct BufferSourceDefaultFacePlan {
     face: ResolvedFace,
     metrics: DisplayRowFallbackMetrics,
     measurement_policy: DisplayRowMeasurementPolicy,
+}
+
+/// Background ownership for one buffer window.
+///
+/// GNU's iterator always begins with the window's effective default face.  A
+/// terminal-default background needs no explicit paint; every other effective
+/// background must be published independently of whether the body is walked or
+/// replayed.  Encoding that distinction here prevents an incremental path from
+/// returning before it has restored the window-level paint contract.
+#[derive(Clone, Debug)]
+enum BufferWindowBackground {
+    TerminalDefault,
+    Resolved {
+        face_id: neomacs_display_protocol::types::FaceId,
+        face: ResolvedFace,
+    },
+}
+
+impl BufferWindowBackground {
+    fn from_default_face(default_face: &EffectiveWindowDefaultFace) -> Self {
+        let face = default_face.face();
+        if face.use_default_background {
+            Self::TerminalDefault
+        } else {
+            Self::Resolved {
+                face_id: default_face.face_id(),
+                face: face.clone(),
+            }
+        }
+    }
+
+    fn publish(
+        &self,
+        output: &mut TextWindowOutputTarget<'_>,
+        params: &WindowParams,
+        geometry: &BufferWindowGeometry,
+    ) {
+        let Self::Resolved { face_id, face } = self else {
+            return;
+        };
+        if geometry.text_height <= 0.0 {
+            return;
+        }
+        output.install_resolved_face(*face_id, face, None);
+        output.builder().add_output_face_fill(FaceFillItem {
+            window_id: DisplayWindowId::new(params.window_id),
+            row_role: GlyphRowRole::Text,
+            clip_rect: Some(params.bounds),
+            bounds: Rect::new(
+                params.bounds.x,
+                geometry.text_y,
+                params.bounds.width,
+                geometry.text_height,
+            ),
+            face_id: *face_id,
+        });
+    }
 }
 
 /// Publish a fast-path (cursor-only / scroll / edit) window's re-decorated cursor
@@ -524,16 +580,12 @@ impl BufferSourceDefaultFacePlan {
     /// face remapping leaves its realized rendering unchanged. A remapped
     /// default is a distinct realized face and must receive a dynamic ID before
     /// any leading synthetic glyph can publish it.
-    pub(crate) fn reserve_effective_face_id(
+    pub(crate) fn reserve_effective_face(
         &self,
         face_resolver: &FaceResolver,
         face_ids: &mut FrameFaceAttempt,
-    ) -> FaceId {
-        if same_resolved_face(&self.face, face_resolver.default_face()) {
-            BasicFaceId::Default.into()
-        } else {
-            crate::display_row::face_state::stable_face_id_for_resolved(face_ids, &self.face)
-        }
+    ) -> EffectiveWindowDefaultFace {
+        EffectiveWindowDefaultFace::resolve(face_resolver, &self.face, face_ids)
     }
 
     pub(crate) fn char_width(&self) -> f32 {
@@ -615,7 +667,14 @@ impl BufferSourceOutputSetup {
         let (mut output, font_metrics, face_resolver, mut face_ids, window_snapshots) =
             state.into_parts();
         let retry_checkpoint = output.capture_retry_checkpoint();
-        let default_face_id = default_face.reserve_effective_face_id(face_resolver, &mut face_ids);
+        let effective_default_face =
+            default_face.reserve_effective_face(face_resolver, &mut face_ids);
+        let default_face_id = effective_default_face.face_id();
+        BufferWindowBackground::from_default_face(&effective_default_face).publish(
+            &mut output.output_target(),
+            params,
+            geometry,
+        );
 
         let has_overlays = !buffer.layout_overlays().is_empty();
         let face_resolution = BufferSourceFaceResolutionContext::new(
@@ -901,6 +960,7 @@ impl BufferSourceOutputSetup {
                 redisplay_positions,
                 window_end_record: publish_request.window_end_record(redisplay_positions),
                 freshness_before_chrome,
+                effective_default_face,
                 cursor_only: true,
                 reused_matrix_rows: None,
             };
@@ -1137,6 +1197,7 @@ impl BufferSourceOutputSetup {
                 redisplay_positions,
                 window_end_record: publish_request.window_end_record(redisplay_positions),
                 freshness_before_chrome,
+                effective_default_face,
                 cursor_only: false,
                 reused_matrix_rows: Some(reused_matrix_rows),
             };
@@ -1204,25 +1265,6 @@ impl BufferSourceOutputSetup {
         }
 
         let (mut output, evaluator) = output.into_parts();
-        if !default_face.face().use_default_background && geometry.text_height > 0.0 {
-            let face_id = crate::display_row::face_state::stable_face_id_for_resolved(
-                &mut face_ids,
-                default_face.face(),
-            );
-            output.install_resolved_face(face_id, default_face.face(), None);
-            output.builder().add_output_face_fill(FaceFillItem {
-                window_id: DisplayWindowId::new(params.window_id),
-                row_role: GlyphRowRole::Text,
-                clip_rect: Some(params.bounds),
-                bounds: Rect::new(
-                    params.bounds.x,
-                    geometry.text_y,
-                    params.bounds.width,
-                    geometry.text_height,
-                ),
-                face_id,
-            });
-        }
         let window_faces = FrameFaces::new(face_resolver).for_window(buffer);
         let mut render_services =
             ChromeRowRenderServices::new(font_metrics, face_resolver, &mut face_ids);
@@ -1349,6 +1391,7 @@ impl BufferSourceOutputSetup {
             redisplay_positions,
             window_end_record: publish_request.window_end_record(redisplay_positions),
             freshness_before_chrome,
+            effective_default_face,
             cursor_only: false,
             reused_matrix_rows: None,
         }

@@ -1134,13 +1134,20 @@ impl LayoutEngine {
         frame_params: &FrameParams,
         window_geometry: crate::display_frame_output::WindowFrameGeometry,
         info: &WindowInfo,
+        effective_default_face: Option<&crate::display_face_policy::EffectiveWindowDefaultFace>,
         face_resolver: &super::neovm_bridge::FaceResolver,
         face_attempt: &FrameFaceAttempt,
     ) {
         let mut decoration_face_ids = face_attempt.clone();
         let font_metrics = &mut self.font_metrics;
         self.frame_output.render_window_decorations(
-            WindowFrameDecorationsRenderRequest::new(params, frame_params, window_geometry, info),
+            WindowFrameDecorationsRenderRequest::new(
+                params,
+                frame_params,
+                window_geometry,
+                info,
+                effective_default_face,
+            ),
             ChromeRowRenderServices::new(font_metrics, face_resolver, &mut decoration_face_ids),
         );
     }
@@ -2102,13 +2109,16 @@ impl LayoutEngine {
                 };
                 lisp_ledger.finish_hook_resume(window_id);
                 let params = &live_inputs.window;
-                let accepted_layout_box = match window_layout {
-                    WindowLayoutOutcome::Stable(layout_box) => {
+                let (accepted_layout_box, effective_default_face) = match window_layout {
+                    WindowLayoutOutcome::Stable {
+                        layout_box,
+                        effective_default_face,
+                    } => {
                         window_chrome_metrics
                             .insert(DisplayWindowId::new(params.window_id), layout_box.chrome());
-                        layout_box
+                        (layout_box, Some(effective_default_face))
                     }
-                    WindowLayoutOutcome::Skipped => layout_box,
+                    WindowLayoutOutcome::Skipped => (layout_box, None),
                     WindowLayoutOutcome::NeedsRelayout { assumed, measured } => {
                         let request = FrameRelayoutRequest::WindowChrome {
                             window_id: DisplayWindowId::new(params.window_id),
@@ -2190,6 +2200,7 @@ impl LayoutEngine {
                         &live_inputs.frame,
                         window_geometry,
                         &info,
+                        effective_default_face.as_ref(),
                         &face_resolver,
                         &face_attempt,
                     );
@@ -3454,7 +3465,7 @@ impl LayoutEngine {
             }
         }
 
-        let redisplay_positions = match render_outcome {
+        let (redisplay_positions, effective_default_face) = match render_outcome {
             BufferSourceRenderAttemptOutcome::LogicalInputsChanged => {
                 if let Some(attempt) = window_end_attempt.take() {
                     evaluator.reject_redisplay_window_end_attempt(attempt);
@@ -3597,6 +3608,7 @@ impl LayoutEngine {
                 redisplay_positions,
                 window_end_record,
                 freshness_before_chrome: _,
+                effective_default_face,
                 cursor_only,
                 reused_matrix_rows,
             } => {
@@ -3622,7 +3634,7 @@ impl LayoutEngine {
                             .insert(window_id, (reused, scroll_dvpos));
                     }
                 }
-                redisplay_positions
+                (redisplay_positions, effective_default_face)
             }
         };
 
@@ -3652,7 +3664,8 @@ impl LayoutEngine {
             .find(|snapshot| snapshot.window_id == window_id)
             .map(WindowChromeMetrics::from_snapshot)
             .unwrap_or(assumed);
-        let outcome = WindowLayoutOutcome::from_measurement(*layout_box, measured);
+        let outcome =
+            WindowLayoutOutcome::from_measurement(*layout_box, measured, effective_default_face);
         if let WindowLayoutOutcome::NeedsRelayout { assumed, measured } = outcome {
             if let Some(attempt) = window_end_attempt.take() {
                 evaluator.reject_redisplay_window_end_attempt(attempt);

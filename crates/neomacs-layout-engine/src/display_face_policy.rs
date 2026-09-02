@@ -1,5 +1,55 @@
 use crate::display_origin::DisplayOrigin;
+use crate::display_row::face_state::stable_face_id_for_resolved;
+use crate::display_source_resolver::same_resolved_face;
+use crate::frame_face_arena::FrameFaceAttempt;
+use crate::neovm_bridge::{FaceResolver, ResolvedFace};
 use neomacs_display_protocol::face::BasicFaceId;
+use neomacs_display_protocol::types::FaceId;
+
+/// The realized default face owned by one buffer window.
+///
+/// GNU resolves `DEFAULT_FACE_ID` through the displayed buffer before body
+/// production (`init_iterator`, xdisp.c), then uses that same realized face for
+/// the explicit TTY line tail (`extend_face_to_end_of_line`).  Keeping the
+/// canonical and remapped identities as variants prevents later decoration
+/// code from silently substituting frame face 0 for a window-local remap.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum EffectiveWindowDefaultFace {
+    FrameDefault { face: ResolvedFace },
+    BufferRemapped { face_id: FaceId, face: ResolvedFace },
+}
+
+impl EffectiveWindowDefaultFace {
+    pub(crate) fn resolve(
+        face_resolver: &FaceResolver,
+        resolved: &ResolvedFace,
+        face_ids: &mut FrameFaceAttempt,
+    ) -> Self {
+        if same_resolved_face(resolved, face_resolver.default_face()) {
+            Self::FrameDefault {
+                face: resolved.clone(),
+            }
+        } else {
+            Self::BufferRemapped {
+                face_id: stable_face_id_for_resolved(face_ids, resolved),
+                face: resolved.clone(),
+            }
+        }
+    }
+
+    pub(crate) const fn face_id(&self) -> FaceId {
+        match self {
+            Self::FrameDefault { .. } => FaceId::new(BasicFaceId::Default as u32),
+            Self::BufferRemapped { face_id, .. } => *face_id,
+        }
+    }
+
+    pub(crate) fn face(&self) -> &ResolvedFace {
+        match self {
+            Self::FrameDefault { face } | Self::BufferRemapped { face, .. } => face,
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum BaseFacePolicy {

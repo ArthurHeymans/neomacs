@@ -127,7 +127,7 @@ use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphType};
 use neomacs_display_protocol::types::DisplayWindowId;
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, Rect};
-use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1};
+use neovm_core::buffer::{Buffer, BufferId, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use neovm_core::emacs_core::eval::{DisplayHost, GuiFrameHostRequest};
 use neovm_core::emacs_core::image_catalog::{
     ImageCatalog, ImageLookup, ImageResolveRequest, PendingImage, ReadyImage,
@@ -8052,6 +8052,11 @@ fn buffer_text_window_terminal_right_border_request_installs_face_and_border() {
     builder.end_window();
 
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(10);
+    let effective_default_face = crate::display_face_policy::EffectiveWindowDefaultFace::resolve(
+        &face_resolver,
+        face_resolver.default_face(),
+        &mut face_ids,
+    );
     let mut font_metrics = None;
     let face_id = TextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
         TextWindowOutputTarget::from_builder(&mut builder),
@@ -8060,6 +8065,7 @@ fn buffer_text_window_terminal_right_border_request_installs_face_and_border() {
             &face_resolver,
             &mut face_ids,
         ),
+        &effective_default_face,
     );
 
     let state = builder.finish(5, 1, 8.0, 16.0);
@@ -8089,6 +8095,11 @@ fn terminal_right_border_decoration_preserves_the_rows_semantic_role() {
     builder.end_window();
 
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(10);
+    let effective_default_face = crate::display_face_policy::EffectiveWindowDefaultFace::resolve(
+        &face_resolver,
+        face_resolver.default_face(),
+        &mut face_ids,
+    );
     let mut font_metrics = None;
     TextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
         TextWindowOutputTarget::from_builder(&mut builder),
@@ -8097,6 +8108,7 @@ fn terminal_right_border_decoration_preserves_the_rows_semantic_role() {
             &face_resolver,
             &mut face_ids,
         ),
+        &effective_default_face,
     );
 
     let state = builder.finish(5, 1, 8.0, 16.0);
@@ -8132,6 +8144,11 @@ fn terminal_right_border_face_id_comes_from_the_shared_frame_allocator() {
     builder.end_window();
 
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
+    let effective_default_face = crate::display_face_policy::EffectiveWindowDefaultFace::resolve(
+        &face_resolver,
+        face_resolver.default_face(),
+        &mut face_ids,
+    );
     // A dynamic (non-basic) content face takes the first id from the frame
     // allocator, exactly as a propertized buffer-text run would.
     let content_face_id = face_ids.reserve_dynamic_face();
@@ -8143,6 +8160,7 @@ fn terminal_right_border_face_id_comes_from_the_shared_frame_allocator() {
             &face_resolver,
             &mut face_ids,
         ),
+        &effective_default_face,
     );
 
     assert_ne!(
@@ -8173,6 +8191,11 @@ fn buffer_text_window_terminal_right_border_request_pads_blank_rows_and_preserve
     builder.end_window();
 
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(10);
+    let effective_default_face = crate::display_face_policy::EffectiveWindowDefaultFace::resolve(
+        &face_resolver,
+        face_resolver.default_face(),
+        &mut face_ids,
+    );
     let mut font_metrics = None;
     let face_id = TextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
         TextWindowOutputTarget::from_builder(&mut builder),
@@ -8181,6 +8204,7 @@ fn buffer_text_window_terminal_right_border_request_pads_blank_rows_and_preserve
             &face_resolver,
             &mut face_ids,
         ),
+        &effective_default_face,
     );
 
     let state = builder.finish(5, 3, 8.0, 16.0);
@@ -8221,6 +8245,75 @@ fn buffer_text_window_terminal_right_border_request_pads_blank_rows_and_preserve
         assert_eq!(right[0].glyph_type, GlyphType::Char { ch: '|' });
         assert_eq!(right[0].face_id, face_id);
     }
+}
+
+#[test]
+fn terminal_right_border_padding_uses_the_effective_window_default_face() {
+    // GNU `extend_face_to_end_of_line` (xdisp.c) produces the blank TTY tail
+    // with the window's already-remapped default face.  The later
+    // `build_frame_matrix_from_leaf_window` border install replaces only the
+    // reserved LAST_AREA cell; it must not turn the text-area tail back into
+    // the frame-global default face.
+    let _runtime = Context::new();
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x000000, 0xFFFFFF, 14.0, None);
+    let mut buffer = Buffer::new_standalone(BufferId(42), Value::string("*border-remap*"));
+    buffer.set_buffer_local(
+        "face-remapping-alist",
+        Value::list(vec![Value::list(vec![
+            Value::symbol("default"),
+            Value::list(vec![
+                Value::keyword("foreground"),
+                Value::string("#ffffff"),
+                Value::keyword("background"),
+                Value::string("#000000"),
+            ]),
+            Value::symbol("default"),
+        ])]),
+    );
+    let padding_face = face_resolver.resolve_buffer_default_face(&buffer);
+    let border_face = face_resolver.resolve_named_face("vertical-border");
+
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
+    builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    write_char_to_current_row_with_width(&mut builder, 'Z', FaceId::new(0), 0, 8.0);
+    builder.end_row();
+    builder.end_window();
+
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(10);
+    let effective_default_face = crate::display_face_policy::EffectiveWindowDefaultFace::resolve(
+        &face_resolver,
+        &padding_face,
+        &mut face_ids,
+    );
+    let expected_padding_face_id = effective_default_face.face_id();
+    let border_face_id =
+        crate::display_row::face_state::stable_face_id_for_resolved(&mut face_ids, &border_face);
+    let mut font_metrics = None;
+    crate::display_row::special_glyphs::install_text_window_right_border_rows(
+        &mut builder,
+        crate::display_status_line::ChromeRowRenderServices::new(
+            &mut font_metrics,
+            &face_resolver,
+            &mut face_ids,
+        ),
+        crate::display_row::special_glyphs::TextWindowRightBorder {
+            ch: '|',
+            face_id: border_face_id,
+            char_width: 8.0,
+        },
+        &border_face,
+        &effective_default_face,
+    );
+
+    let state = builder.finish(5, 1, 8.0, 16.0);
+    assert!(
+        state.window_matrices[0].matrix.rows[0].glyphs[GlyphArea::Text.index()][1..]
+            .iter()
+            .all(|glyph| glyph.face_id == expected_padding_face_id),
+        "the terminal border's synthetic spaces must preserve the window-remapped default face"
+    );
 }
 
 #[test]

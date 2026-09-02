@@ -50,6 +50,7 @@ use crate::display_cursor::{
     CapturedTextWindowCursorPublishContext, CapturedTextWindowCursorPublishOutcome,
     CursorCaptureState, VisualTextWindowCursorPublishContext, VisualTextWindowCursorPublishSummary,
 };
+use crate::display_face_policy::EffectiveWindowDefaultFace;
 
 /// Columns at the terminal right edge that body text must not consume.
 ///
@@ -204,6 +205,7 @@ impl TextWindowTerminalRightBorderRequest {
         self,
         mut output: TextWindowOutputTarget<'_>,
         render_services: ChromeRowRenderServices<'_, '_>,
+        effective_default_face: &EffectiveWindowDefaultFace,
     ) -> FaceId {
         install_text_window_terminal_right_border(
             output.builder(),
@@ -213,6 +215,7 @@ impl TextWindowTerminalRightBorderRequest {
                 char_width: self.char_width,
             },
             render_services,
+            effective_default_face,
         )
     }
 }
