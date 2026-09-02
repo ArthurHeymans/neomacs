@@ -71,45 +71,37 @@ enum OutputGenerationState {
 impl OutputGenerationState {
     const INITIAL: Self = Self::Stable(DecoderOutputGeneration::INITIAL);
 
-    const fn expected(self) -> DecoderOutputGeneration {
-        match self {
-            Self::Stable(generation) => generation,
-            Self::Awaiting { expected, .. } => expected,
-        }
-    }
-
     fn observe(&mut self, generation: DecoderOutputGeneration) -> OutputGenerationObservation {
-        let expected = self.expected();
-        if let Self::Awaiting { previous, .. } = *self
-            && generation <= previous
-        {
-            return OutputGenerationObservation::Stale;
-        }
-        if generation < expected {
-            return OutputGenerationObservation::Stale;
-        }
-        if generation > expected {
-            return OutputGenerationObservation::Skipped {
+        match *self {
+            Self::Stable(current) if generation < current => OutputGenerationObservation::Stale,
+            Self::Stable(current) if generation == current => OutputGenerationObservation::Current,
+            Self::Stable(current) if generation == current.next() => {
+                *self = Self::Stable(generation);
+                OutputGenerationObservation::Promoted
+            }
+            Self::Stable(current) => OutputGenerationObservation::Skipped {
+                expected: current.next(),
+                observed: generation,
+            },
+            Self::Awaiting { previous, .. } if generation <= previous => {
+                OutputGenerationObservation::Stale
+            }
+            Self::Awaiting { expected, .. } if generation < expected => {
+                OutputGenerationObservation::Stale
+            }
+            Self::Awaiting { expected, .. } if generation == expected => {
+                *self = Self::Stable(generation);
+                OutputGenerationObservation::Promoted
+            }
+            Self::Awaiting { expected, .. } => OutputGenerationObservation::Skipped {
                 expected,
                 observed: generation,
-            };
-        }
-        if matches!(self, Self::Awaiting { .. }) {
-            *self = Self::Stable(generation);
-            OutputGenerationObservation::Promoted
-        } else {
-            OutputGenerationObservation::Current
+            },
         }
     }
 
     #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
     fn announce(&mut self, generation: DecoderOutputGeneration) -> OutputGenerationObservation {
-        if let Self::Stable(current) = *self
-            && generation == current.next()
-        {
-            *self = Self::Stable(generation);
-            return OutputGenerationObservation::Promoted;
-        }
         self.observe(generation)
     }
 }
@@ -1024,6 +1016,7 @@ impl<P: Platform> VideoSystemImpl<P> {
                     OutputGenerationObservation::Promoted => true,
                 };
                 if promoted_output {
+                    session.mailbox.clear();
                     session.diagnostics.output_reconfigurations = session
                         .diagnostics
                         .output_reconfigurations

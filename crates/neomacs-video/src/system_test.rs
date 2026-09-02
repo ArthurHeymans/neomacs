@@ -754,7 +754,45 @@ fn decoder_output_acknowledgements_are_generation_checked_and_idempotent() {
 }
 
 #[test]
-fn output_generation_promotion_discards_an_already_queued_future_frame() {
+fn successor_frame_promotes_output_without_a_control_acknowledgement() {
+    let id = VideoId::new(84);
+    let (mut system, control) = fake_system();
+    system
+        .command(VideoCommand::Open {
+            id,
+            source: VideoSource::File("movie.mp4".into()),
+            initial_playback: InitialPlayback::Playing,
+            loop_mode: LoopMode::Off,
+        })
+        .unwrap();
+    control.publish(BackendEvent::Opened {
+        id,
+        width: 1,
+        height: 1,
+        initial_state: VideoSessionState::Playing,
+    });
+    control.publish(fake_frame_with_generation(
+        id,
+        7,
+        0,
+        DecoderOutputGeneration::INITIAL.next(),
+    ));
+
+    let result = system.service(Instant::now());
+
+    assert_eq!(result.ready_frames.len(), 1);
+    assert!(
+        result
+            .events
+            .iter()
+            .all(|event| !matches!(event, VideoEvent::Failed { .. }))
+    );
+    assert_eq!(system.sampled(id), Some(&7));
+    assert_eq!(system.session_diagnostics()[0].output_reconfigurations, 1);
+}
+
+#[test]
+fn frame_driven_output_generation_promotion_discards_an_already_queued_future_frame() {
     let id = VideoId::new(84);
     let (mut system, control) = fake_system();
     system
@@ -775,10 +813,6 @@ fn output_generation_promotion_discards_an_already_queued_future_frame() {
     control.publish(fake_frame(id, 7, 1_000_000_000));
     assert!(system.service(now).ready_frames.is_empty());
 
-    control.publish(BackendEvent::OutputReconfigured {
-        id,
-        generation: DecoderOutputGeneration::INITIAL.next(),
-    });
     control.publish(fake_frame_with_generation(
         id,
         8,
