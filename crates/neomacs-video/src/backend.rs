@@ -151,7 +151,7 @@ pub(crate) trait DecoderBackend {
 #[cfg(target_os = "linux")]
 pub(crate) struct BackendPublisher<F> {
     events: Sender<BackendEvent<F>>,
-    latest_frames: Arc<Mutex<HashMap<VideoId, LatestPublishedFrame<F>>>>,
+    latest_frames: Arc<Mutex<HashMap<VideoId, PublishedFrameQueue<F>>>>,
     wake: VideoWake,
 }
 
@@ -169,11 +169,11 @@ impl<F> Clone for BackendPublisher<F> {
 #[cfg(target_os = "linux")]
 pub(crate) struct BackendInbox<F> {
     events: Receiver<BackendEvent<F>>,
-    latest_frames: Arc<Mutex<HashMap<VideoId, LatestPublishedFrame<F>>>>,
+    latest_frames: Arc<Mutex<HashMap<VideoId, PublishedFrameQueue<F>>>>,
 }
 
 #[cfg(target_os = "linux")]
-struct LatestPublishedFrame<F> {
+struct PublishedFrameQueue<F> {
     frames: PresentationFrameQueue<DecodedFrame<F>>,
     replaced: u64,
 }
@@ -205,7 +205,7 @@ impl<F> BackendPublisher<F> {
 
     pub(crate) fn frame(&self, id: VideoId, frame: DecodedFrame<F>) {
         let mut latest = lock_unpoisoned(&self.latest_frames);
-        let published = latest.entry(id).or_insert_with(|| LatestPublishedFrame {
+        let published = latest.entry(id).or_insert_with(|| PublishedFrameQueue {
             frames: PresentationFrameQueue::default(),
             replaced: 0,
         });
