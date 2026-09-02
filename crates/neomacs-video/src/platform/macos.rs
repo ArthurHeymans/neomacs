@@ -253,7 +253,7 @@ impl MacDecoder {
         Ok(DecoderReconfiguration::Applied)
     }
 
-    fn poll_sessions(&mut self, timing: crate::VideoServiceTiming) {
+    fn poll_sessions(&mut self, request: &crate::VideoServiceRequest) {
         autoreleasepool(|_| {
             let mut events = Vec::new();
             let mut failed = Vec::new();
@@ -295,6 +295,7 @@ impl MacDecoder {
                 let Some(output) = session.output.as_ref() else {
                     continue;
                 };
+                let timing = request.timing_for(id);
 
                 // AVPlayerItemVideoOutput is a pull API. Ask for the sample
                 // corresponding to the compositor's anticipated presentation
@@ -676,8 +677,8 @@ impl DecoderBackend for MacDecoder {
         }
     }
 
-    fn service(&mut self, timing: crate::VideoServiceTiming) -> Vec<BackendEvent<Self::Frame>> {
-        self.poll_sessions(timing);
+    fn service(&mut self, request: &crate::VideoServiceRequest) -> Vec<BackendEvent<Self::Frame>> {
+        self.poll_sessions(request);
         std::mem::take(&mut self.pending)
     }
 

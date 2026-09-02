@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::num::{NonZeroU32, NonZeroU64};
 use std::path::PathBuf;
 use std::time::Instant;
@@ -1102,6 +1103,60 @@ impl VideoServiceTiming {
     pub fn time_until_presentation(self) -> std::time::Duration {
         self.target_presentation_time
             .saturating_duration_since(self.service_time)
+    }
+}
+
+/// One non-blocking service pass with an independent presentation target for
+/// every visible video session.
+///
+/// A video can appear in windows with different refresh rates. Storing targets
+/// by [`VideoId`] prevents one window's cadence from being applied to an
+/// unrelated player, while repeated presentations of the same video converge
+/// on the earliest compositor opportunity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VideoServiceRequest {
+    service_time: Instant,
+    presentation_targets: HashMap<VideoId, Instant>,
+}
+
+impl VideoServiceRequest {
+    pub fn new(service_time: Instant) -> Self {
+        Self {
+            service_time,
+            presentation_targets: HashMap::new(),
+        }
+    }
+
+    pub const fn service_time(&self) -> Instant {
+        self.service_time
+    }
+
+    pub fn set_presentation_target(&mut self, id: VideoId, target: Instant) {
+        let target = target.max(self.service_time);
+        self.presentation_targets
+            .entry(id)
+            .and_modify(|existing| *existing = std::cmp::min(*existing, target))
+            .or_insert(target);
+    }
+
+    pub fn is_presented(&self, id: VideoId) -> bool {
+        self.presentation_targets.contains_key(&id)
+    }
+
+    pub fn timing_for(&self, id: VideoId) -> VideoServiceTiming {
+        VideoServiceTiming::new(
+            self.service_time,
+            self.presentation_targets
+                .get(&id)
+                .copied()
+                .unwrap_or(self.service_time),
+        )
+    }
+
+    pub fn presentation_targets(&self) -> impl Iterator<Item = (VideoId, Instant)> + '_ {
+        self.presentation_targets
+            .iter()
+            .map(|(&id, &target)| (id, target))
     }
 }
 

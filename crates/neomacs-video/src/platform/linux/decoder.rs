@@ -228,7 +228,7 @@ impl DecoderBackend for GstreamerDecoder {
         }
     }
 
-    fn service(&mut self, _timing: crate::VideoServiceTiming) -> Vec<BackendEvent<Self::Frame>> {
+    fn service(&mut self, _request: &crate::VideoServiceRequest) -> Vec<BackendEvent<Self::Frame>> {
         self.incoming.drain()
     }
 }

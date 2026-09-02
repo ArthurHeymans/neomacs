@@ -114,7 +114,7 @@ pub(crate) trait DecoderBackend {
     /// events. Pull-based adapters use the presentation target to select the
     /// frame the compositor is about to show; push-based adapters only drain
     /// their bounded event bridge.
-    fn service(&mut self, timing: crate::VideoServiceTiming) -> Vec<BackendEvent<Self::Frame>>;
+    fn service(&mut self, request: &crate::VideoServiceRequest) -> Vec<BackendEvent<Self::Frame>>;
 
     /// Ask the decoder to replace an output representation that the GPU
     /// importer rejected.  Most backends have no in-place fallback; the
@@ -264,10 +264,7 @@ pub(crate) enum CompletedFrameImport {
         allow(dead_code)
     )]
     BorrowedNativeSurface,
-    #[cfg_attr(
-        not(any(target_os = "linux", target_os = "windows", test)),
-        allow(dead_code)
-    )]
+    #[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
     GpuBlit { reported_bytes: Option<u64> },
     #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
     CpuUpload { bytes: u64 },

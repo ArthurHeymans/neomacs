@@ -1,6 +1,6 @@
 //! Renderer-facing facade over the cross-platform native video subsystem.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use neomacs_display_protocol::types::VideoId;
 use neomacs_video::{
@@ -754,8 +754,7 @@ impl VideoCache {
 
     pub fn process_pending(
         &mut self,
-        timing: neomacs_video::VideoServiceTiming,
-        presented: &HashSet<VideoId>,
+        request: neomacs_video::VideoServiceRequest,
     ) -> &VideoServiceResult {
         let needs_system = self
             .videos
@@ -768,7 +767,7 @@ impl VideoCache {
             return &self.last_service;
         };
         for external_id in self.videos.keys().copied().collect::<Vec<_>>() {
-            let result = if presented.contains(&external_id) {
+            let result = if request.is_presented(external_id) {
                 self.resume_presented(&mut system, external_id)
             } else {
                 self.park_hidden(&mut system, external_id)
@@ -778,7 +777,17 @@ impl VideoCache {
             }
         }
 
-        let native_result = system.service_for_presentation(timing);
+        let mut native_request = neomacs_video::VideoServiceRequest::new(request.service_time());
+        for (external_id, target) in request.presentation_targets() {
+            if let Some(native_id) = self
+                .videos
+                .get(&external_id)
+                .and_then(|video| video.native_id)
+            {
+                native_request.set_presentation_target(native_id.protocol(), target);
+            }
+        }
+        let native_result = system.service_with_request(native_request);
         let mut events = Vec::with_capacity(native_result.events.len());
         for event in native_result.events {
             let native_id = NativeVideoSessionId(event_id(&event));

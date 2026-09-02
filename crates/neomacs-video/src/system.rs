@@ -16,7 +16,7 @@ use crate::{
     FrameImportPolicy, GpuGeneration, MediaTime, PlaybackAction, PlaybackEpoch, PlaybackRate,
     PresentationVisibility, VideoCommand, VideoCommandError, VideoDiagnostics, VideoEvent,
     VideoFrameFormat, VideoFramePath, VideoFrameReady, VideoImportCounts, VideoInitError,
-    VideoPresentationPath, VideoRecoveryManifest, VideoServiceResult, VideoServiceTiming,
+    VideoPresentationPath, VideoRecoveryManifest, VideoServiceRequest, VideoServiceResult,
     VideoSessionDiagnostics, VideoSessionRecovery, VideoSessionState, VideoSource,
 };
 
@@ -264,11 +264,11 @@ impl VideoSystem {
     }
 
     pub fn service(&mut self, now: Instant) -> VideoServiceResult {
-        self.service_for_presentation(VideoServiceTiming::immediate(now))
+        self.service_with_request(VideoServiceRequest::new(now))
     }
 
-    pub fn service_for_presentation(&mut self, timing: VideoServiceTiming) -> VideoServiceResult {
-        let result = self.inner.service_for_presentation(timing);
+    pub fn service_with_request(&mut self, request: VideoServiceRequest) -> VideoServiceResult {
+        let result = self.inner.service_with_request(request);
         self.retire_replaced_frames();
         result
     }
@@ -523,18 +523,18 @@ impl<P: Platform> VideoSystemImpl<P> {
 
     #[cfg(test)]
     pub(crate) fn service(&mut self, now: Instant) -> VideoServiceResult {
-        self.service_for_presentation(VideoServiceTiming::immediate(now))
+        self.service_with_request(VideoServiceRequest::new(now))
     }
 
-    pub(crate) fn service_for_presentation(
+    pub(crate) fn service_with_request(
         &mut self,
-        timing: VideoServiceTiming,
+        request: VideoServiceRequest,
     ) -> VideoServiceResult {
-        let now = timing.service_time();
+        let now = request.service_time();
         let mut result = VideoServiceResult::default();
         let mut restorations = Vec::new();
         let mut terminal_failures = Vec::new();
-        for event in self.decoder.service(timing) {
+        for event in self.decoder.service(&request) {
             if let BackendEvent::Opened { id, .. } = &event
                 && let Some(restore) = self
                     .sessions

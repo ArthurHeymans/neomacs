@@ -307,12 +307,11 @@ impl WgpuRenderer {
     }
 
     #[cfg(feature = "video")]
-    pub fn process_pending_videos_at(
+    pub fn process_pending_videos(
         &mut self,
-        timing: neomacs_video::VideoServiceTiming,
-        presented: &std::collections::HashSet<neomacs_display_protocol::types::VideoId>,
+        request: neomacs_video::VideoServiceRequest,
     ) -> &neomacs_video::VideoServiceResult {
-        self.caches.video.process_pending(timing, presented)
+        self.caches.video.process_pending(request)
     }
 
     #[cfg(feature = "video")]

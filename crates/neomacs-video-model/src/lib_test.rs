@@ -1,7 +1,8 @@
 use super::{
     FrameImportPolicy, VideoCompositorImport, VideoDecodeResidency, VideoFramePath,
-    VideoPresentationPath, VideoServiceTiming,
+    VideoPresentationPath, VideoServiceRequest, VideoServiceTiming,
 };
+use neomacs_display_protocol::types::VideoId;
 use std::time::{Duration, Instant};
 
 #[test]
@@ -51,4 +52,29 @@ fn video_service_timing_cannot_target_an_already_missed_presentation() {
     assert_eq!(timing.service_time(), now);
     assert_eq!(timing.target_presentation_time(), now);
     assert_eq!(timing.time_until_presentation(), Duration::ZERO);
+}
+
+#[test]
+fn video_service_request_keeps_an_independent_earliest_target_per_video() {
+    let now = Instant::now();
+    let fast = VideoId::new(1);
+    let slow = VideoId::new(2);
+    let hidden = VideoId::new(3);
+    let mut request = VideoServiceRequest::new(now);
+
+    request.set_presentation_target(fast, now + Duration::from_millis(16));
+    request.set_presentation_target(slow, now + Duration::from_millis(16));
+    request.set_presentation_target(fast, now + Duration::from_millis(8));
+
+    assert_eq!(
+        request.timing_for(fast).target_presentation_time(),
+        now + Duration::from_millis(8)
+    );
+    assert_eq!(
+        request.timing_for(slow).target_presentation_time(),
+        now + Duration::from_millis(16)
+    );
+    assert_eq!(request.timing_for(hidden).target_presentation_time(), now);
+    assert!(request.is_presented(fast));
+    assert!(!request.is_presented(hidden));
 }

@@ -479,12 +479,14 @@ on every frame.
 ## Recommended implementation order
 
 Steps 1 and 3 are implemented on `main`: the model carries independent path
-evidence, and AVPlayer output is sampled for the compositor's typed
-target-presentation time. Step 2 is correct at the queue-completion boundary,
-but its native objects are still retained by a parallel affine lease rather
-than coupled to the HAL texture drop callback. The remaining steps are
-optional negotiated tiers that require representative hardware measurement;
-they should not replace the broad player backends speculatively.
+evidence, and each AVPlayer output is sampled for that video's earliest typed
+target-presentation time across its eligible windows. A fast window therefore
+cannot move an unrelated video's sampling deadline. Step 2 is correct at the
+queue-completion boundary, but its native objects are still retained by a
+parallel affine lease rather than coupled to the HAL texture drop callback.
+The remaining steps are optional negotiated tiers that require representative
+hardware measurement; they should not replace the broad player backends
+speculatively.
 
 1. Split decoder provenance, compositor import, and presentation path in the
    shared model; keep the existing public `VideoId` session API stable.

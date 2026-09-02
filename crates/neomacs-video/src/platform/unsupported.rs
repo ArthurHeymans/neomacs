@@ -18,7 +18,7 @@ impl DecoderBackend for UnsupportedDecoder {
 
     fn service(
         &mut self,
-        _timing: crate::VideoServiceTiming,
+        _request: &crate::VideoServiceRequest,
     ) -> Vec<crate::backend::BackendEvent<Self::Frame>> {
         Vec::new()
     }

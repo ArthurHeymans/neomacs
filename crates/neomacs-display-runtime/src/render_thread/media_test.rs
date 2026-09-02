@@ -12,25 +12,27 @@ use rio_vt::crosswords::style::StyleFlags as CellFlags;
 
 #[cfg(feature = "video")]
 #[test]
-fn video_service_targets_the_fastest_visible_presenter() {
+fn video_service_keeps_targets_independent_across_presenters() {
     let now = std::time::Instant::now();
+    let fast = neomacs_display_protocol::types::VideoId::new(1);
+    let slow = neomacs_display_protocol::types::VideoId::new(2);
 
-    let timing = video_service_timing(
+    let request = video_service_request(
         now,
         [
-            std::time::Duration::from_millis(16),
-            std::time::Duration::from_millis(8),
+            (fast, std::time::Duration::from_millis(16)),
+            (slow, std::time::Duration::from_millis(16)),
+            (fast, std::time::Duration::from_millis(8)),
         ],
     );
 
-    assert_eq!(timing.service_time(), now);
     assert_eq!(
-        timing.target_presentation_time(),
+        request.timing_for(fast).target_presentation_time(),
         now + std::time::Duration::from_millis(8)
     );
     assert_eq!(
-        video_service_timing(now, std::iter::empty()).target_presentation_time(),
-        now
+        request.timing_for(slow).target_presentation_time(),
+        now + std::time::Duration::from_millis(16)
     );
 }
 
