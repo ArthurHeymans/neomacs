@@ -960,6 +960,7 @@ unsafe extern "C" fn module_type_of(env: *mut emacs_env, arg: emacs_value) -> em
                 VecLikeType::Xwidget => "xwidget",
                 VecLikeType::XwidgetView => "xwidget-view",
                 VecLikeType::SurfaceHandle => "neomacs-surface",
+                VecLikeType::VideoHandle => "neomacs-video",
                 VecLikeType::Subr => "primitive-function",
                 VecLikeType::Bignum => "bignum",
                 VecLikeType::SymbolWithPos => "symbol-with-pos",

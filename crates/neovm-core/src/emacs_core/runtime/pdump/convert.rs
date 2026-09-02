@@ -287,6 +287,9 @@ impl DumpEncoder {
                 // portable dump image.
                 panic!("pdump: shader-surface handles are not portable")
             }
+            ValueKind::Veclike(VecLikeType::VideoHandle) => {
+                panic!("pdump: video-session handles are not portable")
+            }
             ValueKind::Veclike(VecLikeType::Bignum) => {
                 DumpValue::Bignum(v.as_bignum().unwrap().to_string())
             }
@@ -3313,6 +3316,9 @@ fn dump_heap_object_from_value(encoder: &mut DumpEncoder, value: Value) -> DumpH
         // dumped as `Free`.
         ValueKind::Veclike(VecLikeType::SurfaceHandle) => {
             panic!("pdump: shader-surface handles are not portable")
+        }
+        ValueKind::Veclike(VecLikeType::VideoHandle) => {
+            panic!("pdump: video-session handles are not portable")
         }
         // Explicit (not the `Free` fallback) so a live finalizer can never be
         // silently dropped from an image. `dump-emacs-portable` pre-scans the

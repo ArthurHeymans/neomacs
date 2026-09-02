@@ -235,8 +235,6 @@ pub enum FrameGlyph {
         y: f32,
         width: f32,
         height: f32,
-        loop_count: i32,
-        autoplay: bool,
         /// Compositor alpha in the closed interval 0..=1.
         opacity: f32,
         face_id: FaceId,
@@ -1995,16 +1993,7 @@ impl FrameGlyphBuffer {
     }
 
     /// Add a video glyph
-    pub fn add_video(
-        &mut self,
-        video_id: VideoId,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-        loop_count: i32,
-        autoplay: bool,
-    ) {
+    pub fn add_video(&mut self, video_id: VideoId, x: f32, y: f32, width: f32, height: f32) {
         self.glyphs.push(FrameGlyph::Video {
             window_id: self.current_window_id,
             row_role: self.current_row_role,
@@ -2015,8 +2004,6 @@ impl FrameGlyphBuffer {
             y,
             width,
             height,
-            loop_count,
-            autoplay,
             opacity: 1.0,
             face_id: self.current_face_id,
             box_vertical_edges: BoxVerticalEdges::Both,

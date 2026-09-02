@@ -129,6 +129,7 @@ fn gnu_pvec_type_layout_for_shared_vectorlikes() {
     assert_eq!(VecLikeType::ByteCode.gnu_pvec_code(), None);
     assert_eq!(VecLikeType::Timer.gnu_pvec_code(), None);
     assert_eq!(VecLikeType::SurfaceHandle.gnu_pvec_code(), None);
+    assert_eq!(VecLikeType::VideoHandle.gnu_pvec_code(), None);
 }
 
 #[test]

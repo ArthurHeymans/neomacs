@@ -1,9 +1,7 @@
 //! Asset and embedded-content render commands.
 
 use super::RenderApp;
-use crate::thread_comm::AssetCommand;
-#[cfg(feature = "video")]
-use crate::thread_comm::MediaSource;
+use crate::thread_comm::{AssetCommand, VideoSessionCommand};
 use neomacs_display_protocol::ImageId;
 
 fn clear_image_terminals(shared: &super::SharedImageRenderState, image: ImageId) {
@@ -205,45 +203,26 @@ impl RenderApp {
                     }
                 }
             }
-            AssetCommand::VideoCreate {
-                id,
-                source,
-                loop_count,
-                autoplay,
-            } => {
-                tracing::info!("Loading video {}: {}", id, source.as_str());
+            AssetCommand::Video(VideoSessionCommand::Open { id, request }) => {
+                tracing::info!(video_id = id.get(), source = ?request.source, "opening video");
                 #[cfg(feature = "video")]
                 if let Some(ref mut renderer) = self.renderer {
-                    match source {
-                        MediaSource::File(path) => {
-                            renderer.load_video_file_with_id(id, &path, loop_count, autoplay);
-                        }
-                        MediaSource::Uri(uri) => {
-                            renderer.load_video_uri_with_id(id, &uri, loop_count, autoplay);
-                        }
-                    }
-                    tracing::info!("Video loaded with requested id {}", id);
+                    renderer.open_video(id, request);
+                    tracing::info!(video_id = id.get(), "video open queued");
                 }
             }
-            AssetCommand::VideoPlay { id } => {
-                tracing::debug!("Playing video {}", id);
+            AssetCommand::Video(VideoSessionCommand::Control { id, action }) => {
+                tracing::debug!(video_id = id.get(), ?action, "controlling video");
                 #[cfg(feature = "video")]
                 if let Some(ref mut renderer) = self.renderer {
-                    renderer.video_play(id);
+                    renderer.control_video(id, action);
                 }
             }
-            AssetCommand::VideoPause { id } => {
-                tracing::debug!("Pausing video {}", id);
+            AssetCommand::Video(VideoSessionCommand::Close { id }) => {
+                tracing::info!(video_id = id.get(), "closing video");
                 #[cfg(feature = "video")]
                 if let Some(ref mut renderer) = self.renderer {
-                    renderer.video_pause(id);
-                }
-            }
-            AssetCommand::VideoDestroy { id } => {
-                tracing::info!("Destroying video {}", id);
-                #[cfg(feature = "video")]
-                if let Some(ref mut renderer) = self.renderer {
-                    renderer.free_video(id);
+                    renderer.close_video(id);
                 }
             }
             AssetCommand::SurfaceCreate {

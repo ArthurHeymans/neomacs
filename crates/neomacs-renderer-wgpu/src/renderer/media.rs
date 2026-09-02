@@ -2,10 +2,14 @@
 
 use super::super::image_cache::ImageCache;
 use super::WgpuRenderer;
+#[cfg(feature = "video")]
+use neomacs_display_protocol::VideoId;
 use neomacs_display_protocol::{
     ImageColorContext, ImageFrameIndex, ImageId, ImageLoadToken, ImageMaskPolicy, ImageRealization,
     ImageRotation, ImageSequenceId, ImageSequenceRetirement, ImageSizeSpec,
 };
+#[cfg(feature = "video")]
+use neomacs_video::{PlaybackAction, VideoOpenRequest};
 
 impl WgpuRenderer {
     /// Exact image texture and decoded animation-sequence bytes currently
@@ -240,6 +244,24 @@ impl WgpuRenderer {
         self.caches
             .video
             .load_uri_with_id(id, uri, loop_count, autoplay);
+    }
+
+    /// Open one stable editor video session from a fully typed request.
+    #[cfg(feature = "video")]
+    pub fn open_video(&mut self, id: VideoId, request: VideoOpenRequest) {
+        self.caches.video.open(id, request);
+    }
+
+    /// Apply one typed playback transition to an existing video session.
+    #[cfg(feature = "video")]
+    pub fn control_video(&mut self, id: VideoId, action: PlaybackAction) {
+        self.caches.video.control(id, action);
+    }
+
+    /// Close one stable editor video session.
+    #[cfg(feature = "video")]
+    pub fn close_video(&mut self, id: VideoId) {
+        self.caches.video.close(id);
     }
 
     /// Get video dimensions

@@ -6,8 +6,9 @@ use std::time::Instant;
 use neomacs_display_protocol::types::VideoId;
 use neomacs_video::{
     FrameTransferPolicy, GpuGeneration, InitialPlayback, LoopMode, PlaybackAction,
-    PresentationVisibility, VideoCommand, VideoCommandError, VideoEvent, VideoSamplingResources,
-    VideoServiceResult, VideoSessionState, VideoSource, VideoSystem, VideoWake,
+    PresentationVisibility, VideoCommand, VideoCommandError, VideoEvent, VideoOpenRequest,
+    VideoSamplingResources, VideoServiceResult, VideoSessionState, VideoSource, VideoSystem,
+    VideoWake,
 };
 
 use neomacs_video::VideoRecoveryManifest as PlaybackRecoveryManifest;
@@ -381,26 +382,24 @@ impl VideoCache {
     }
 
     pub fn load_file_with_id(&mut self, id: u32, path: &str, loop_count: i32, autoplay: bool) {
-        self.load_source_with_id(id, VideoSource::File(path.into()), loop_count, autoplay);
+        self.load_legacy_source_with_id(id, VideoSource::File(path.into()), loop_count, autoplay);
     }
 
     pub fn load_uri_with_id(&mut self, id: u32, uri: &str, loop_count: i32, autoplay: bool) {
-        self.load_source_with_id(id, VideoSource::Uri(uri.to_owned()), loop_count, autoplay);
+        self.load_legacy_source_with_id(id, VideoSource::Uri(uri.to_owned()), loop_count, autoplay);
     }
 
-    fn load_source_with_id(
+    fn load_legacy_source_with_id(
         &mut self,
         id: u32,
         source: VideoSource,
         loop_count: i32,
         autoplay: bool,
     ) {
-        self.next_id = self.next_id.max(id.saturating_add(1));
-        let typed_id = VideoId::new(id);
-        let native_id = self.allocate_native_id();
         let loop_mode = match LoopMode::from_legacy(loop_count) {
             Ok(loop_mode) => loop_mode,
             Err(error) => {
+                let typed_id = VideoId::new(id);
                 self.videos.insert(
                     typed_id,
                     CachedVideo {
@@ -418,10 +417,36 @@ impl VideoCache {
                 return;
             }
         };
+        self.open(
+            VideoId::new(id),
+            VideoOpenRequest {
+                source,
+                loop_mode,
+                initial_playback: if autoplay {
+                    InitialPlayback::Playing
+                } else {
+                    InitialPlayback::Paused
+                },
+            },
+        );
+    }
+
+    /// Open one stable editor session. `VideoId` never aliases the native
+    /// decoder incarnation allocated below, which is important during device
+    /// recovery and delayed backend events.
+    pub fn open(&mut self, id: VideoId, request: VideoOpenRequest) {
+        // Stable ids are allocated once by the editor, but recovery/replay can
+        // defensively reopen one. Close before replacement so the old native
+        // routing entry and decoder cannot survive an idempotent replay.
+        if self.videos.contains_key(&id) {
+            self.close(id);
+        }
+        self.next_id = self.next_id.max(id.get().saturating_add(1));
+        let native_id = self.allocate_native_id();
         self.videos.insert(
-            typed_id,
+            id,
             CachedVideo {
-                id: typed_id,
+                id,
                 width: 0,
                 height: 0,
                 state: VideoState::Loading,
@@ -431,23 +456,45 @@ impl VideoCache {
                 parked: None,
             },
         );
-        self.native_to_video.insert(native_id, typed_id);
+        self.native_to_video.insert(native_id, id);
         let result = self.command(VideoCommand::Open {
             id: native_id.protocol(),
-            source,
-            initial_playback: if autoplay {
-                InitialPlayback::Playing
-            } else {
-                InitialPlayback::Paused
-            },
-            loop_mode,
+            source: request.source,
+            initial_playback: request.initial_playback,
+            loop_mode: request.loop_mode,
         });
         if let Err(error) = result {
             self.native_to_video.remove(&native_id);
-            if let Some(video) = self.videos.get_mut(&typed_id) {
+            if let Some(video) = self.videos.get_mut(&id) {
                 video.native_id = None;
             }
-            self.fail(id, error);
+            self.fail(id.get(), error);
+        }
+    }
+
+    /// Route all session playback actions through one exhaustive typed seam.
+    pub fn control(&mut self, id: VideoId, action: PlaybackAction) {
+        match action {
+            PlaybackAction::Play => self.play(id.get()),
+            PlaybackAction::Pause => self.pause(id.get()),
+            PlaybackAction::Stop => self.stop(id.get()),
+            PlaybackAction::SetLoop(mode) => self.set_loop_mode(id, mode),
+            action @ (PlaybackAction::Seek(_) | PlaybackAction::SetRate(_)) => {
+                let result = self
+                    .videos
+                    .get(&id)
+                    .and_then(|video| video.native_id)
+                    .ok_or_else(|| VideoCommandError::from("video session is not active"))
+                    .and_then(|native_id| {
+                        self.command(VideoCommand::Playback {
+                            id: native_id.protocol(),
+                            action,
+                        })
+                    });
+                if let Err(error) = result {
+                    self.fail(id.get(), error);
+                }
+            }
         }
     }
 
@@ -548,33 +595,39 @@ impl VideoCache {
     }
 
     pub fn set_loop(&mut self, id: u32, count: i32) {
-        let typed_id = VideoId::new(id);
-        let result = LoopMode::from_legacy(count)
-            .map_err(|error| VideoCommandError::from(error.to_string()))
-            .and_then(|mode| {
-                if self
-                    .videos
-                    .get(&typed_id)
-                    .and_then(|video| video.native_id)
-                    .is_none()
-                {
-                    return self.update_parked(typed_id, |manifest| manifest.with_loop_mode(mode));
-                }
-                let native_id = self.videos[&typed_id]
-                    .native_id
-                    .expect("checked active native video session");
-                self.command(VideoCommand::Playback {
-                    id: native_id.protocol(),
-                    action: PlaybackAction::SetLoop(mode),
-                })
-            });
+        match LoopMode::from_legacy(count) {
+            Ok(mode) => self.set_loop_mode(VideoId::new(id), mode),
+            Err(error) => self.fail(id, error.to_string().into()),
+        }
+    }
+
+    fn set_loop_mode(&mut self, id: VideoId, mode: LoopMode) {
+        let result = if self
+            .videos
+            .get(&id)
+            .and_then(|video| video.native_id)
+            .is_none()
+        {
+            self.update_parked(id, |manifest| manifest.with_loop_mode(mode))
+        } else {
+            let native_id = self.videos[&id]
+                .native_id
+                .expect("checked active native video session");
+            self.command(VideoCommand::Playback {
+                id: native_id.protocol(),
+                action: PlaybackAction::SetLoop(mode),
+            })
+        };
         if let Err(error) = result {
-            self.fail(id, error);
+            self.fail(id.get(), error);
         }
     }
 
     pub fn remove(&mut self, id: u32) {
-        let id = VideoId::new(id);
+        self.close(VideoId::new(id));
+    }
+
+    pub fn close(&mut self, id: VideoId) {
         if let Some(native_id) = self.videos.get(&id).and_then(|video| video.native_id) {
             let _ = self.command(VideoCommand::Close {
                 id: native_id.protocol(),

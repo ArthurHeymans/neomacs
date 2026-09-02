@@ -71,6 +71,8 @@ pub mod shader_surface;
 pub(crate) mod sound;
 #[path = "display/terminal/mod.rs"]
 pub mod terminal;
+#[path = "display/video/mod.rs"]
+pub mod video;
 #[path = "display/window_cmds/mod.rs"]
 pub mod window_cmds;
 #[path = "display/xdisp/mod.rs"]
@@ -401,6 +403,9 @@ mod syntax_gnu_parity_regression_test;
 #[cfg(test)]
 #[path = "system/tls/tests/runtime.rs"]
 mod tls_test;
+#[cfg(test)]
+#[path = "display/video/tests/runtime.rs"]
+mod video_test;
 #[cfg(test)]
 #[path = "display/window_cmds/tests/window_system_preload.rs"]
 mod window_system_preload_test;

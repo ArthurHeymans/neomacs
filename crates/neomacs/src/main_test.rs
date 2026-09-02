@@ -20,14 +20,14 @@ use super::{
     run_gnu_startup, runtime_mode_from_program_name, source_bootstrap_loadup_invocation,
     startup_dimensions, sync_live_gui_frame_titles, sync_selected_gui_chrome_state,
 };
-use neomacs_display_protocol::WebViewId;
+use neomacs_display_protocol::{VideoId, WebViewId};
 use neomacs_display_runtime::render_thread::{
     ImageDecodeTerminal, ImageRenderState, SharedImageRenderState,
 };
 use neomacs_display_runtime::thread_comm::{
     AssetCommand, ClipboardCommand, ClipboardSelection, ConfigCommand, FrameRef,
-    FrameShaderAvailability, LifecycleCommand, MediaSource, RenderCommand,
-    SharedRenderCapabilities, UiCommand, WindowCommand, WindowFullscreenMode,
+    FrameShaderAvailability, LifecycleCommand, RenderCommand, SharedRenderCapabilities, UiCommand,
+    VideoSessionCommand, WindowCommand, WindowFullscreenMode,
 };
 #[cfg(feature = "neo-term")]
 use neomacs_display_runtime::{
@@ -36,6 +36,9 @@ use neomacs_display_runtime::{
 };
 use neomacs_layout_engine::font::metrics::FontMetricsService;
 use neomacs_layout_engine::font::sizing::face_height_to_gnu_x11_fallback_pixels;
+use neomacs_video_model::{
+    InitialPlayback, LoopMode, PlaybackAction, VideoOpenRequest, VideoSource,
+};
 use neomacs_webview::{NavigationTarget, WebViewCommand};
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::GuiFrameHostRequest;
@@ -2924,15 +2927,13 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
     assert_eq!(commands.len(), 1);
     assert!(matches!(
         &commands[0],
-        RenderCommand::Asset(AssetCommand::VideoCreate {
+        RenderCommand::Asset(AssetCommand::Video(VideoSessionCommand::Open {
             id,
-            source,
-            loop_count,
-            autoplay,
-        }) if *id == first.video_id
-            && matches!(source, MediaSource::File(path) if path == "/tmp/demo.mp4")
-            && *loop_count == -1
-            && *autoplay
+            request,
+        })) if *id == first.video_id
+            && matches!(&request.source, VideoSource::File(path) if path.to_string_lossy() == "/tmp/demo.mp4")
+            && request.loop_mode == LoopMode::Infinite
+            && request.initial_playback == InitialPlayback::Playing
     ));
 }
 
@@ -2949,7 +2950,7 @@ fn resolved_video_registry_never_evicts_a_still_referenceable_identity() {
                 autoplay: false,
             },
             super::ResolvedVideo {
-                video_id: index as u32 + 1,
+                video_id: VideoId::new(index as u32 + 1),
             },
         );
         assert_eq!(
@@ -2962,7 +2963,7 @@ fn resolved_video_registry_never_evicts_a_still_referenceable_identity() {
                     autoplay: false,
                 })
                 .map(|video| video.video_id),
-            Some(index as u32 + 1)
+            Some(VideoId::new(index as u32 + 1))
         );
     }
     assert_eq!(registry.entries.len(), 80);
@@ -3003,15 +3004,68 @@ fn primary_display_host_request_video_preserves_uri_source() {
     assert_eq!(commands.len(), 1);
     assert!(matches!(
         &commands[0],
-        RenderCommand::Asset(AssetCommand::VideoCreate {
+        RenderCommand::Asset(AssetCommand::Video(VideoSessionCommand::Open {
             id,
-            source,
-            loop_count,
-            autoplay,
-        }) if *id == resolved.video_id
-            && matches!(source, MediaSource::Uri(uri) if uri == "https://example.com/video.mp4")
-            && *loop_count == 0
-            && !*autoplay
+            request,
+        })) if *id == resolved.video_id
+            && matches!(&request.source, VideoSource::Uri(uri) if uri == "https://example.com/video.mp4")
+            && request.loop_mode == LoopMode::Off
+            && request.initial_playback == InitialPlayback::Paused
+    ));
+}
+
+#[test]
+fn primary_display_host_routes_one_typed_video_session_lifecycle() {
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+    let host = PrimaryWindowDisplayHost {
+        cmd_tx: cmd_tx.clone(),
+        render_waker: None,
+        font_sizing: FontSizing::gnu_x11_fallback(),
+        primary_window_adopted: false,
+        primary_frame_id: None,
+        last_window_titles: Mutex::new(std::collections::HashMap::new()),
+        font_metrics: None,
+        primary_window_size: shared_primary_window_size(1600, 1800),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
+        #[cfg(feature = "neo-term")]
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
+    };
+    let open = VideoOpenRequest {
+        source: VideoSource::File("movie.mp4".into()),
+        loop_mode: LoopMode::Infinite,
+        initial_playback: InitialPlayback::Playing,
+    };
+
+    let id = neovm_core::emacs_core::DisplayHost::create_video(&host, open.clone())
+        .expect("create video session");
+    neovm_core::emacs_core::DisplayHost::control_video(&host, id, PlaybackAction::Pause)
+        .expect("pause video session");
+    neovm_core::emacs_core::DisplayHost::destroy_video(&host, id).expect("close video session");
+
+    let commands: Vec<_> = cmd_rx.try_iter().collect();
+    assert!(matches!(
+        &commands[0],
+        RenderCommand::Asset(AssetCommand::Video(VideoSessionCommand::Open {
+            id: opened,
+            request,
+        })) if *opened == id && *request == open
+    ));
+    assert!(matches!(
+        &commands[1],
+        RenderCommand::Asset(AssetCommand::Video(VideoSessionCommand::Control {
+            id: controlled,
+            action: PlaybackAction::Pause,
+        })) if *controlled == id
+    ));
+    assert!(matches!(
+        &commands[2],
+        RenderCommand::Asset(AssetCommand::Video(VideoSessionCommand::Close { id: closed }))
+            if *closed == id
     ));
 }
 

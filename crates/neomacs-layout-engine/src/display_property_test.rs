@@ -3,6 +3,7 @@ use crate::display_item::{
     DisplayImageItem, DisplayLength, DisplayMediaReplacement, DisplayStretch, DisplayStretchWidth,
     DisplayVideoItem, DisplayXwidgetItem,
 };
+use neomacs_display_protocol::VideoId;
 use neovm_core::emacs_core::{Context, Value};
 
 #[test]
@@ -381,11 +382,9 @@ fn display_replacement_property_accepts_only_matching_media_replacements() {
         opaque_background: None,
     });
     let video = DisplayMediaReplacement::video(DisplayVideoItem {
-        video_id: 2,
+        video_id: VideoId::new(2),
         width: 30.0,
         height: 40.0,
-        loop_count: 0,
-        autoplay: false,
         opacity: 1.0,
     });
     let xwidget = DisplayMediaReplacement::xwidget(DisplayXwidgetItem {

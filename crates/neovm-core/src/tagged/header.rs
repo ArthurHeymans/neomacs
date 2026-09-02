@@ -13,7 +13,7 @@
 
 use super::value::TaggedValue;
 use malachite::integer::Integer;
-use neomacs_display_protocol::WebViewId;
+use neomacs_display_protocol::{VideoId, WebViewId};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -321,6 +321,10 @@ pub enum VecLikeType {
     /// sweep queues the id for a best-effort
     /// `DisplayHost::destroy_shader_surface` when the handle dies.
     SurfaceHandle = 39,
+    /// GC-managed video-session handle (NeoMacs-only; no GNU counterpart).
+    /// The stable [`VideoId`] names a session across native decoder recovery;
+    /// it is deliberately a different identity domain from glyph ids.
+    VideoHandle = 40,
 }
 
 impl VecLikeType {
@@ -351,7 +355,11 @@ impl VecLikeType {
             Self::SubCharTable => GnuPvecType::SubCharTable,
             Self::Record => GnuPvecType::Record,
             Self::Font => GnuPvecType::Font,
-            Self::Macro | Self::ByteCode | Self::Timer | Self::SurfaceHandle => return None,
+            Self::Macro
+            | Self::ByteCode
+            | Self::Timer
+            | Self::SurfaceHandle
+            | Self::VideoHandle => return None,
         })
     }
 
@@ -1134,6 +1142,13 @@ pub struct TimerObj {
 pub struct SurfaceObj {
     pub header: VecLikeHeader,
     pub surface_id: u32,
+}
+
+/// Heap-allocated handle for one host-owned video session.
+#[repr(C)]
+pub struct VideoObj {
+    pub header: VecLikeHeader,
+    pub video_id: VideoId,
 }
 
 /// Heap-allocated xwidget model object.

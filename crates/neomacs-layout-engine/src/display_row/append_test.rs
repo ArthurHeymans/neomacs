@@ -11783,11 +11783,9 @@ fn display_replacement_append_context_installs_video_replacements() {
     let active_face = test_active_face_state(FaceId::new(3), 8.0);
     let media_item = DisplayReplacementMediaSourceItem::new(
         DisplayMediaReplacement::video(DisplayVideoItem {
-            video_id: 88,
+            video_id: VideoId::new(88),
             width: 80.0,
             height: 45.0,
-            loop_count: -1,
-            autoplay: true,
             opacity: 0.5,
         }),
         active_face.metrics().row_height(),
@@ -11826,12 +11824,10 @@ fn display_replacement_append_context_installs_video_replacements() {
             assert!(matches!(
                 glyph.glyph_type,
                 neomacs_display_protocol::glyph_matrix::GlyphType::Video {
-                    video_id: 88,
+                    video_id,
                     width_cols: 10,
-                    loop_count: -1,
-                    autoplay: true,
                     opacity: 0.5,
-                }
+                } if video_id == VideoId::new(88)
             ));
         })
         .expect("current row");
@@ -11854,22 +11850,10 @@ fn display_replacement_append_context_installs_video_replacements() {
                 y,
                 width,
                 height,
-                loop_count,
-                autoplay,
                 opacity,
                 ..
             } => Some((
-                *window_id,
-                *row_role,
-                *clip_rect,
-                *slot_id,
-                *video_id,
-                *x,
-                *y,
-                *width,
-                *height,
-                *loop_count,
-                *autoplay,
+                *window_id, *row_role, *clip_rect, *slot_id, *video_id, *x, *y, *width, *height,
                 *opacity,
             )),
             _ => None,
@@ -11891,9 +11875,7 @@ fn display_replacement_append_context_installs_video_replacements() {
         (video.5, video.6, video.7, video.8),
         (16.0, 24.0, 80.0, 45.0)
     );
-    assert_eq!(video.9, -1);
-    assert!(video.10);
-    assert_eq!(video.11, 0.5);
+    assert_eq!(video.9, 0.5);
 }
 
 struct DisplayRowSourceStep {

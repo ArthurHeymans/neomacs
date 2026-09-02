@@ -2385,16 +2385,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             DisplayMediaReplacementKind::EmptyImageSlice => {
                 unreachable!("empty image slices return before glyph construction")
             }
-            DisplayMediaReplacementKind::Video {
+            DisplayMediaReplacementKind::Video { video_id, opacity } => GlyphType::Video {
                 video_id,
-                loop_count,
-                autoplay,
-                opacity,
-            } => GlyphType::Video {
-                video_id: video_id as i32,
                 width_cols,
-                loop_count,
-                autoplay,
                 opacity,
             },
             DisplayMediaReplacementKind::Xwidget {

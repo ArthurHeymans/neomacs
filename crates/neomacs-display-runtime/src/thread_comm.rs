@@ -12,12 +12,13 @@ use std::time::Instant;
 use neomacs_display_protocol::SealedFramePresentation;
 use neomacs_display_protocol::{
     ImageColorContext, ImageId, ImageLoadToken, ImageMaskPolicy, ImageRealization, ImageRotation,
-    ImageSizeSpec,
+    ImageSizeSpec, VideoId,
 };
 pub use neomacs_display_protocol::{
     ImageStateEvent, MenuBarItem, PopupMenuItem, TabBarItem, ToolBarImageSource, ToolBarItem,
     ToolBarItemType, VisualConfig,
 };
+use neomacs_video_model::{PlaybackAction, VideoOpenRequest};
 use neovm_core::window::GuiFrameGeometryHints;
 
 /// Native selection owned by the display server.
@@ -363,21 +364,24 @@ pub enum WindowCommand {
     RequestAttention { urgent: bool },
 }
 
-/// Source for media assets that can be loaded either from files or URIs.
+/// Typed commands for one stable compositor-owned video session.
+///
+/// This is intentionally a single state-machine command instead of separate
+/// loosely-related asset variants. Adding a playback operation now makes the
+/// render-thread match exhaustive at compile time.
 #[derive(Debug)]
-pub enum MediaSource {
-    /// A filesystem path, matching Emacs Lisp `:file` display specs.
-    File(String),
-    /// A URI, matching Emacs Lisp `:uri` display specs.
-    Uri(String),
-}
-
-impl MediaSource {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::File(path) | Self::Uri(path) => path,
-        }
-    }
+pub enum VideoSessionCommand {
+    Open {
+        id: VideoId,
+        request: VideoOpenRequest,
+    },
+    Control {
+        id: VideoId,
+        action: PlaybackAction,
+    },
+    Close {
+        id: VideoId,
+    },
 }
 
 /// Content source for a shader surface
@@ -447,9 +451,7 @@ pub enum AssetCommand {
         stride: u32,
     },
     /// Retire an image after its last render presentation releases it.
-    ImageRetire {
-        image: ImageId,
-    },
+    ImageRetire { image: ImageId },
     /// Retire CPU-side animation decoder/compositor state independently of
     /// frame textures.
     ImageSequenceRetire {
@@ -488,9 +490,7 @@ pub enum AssetCommand {
         value: [f32; 4],
     },
     /// Free a shader surface
-    SurfaceFree {
-        id: u32,
-    },
+    SurfaceFree { id: u32 },
     /// Install (Some, already composed+validated source in the given
     /// language, plus the user uniforms in slot order) or remove (None) the
     /// full-frame post shader
@@ -509,23 +509,8 @@ pub enum AssetCommand {
         name: String,
         value: [f32; 4],
     },
-    /// Create video player
-    VideoCreate {
-        id: u32,
-        source: MediaSource,
-        loop_count: i32,
-        autoplay: bool,
-    },
-    /// Control video playback
-    VideoPlay {
-        id: u32,
-    },
-    VideoPause {
-        id: u32,
-    },
-    VideoDestroy {
-        id: u32,
-    },
+    /// Open, control, or close a stable video session.
+    Video(VideoSessionCommand),
 }
 
 /// Terminal commands.

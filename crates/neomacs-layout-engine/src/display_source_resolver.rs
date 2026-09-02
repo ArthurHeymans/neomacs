@@ -21,8 +21,8 @@ use crate::display_source::{
 };
 use crate::display_spec::{DisplayImageDimensionEnvironment, DisplayImageSliceSpec};
 use crate::display_spec::{
-    DisplaySpecHead, parse_display_image_layout, parse_display_surface_source_layout,
-    parse_display_video_layout, parse_display_webkit_layout,
+    DisplaySpecHead, DisplayVideoReference, parse_display_image_layout,
+    parse_display_surface_source_layout, parse_display_video_layout, parse_display_webkit_layout,
 };
 use crate::font::metrics::FontMetricsService;
 use crate::frame_face_arena::FrameFaceAttempt;
@@ -38,6 +38,7 @@ use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::{DisplayHost, SurfaceChannelKind};
 use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
 use neovm_core::emacs_core::value::list_to_vec;
+use neovm_core::emacs_core::video::parse_video_display_reference;
 // Internal per-glyph face-resolution caches keyed by FaceId / cache keys
 // (non-adversarial); FxHash, not std SipHash -- resolve_face_ref + remember_face
 // were the largest residual SipHash callers in a Doom scroll profile after the
@@ -1070,17 +1071,21 @@ fn resolve_video_display_property(
         DisplayRowCharWidthPolicy::new(params.fallback_metrics.char_width()).fallback() * 40.0,
         params.fallback_metrics.row_height() * 12.0,
     )?;
-    let resolved = params
-        .display_host
-        .request_video(spec.request.clone())
-        .ok()
-        .flatten()?;
+    let video_id = match &spec.reference {
+        DisplayVideoReference::Session(id) => *id,
+        DisplayVideoReference::Resolve(request) => {
+            params
+                .display_host
+                .request_video(request.clone())
+                .ok()
+                .flatten()?
+                .video_id
+        }
+    };
     Some(DisplayMediaReplacement::video(DisplayVideoItem {
-        video_id: display_media_id(resolved.video_id),
+        video_id,
         width: spec.width.max(1.0),
         height: spec.height.max(1.0),
-        loop_count: spec.loop_count,
-        autoplay: spec.autoplay,
         opacity: spec.opacity,
     }))
 }
@@ -1167,27 +1172,19 @@ fn resolve_surface_channel(
         ));
     }
     if DisplaySpecHead::Video.is_head_of(value) {
-        let mut spec = parse_display_video_layout(value, 1.0, 1.0)?;
-        // Channel-only videos should play by default; an explicit
-        // `:autoplay nil` in the spec still wins (parse honored it).
-        if !value
-            .is_cons()
-            .then(|| list_to_vec(value))
-            .flatten()
-            .is_some_and(|items| {
-                items
-                    .iter()
-                    .any(|item| item.as_symbol_name() == Some(":autoplay"))
-            })
-        {
-            spec.request.autoplay = true;
-        }
-        let resolved = params
-            .display_host
-            .request_video(spec.request)
-            .ok()
-            .flatten()?;
-        return Some((SurfaceChannelKind::Video, resolved.video_id));
+        let items = list_to_vec(value)?;
+        let video_id = match parse_video_display_reference(&items, true)? {
+            DisplayVideoReference::Session(id) => id,
+            DisplayVideoReference::Resolve(request) => {
+                params
+                    .display_host
+                    .request_video(request)
+                    .ok()
+                    .flatten()?
+                    .video_id
+            }
+        };
+        return Some((SurfaceChannelKind::Video, video_id.get()));
     }
     None
 }

@@ -1707,7 +1707,7 @@ fn add_image_appends_image_glyph() {
 #[test]
 fn add_video_appends_video_glyph() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.add_video(VideoId::new(7), 0.0, 0.0, 640.0, 480.0, 0, false);
+    buf.add_video(VideoId::new(7), 0.0, 0.0, 640.0, 480.0);
 
     match &buf.glyphs[0] {
         FrameGlyph::Video { video_id, .. } => assert_eq!(video_id.get(), 7),

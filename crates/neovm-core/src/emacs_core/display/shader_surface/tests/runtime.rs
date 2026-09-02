@@ -7,14 +7,18 @@
 
 use super::eval::{Context, DisplayHost, GuiFrameHostRequest, ShaderSurfaceCreateRequest};
 use super::value::Value;
+use neomacs_display_protocol::VideoId;
+use neomacs_video_model::VideoOpenRequest;
 use std::sync::{Arc, Mutex};
 
 const STUB_SURFACE_ID: u32 = 42;
+const STUB_VIDEO_ID: VideoId = VideoId::new(73);
 
 /// Stub host: creation always yields `STUB_SURFACE_ID`; uniform writes and
 /// destroys are recorded so tests can assert which ids reached the host.
 #[derive(Clone, Default)]
 struct RecordingSurfaceDisplayHost {
+    surfaces: Arc<Mutex<Vec<ShaderSurfaceCreateRequest>>>,
     uniforms: Arc<Mutex<Vec<(u32, String)>>>,
     destroys: Arc<Mutex<Vec<u32>>>,
 }
@@ -28,8 +32,16 @@ impl DisplayHost for RecordingSurfaceDisplayHost {
         Ok(())
     }
 
-    fn create_shader_surface(&self, _request: ShaderSurfaceCreateRequest) -> Result<u32, String> {
+    fn create_shader_surface(&self, request: ShaderSurfaceCreateRequest) -> Result<u32, String> {
+        self.surfaces
+            .lock()
+            .expect("surface host requests")
+            .push(request);
         Ok(STUB_SURFACE_ID)
+    }
+
+    fn create_video(&self, _request: VideoOpenRequest) -> Result<VideoId, String> {
+        Ok(STUB_VIDEO_ID)
     }
 
     fn set_shader_surface_uniform(
@@ -169,5 +181,32 @@ fn explicit_destroy_then_gc_double_free_is_delivered_but_harmless() {
     assert_eq!(
         *host.destroys.lock().expect("surface host destroys"),
         vec![STUB_SURFACE_ID, STUB_SURFACE_ID]
+    );
+}
+
+#[test]
+fn video_channel_reuses_an_opaque_video_handle() {
+    crate::test_utils::init_test_tracing();
+    let (mut ctx, host) = surface_context();
+
+    eval(
+        &mut ctx,
+        r#"
+(progn
+  (setq surface-video-handle (neomacs-video-load "movie.mp4"))
+  (neomacs-surface-create
+   :width 8 :height 8 :shader "stub"
+   :channel0 (list 'video :id surface-video-handle)))
+"#,
+    );
+
+    let surfaces = host.surfaces.lock().expect("surface host requests");
+    let channel0 = surfaces.last().and_then(|request| match &request.content {
+        super::eval::ShaderSurfaceContent::Shader { channel0, .. } => *channel0,
+        super::eval::ShaderSurfaceContent::Pixels { .. } => None,
+    });
+    assert_eq!(
+        channel0,
+        Some((super::eval::SurfaceChannelKind::Video, STUB_VIDEO_ID.get()))
     );
 }

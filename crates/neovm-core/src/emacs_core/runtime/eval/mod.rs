@@ -2156,7 +2156,7 @@ pub struct VideoResolveRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResolvedVideo {
-    pub video_id: u32,
+    pub video_id: neomacs_display_protocol::VideoId,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -9061,6 +9061,7 @@ impl Context {
         // `garbage-collect` and the safe-point paths above), so this is the
         // single drain point for `TaggedHeap::pending_surface_destroys`.
         self.drain_pending_surface_destroys();
+        self.drain_pending_video_destroys();
         // GNU `garbage_collect` runs the doomed finalizers before
         // `post-gc-hook`.
         self.run_doomed_finalizers();
@@ -9456,6 +9457,25 @@ impl Context {
         for id in ids {
             if let Err(err) = host.destroy_shader_surface(id) {
                 tracing::debug!("gc surface destroy {id} failed: {err}");
+            }
+        }
+    }
+
+    /// Close every video session whose final Lisp handle was swept by the
+    /// just-finished collection. As with shader surfaces, this is best-effort:
+    /// losing the GUI host already tears down the renderer that owns the
+    /// corresponding sessions.
+    fn drain_pending_video_destroys(&mut self) {
+        let ids = self.tagged_heap.take_pending_video_destroys();
+        if ids.is_empty() {
+            return;
+        }
+        let Some(host) = self.display_host.as_ref() else {
+            return;
+        };
+        for id in ids {
+            if let Err(err) = host.destroy_video(id) {
+                tracing::debug!(video_id = id.get(), "gc video destroy failed: {err}");
             }
         }
     }

@@ -1749,7 +1749,9 @@ impl DisplayHost for RecordingImageDisplayHost {
             .lock()
             .expect("video requests lock")
             .push(request);
-        Ok(Some(ResolvedVideo { video_id: 88 }))
+        Ok(Some(ResolvedVideo {
+            video_id: neomacs_display_protocol::VideoId::new(88),
+        }))
     }
 
     fn request_webkit(
@@ -2780,7 +2782,7 @@ impl GlyphTrace {
             GlyphType::Stretch { width_cols } => GlyphKindTrace::Stretch(*width_cols),
             GlyphType::Image { image_id, .. } => GlyphKindTrace::Image(*image_id),
             GlyphType::Surface { surface_id, .. } => GlyphKindTrace::Surface(*surface_id),
-            GlyphType::Video { video_id, .. } => GlyphKindTrace::Image(*video_id),
+            GlyphType::Video { video_id, .. } => GlyphKindTrace::Image(video_id.get() as i32),
             GlyphType::Xwidget { xwidget_id, .. } => GlyphKindTrace::Image(xwidget_id.get() as i32),
             GlyphType::Glyphless { ch } => GlyphKindTrace::Glyphless(*ch),
         };
@@ -13278,7 +13280,7 @@ fn layout_frame_rust_emits_inline_video_glyphs_for_display_video_specs() {
         .as_ref()
         .expect("frame display state");
     let presentation = state.materialize();
-    let (video_id, width, height, loop_count, autoplay, slot_id) = presentation
+    let (video_id, width, height, slot_id) = presentation
         .glyphs
         .iter()
         .find_map(|glyph| match glyph {
@@ -13286,19 +13288,15 @@ fn layout_frame_rust_emits_inline_video_glyphs_for_display_video_specs() {
                 video_id,
                 width,
                 height,
-                loop_count,
-                autoplay,
                 slot_id,
                 ..
-            } => Some((*video_id, *width, *height, *loop_count, *autoplay, *slot_id)),
+            } => Some((*video_id, *width, *height, *slot_id)),
             _ => None,
         })
         .expect("inline video glyph");
     assert_eq!(video_id.get(), 88);
     assert_eq!(width, 80.0);
     assert_eq!(height, 45.0);
-    assert_eq!(loop_count, -1);
-    assert!(autoplay);
     let replacement = assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 80);
     let slot_id = slot_id.expect("video slot id");
     assert_eq!(i64::from(slot_id.col), replacement.col);

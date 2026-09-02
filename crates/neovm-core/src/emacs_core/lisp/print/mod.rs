@@ -1163,6 +1163,10 @@ fn write_value_stateful_inner(
             let id = value.as_surface_handle().unwrap();
             write!(out, "#<neomacs-surface {id}>").unwrap();
         }
+        ValueKind::Veclike(VecLikeType::VideoHandle) => {
+            let id = value.as_video_handle().unwrap();
+            write!(out, "#<neomacs-video {id}>").unwrap();
+        }
         ValueKind::Veclike(VecLikeType::Bignum) => {
             // GNU `print_object` formats bignums via `mpz_get_str`
             // (`src/print.c` PRINT_INTEGER branch). `malachite::Integer`'s
@@ -2121,6 +2125,10 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
         ValueKind::Veclike(VecLikeType::SurfaceHandle) => {
             let id = value.as_surface_handle().unwrap();
             out.extend_from_slice(format!("#<neomacs-surface {id}>").as_bytes());
+        }
+        ValueKind::Veclike(VecLikeType::VideoHandle) => {
+            let id = value.as_video_handle().unwrap();
+            out.extend_from_slice(format!("#<neomacs-video {id}>").as_bytes());
         }
         ValueKind::Veclike(VecLikeType::Bignum) => {
             out.extend_from_slice(value.as_bignum().unwrap().to_string().as_bytes());

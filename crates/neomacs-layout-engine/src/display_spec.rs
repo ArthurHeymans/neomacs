@@ -7,8 +7,7 @@
 
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::{
-    ShaderSurfaceLanguage, SurfaceResolveRequest, VideoResolveRequest, VideoResolveSource,
-    WebKitResolveRequest, WebKitResolveSource,
+    ShaderSurfaceLanguage, SurfaceResolveRequest, WebKitResolveRequest, WebKitResolveSource,
 };
 use neovm_core::emacs_core::image::{
     ImageSpecKey, image_frame_index_from_lisp, image_mask_policy_from_items,
@@ -20,6 +19,7 @@ use neovm_core::emacs_core::image_catalog::{
     ImageSpecIdentity, numeric_image_scale,
 };
 use neovm_core::emacs_core::value::{ValueKind, list_to_vec};
+use neovm_core::emacs_core::video::{VideoDisplayReference, parse_video_display_reference};
 use neovm_core::face::Color as LispColor;
 use strum::{EnumString, IntoStaticStr};
 
@@ -383,13 +383,13 @@ impl DisplayImageAscentPolicy {
 
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayVideoLayout {
-    pub(crate) request: VideoResolveRequest,
+    pub(crate) reference: DisplayVideoReference,
     pub(crate) width: f32,
     pub(crate) height: f32,
-    pub(crate) loop_count: i32,
-    pub(crate) autoplay: bool,
     pub(crate) opacity: f32,
 }
+
+pub(crate) type DisplayVideoReference = VideoDisplayReference;
 
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayWebKitLayout {
@@ -592,26 +592,14 @@ pub(crate) fn parse_display_video_layout(
         return None;
     }
 
-    let mut source = None;
     let mut width = fallback_width.max(1.0);
     let mut height = fallback_height.max(1.0);
-    let mut loop_count = 0;
-    let mut autoplay = false;
     let mut opacity = 1.0;
 
     let mut i = 1usize;
     while i + 1 < items.len() {
         let value = items[i + 1];
         match DisplayMediaKey::from_lisp_value(items[i]) {
-            Some(DisplayMediaKey::File) => {
-                source = value
-                    .as_lisp_string()
-                    .cloned()
-                    .map(VideoResolveSource::File);
-            }
-            Some(DisplayMediaKey::Uri) => {
-                source = value.as_lisp_string().cloned().map(VideoResolveSource::Uri);
-            }
             Some(DisplayMediaKey::Width) => {
                 if let Some(parsed) = parse_image_dimension(value) {
                     width = parsed.max(1) as f32;
@@ -621,12 +609,6 @@ pub(crate) fn parse_display_video_layout(
                 if let Some(parsed) = parse_image_dimension(value) {
                     height = parsed.max(1) as f32;
                 }
-            }
-            Some(DisplayMediaKey::Loop | DisplayMediaKey::LoopCount) => {
-                loop_count = parse_video_loop_count(value);
-            }
-            Some(DisplayMediaKey::Autoplay) => {
-                autoplay = parse_boolish(value);
             }
             Some(DisplayMediaKey::Opacity) => {
                 if let Some(number) = value.as_number_f64().filter(|number| number.is_finite()) {
@@ -638,16 +620,11 @@ pub(crate) fn parse_display_video_layout(
         i += 2;
     }
 
+    let reference = parse_video_display_reference(&items, false)?;
     Some(DisplayVideoLayout {
-        request: VideoResolveRequest {
-            source: source?,
-            loop_count,
-            autoplay,
-        },
+        reference,
         width,
         height,
-        loop_count,
-        autoplay,
         opacity,
     })
 }
@@ -945,16 +922,6 @@ fn parse_image_color_pixel(value: Value) -> Option<u32> {
 
 fn parse_boolish(value: Value) -> bool {
     !value.is_nil()
-}
-
-fn parse_video_loop_count(value: Value) -> i32 {
-    if value.is_nil() {
-        return 0;
-    }
-    if value.is_symbol_named("t") {
-        return -1;
-    }
-    value.as_int().unwrap_or(-1) as i32
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]

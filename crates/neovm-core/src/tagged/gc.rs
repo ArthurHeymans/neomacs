@@ -3355,6 +3355,9 @@ pub struct TaggedHeap {
     /// need marking; a double destroy is harmless (the render-thread free of
     /// a missing id is a no-op).
     pending_surface_destroys: Vec<u32>,
+    /// Stable video ids of `VideoObj` handles reclaimed by the sweep. The
+    /// evaluator drains these after collection through `DisplayHost`.
+    pending_video_destroys: Vec<neomacs_display_protocol::VideoId>,
 
     /// Reclaimed cons cells threaded through the dead cells themselves,
     /// matching GNU alloc.c's `cons_free_list`.
@@ -3759,6 +3762,7 @@ impl TaggedHeap {
             finalizer_registry: Vec::new(),
             doomed_finalizer_functions: Vec::new(),
             pending_surface_destroys: Vec::new(),
+            pending_video_destroys: Vec::new(),
             cons_free_list: std::ptr::null_mut(),
             float_arena: ObjectArena::new(),
             string_arena: ObjectArena::new(),
@@ -4468,6 +4472,7 @@ impl TaggedHeap {
                         VecLikeType::Xwidget => size_of::<XwidgetObj>(),
                         VecLikeType::XwidgetView => size_of::<XwidgetViewObj>(),
                         VecLikeType::SurfaceHandle => size_of::<SurfaceObj>(),
+                        VecLikeType::VideoHandle => size_of::<VideoObj>(),
                         VecLikeType::Subr => size_of::<SubrObj>(),
                         VecLikeType::Bignum => size_of::<BignumObj>(),
                         VecLikeType::SymbolWithPos => size_of::<SymbolWithPosObj>(),
@@ -4655,6 +4660,7 @@ impl TaggedHeap {
                     VecLikeType::ByteCode => "bytecode",
                     VecLikeType::Timer => "timer",
                     VecLikeType::SurfaceHandle => "surface-handle",
+                    VecLikeType::VideoHandle => "video-handle",
                 },
             }
         }
@@ -5330,11 +5336,32 @@ impl TaggedHeap {
         unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
     }
 
+    /// Allocate a GC-managed video-session handle.
+    pub fn alloc_video_handle(
+        &mut self,
+        video_id: neomacs_display_protocol::VideoId,
+    ) -> TaggedValue {
+        let obj = Box::new(VideoObj {
+            header: VecLikeHeader::new(VecLikeType::VideoHandle),
+            video_id,
+        });
+        let ptr = Box::into_raw(obj);
+        self.link_veclike(ptr as *mut VecLikeHeader);
+        self.allocated_count += 1;
+        self.note_allocation_bytes(size_of::<VideoObj>());
+        unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
+    }
+
     /// Take the surface ids of handles the sweep reclaimed since the last
     /// drain. The evaluator's cycle-completed block queues a best-effort
     /// `DisplayHost::destroy_shader_surface` for each.
     pub fn take_pending_surface_destroys(&mut self) -> Vec<u32> {
         std::mem::take(&mut self.pending_surface_destroys)
+    }
+
+    /// Take video ids whose last Lisp handle was reclaimed by the sweep.
+    pub fn take_pending_video_destroys(&mut self) -> Vec<neomacs_display_protocol::VideoId> {
+        std::mem::take(&mut self.pending_video_destroys)
     }
 
     /// Allocate an xwidget view object.
@@ -6904,7 +6931,7 @@ impl TaggedHeap {
                     out.extend([o.model, o.window]);
                 }
                 // Buffer/Window/Frame/Timer/Process/Terminal/Marker/Subr/
-                // Bignum/Sqlite/UserPtr/SurfaceHandle have no Value children
+                // Bignum/Sqlite/UserPtr/SurfaceHandle/VideoHandle have no Value children
                 // to trace (mirrors trace_veclike).
                 VecLikeType::Buffer
                 | VecLikeType::Window
@@ -6917,7 +6944,8 @@ impl TaggedHeap {
                 | VecLikeType::Bignum
                 | VecLikeType::Sqlite
                 | VecLikeType::UserPtr
-                | VecLikeType::SurfaceHandle => {}
+                | VecLikeType::SurfaceHandle
+                | VecLikeType::VideoHandle => {}
             }
         }
         out
@@ -8952,7 +8980,8 @@ impl TaggedHeap {
             | VecLikeType::Bignum
             | VecLikeType::Sqlite
             | VecLikeType::UserPtr
-            | VecLikeType::SurfaceHandle => {
+            | VecLikeType::SurfaceHandle
+            | VecLikeType::VideoHandle => {
                 // These have no Value children to trace.
                 //
                 // Bignums own a `malachite::Integer`, which manages
@@ -8962,7 +8991,7 @@ impl TaggedHeap {
                 // UserPtr has only a raw C pointer and finalizer, no
                 // Lisp children.
                 //
-                // SurfaceHandle holds only a plain u32 surface id.
+                // SurfaceHandle and VideoHandle contain only typed ids.
             }
         }
     }
@@ -9264,6 +9293,12 @@ impl TaggedHeap {
                         let obj = ptr as *mut SurfaceObj;
                         let surface_id = unsafe { (*obj).surface_id };
                         self.pending_surface_destroys.push(surface_id);
+                        unsafe { drop(Box::from_raw(obj)) };
+                    }
+                    VecLikeType::VideoHandle => {
+                        let obj = ptr as *mut VideoObj;
+                        let video_id = unsafe { (*obj).video_id };
+                        self.pending_video_destroys.push(video_id);
                         unsafe { drop(Box::from_raw(obj)) };
                     }
                     VecLikeType::Subr => unsafe { drop(Box::from_raw(ptr as *mut SubrObj)) },
@@ -9871,6 +9906,7 @@ pub(crate) mod alloc_probe {
         ByteCode => ("ByteCode", super::ByteCodeObj),
         Timer => ("Timer", super::TimerObj),
         SurfaceHandle => ("SurfaceHandle", super::SurfaceObj),
+        VideoHandle => ("VideoHandle", super::VideoObj),
     }
     /// Histogram bucket upper bounds (bytes).
     pub(crate) const BUCKET_LABELS: [&str; N_BUCKETS] = [
@@ -9920,6 +9956,7 @@ pub(crate) mod alloc_probe {
                     VecLikeType::ByteCode => AllocKind::ByteCode,
                     VecLikeType::Timer => AllocKind::Timer,
                     VecLikeType::SurfaceHandle => AllocKind::SurfaceHandle,
+                    VecLikeType::VideoHandle => AllocKind::VideoHandle,
                 }
             }
         };

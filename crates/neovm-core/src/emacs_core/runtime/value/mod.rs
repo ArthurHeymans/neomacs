@@ -33,8 +33,8 @@ use crate::tagged::gc::{
 use crate::tagged::header::{
     BufferObj, ByteCodeObj, CHAR_TABLE_TOP_SLOTS, CharTableObj, ConsCell, FontObj, FontObjectData,
     FrameObj, HashTableObj, LambdaObj, LispValueSlice, MacroObj, MarkerObj, ObarrayObj, OverlayObj,
-    ProcessObj, RecordObj, SubCharTableObj, SurfaceObj, TimerObj, VectorObj, WindowObj, XwidgetObj,
-    XwidgetViewObj,
+    ProcessObj, RecordObj, SubCharTableObj, SurfaceObj, TimerObj, VectorObj, VideoObj, WindowObj,
+    XwidgetObj, XwidgetViewObj,
 };
 use crate::tagged::mutate;
 use crate::tagged::value::{TAG_BITS, TAG_MASK, TaggedValue};
@@ -1955,6 +1955,12 @@ impl TaggedValue {
         with_tagged_heap(|h| h.alloc_surface_handle(surface_id))
     }
 
+    /// Allocate a GC-managed video-session handle. The stable `VideoId` is
+    /// destroyed through the display host when Lisp drops the final reference.
+    pub fn make_video_handle(video_id: neomacs_display_protocol::VideoId) -> Self {
+        with_tagged_heap(|h| h.alloc_video_handle(video_id))
+    }
+
     /// Allocate an opaque SQLite database or statement object.
     pub(crate) fn make_sqlite(is_statement: bool, id: i64) -> Self {
         with_tagged_heap(|h| h.alloc_sqlite(is_statement, id))
@@ -2038,6 +2044,12 @@ impl TaggedValue {
     #[inline]
     pub fn is_surface_handle(self) -> bool {
         self.veclike_type() == Some(VecLikeType::SurfaceHandle)
+    }
+
+    /// Check if this is a GC-managed video-session handle.
+    #[inline]
+    pub fn is_video_handle(self) -> bool {
+        self.veclike_type() == Some(VecLikeType::VideoHandle)
     }
 
     // -- Data accessors for heap types --
@@ -2527,6 +2539,16 @@ impl TaggedValue {
         if self.is_surface_handle() {
             let ptr = self.as_veclike_ptr().unwrap() as *const SurfaceObj;
             Some(unsafe { (*ptr).surface_id })
+        } else {
+            None
+        }
+    }
+
+    /// Get the stable protocol id from a video-session handle.
+    pub fn as_video_handle(self) -> Option<neomacs_display_protocol::VideoId> {
+        if self.is_video_handle() {
+            let ptr = self.as_veclike_ptr().unwrap() as *const VideoObj;
+            Some(unsafe { (*ptr).video_id })
         } else {
             None
         }

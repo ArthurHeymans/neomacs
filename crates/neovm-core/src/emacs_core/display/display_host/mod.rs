@@ -17,7 +17,8 @@ use crate::buffer::BufferId;
 use crate::face::{Face as RuntimeFace, FaceHeight};
 use crate::heap_types::LispString;
 use crate::window::FrameFullscreen;
-use neomacs_display_protocol::WebViewId;
+use neomacs_display_protocol::{VideoId, WebViewId};
+use neomacs_video_model::{PlaybackAction, VideoOpenRequest};
 
 /// Evaluator-owned correlation ID for one asynchronous xwidget script call.
 ///
@@ -404,6 +405,18 @@ pub trait DisplayHost {
         _request: VideoResolveRequest,
     ) -> Result<Option<ResolvedVideo>, String> {
         Ok(None)
+    }
+    /// Create a Lisp-managed video session and return its stable protocol id.
+    fn create_video(&self, _request: VideoOpenRequest) -> Result<VideoId, String> {
+        Err("video sessions are unsupported by this display host".to_owned())
+    }
+    /// Apply one typed playback action to a Lisp-managed video session.
+    fn control_video(&self, _id: VideoId, _action: PlaybackAction) -> Result<(), String> {
+        Err("video sessions are unsupported by this display host".to_owned())
+    }
+    /// Close a Lisp-managed video session and release its renderer resources.
+    fn destroy_video(&self, _id: VideoId) -> Result<(), String> {
+        Ok(())
     }
     fn request_webkit(
         &self,

@@ -116,7 +116,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-use neomacs_display_protocol::{VisualConfig, WebViewId};
+use neomacs_display_protocol::{VideoId, VisualConfig, WebViewId};
 use neomacs_display_runtime::display_scale::observe_event_loop_display;
 #[cfg(not(feature = "neo-term"))]
 use neomacs_display_runtime::render_thread::run_render_loop_current_thread;
@@ -133,8 +133,8 @@ use neomacs_display_runtime::shader_surface::{
 use neomacs_display_runtime::thread_comm::{
     AssetCommand, ClipboardCommand, ClipboardSelection, ConfigCommand, EmacsComms, FrameRef,
     FrameShaderAvailability, FrameShaderExecution, FrameShaderRequestId,
-    InputEvent as DisplayInputEvent, LifecycleCommand, MediaSource, RenderCommand,
-    SharedRenderCapabilities, SurfaceSource, ThreadComms, UiCommand, WindowCommand,
+    InputEvent as DisplayInputEvent, LifecycleCommand, RenderCommand, SharedRenderCapabilities,
+    SurfaceSource, ThreadComms, UiCommand, VideoSessionCommand, WindowCommand,
     WindowFullscreenMode,
 };
 #[cfg(feature = "neo-term")]
@@ -148,6 +148,9 @@ use neomacs_layout_engine::font::sizing::{
 };
 use neomacs_layout_engine::gui_chrome::{
     collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items, compact_bar_mode_enabled,
+};
+use neomacs_video_model::{
+    InitialPlayback, LoopMode, PlaybackAction, VideoOpenRequest, VideoSource,
 };
 use neomacs_webview::{
     BrowsingRelationship, NavigationTarget, ScriptRequest, ScriptRequestId, ScriptWorld,
@@ -1200,8 +1203,32 @@ static HOST_VIDEO_ID_ALLOCATOR: AtomicU32 = AtomicU32::new(HOST_VIDEO_ID_START);
 const HOST_WEBKIT_ID_START: u32 = 0x6000_0000;
 static HOST_WEBKIT_ID_ALLOCATOR: AtomicU32 = AtomicU32::new(HOST_WEBKIT_ID_START);
 
-fn next_host_video_id() -> u32 {
-    HOST_VIDEO_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
+fn next_host_video_id() -> VideoId {
+    VideoId::new(HOST_VIDEO_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed))
+}
+
+fn video_open_request(request: &VideoResolveRequest) -> Result<VideoOpenRequest, String> {
+    let source = match &request.source {
+        VideoResolveSource::File(path) => VideoSource::File(
+            path.as_utf8_str()
+                .ok_or_else(|| "video file path must be UTF-8".to_owned())?
+                .into(),
+        ),
+        VideoResolveSource::Uri(uri) => VideoSource::Uri(
+            uri.as_utf8_str()
+                .ok_or_else(|| "video URI must be UTF-8".to_owned())?
+                .to_owned(),
+        ),
+    };
+    Ok(VideoOpenRequest {
+        source,
+        loop_mode: LoopMode::from_legacy(request.loop_count).map_err(|error| error.to_string())?,
+        initial_playback: if request.autoplay {
+            InitialPlayback::Playing
+        } else {
+            InitialPlayback::Paused
+        },
+    })
 }
 
 fn next_host_webkit_id() -> WebViewId {
@@ -1944,41 +1971,93 @@ impl DisplayHost for PrimaryWindowDisplayHost {
     }
 
     fn request_video(&self, request: VideoResolveRequest) -> Result<Option<ResolvedVideo>, String> {
-        {
-            let cache = match self.resolved_videos.lock() {
-                Ok(cache) => cache,
-                Err(poisoned) => poisoned.into_inner(),
-            };
-            if let Some(video) = cache.get(&request) {
-                return Ok(Some(video));
+        cfg_select! {
+            feature = "video" => {
+                {
+                    let cache = match self.resolved_videos.lock() {
+                        Ok(cache) => cache,
+                        Err(poisoned) => poisoned.into_inner(),
+                    };
+                    if let Some(video) = cache.get(&request) {
+                        return Ok(Some(video));
+                    }
+                }
+
+                let video_id = next_host_video_id();
+                let open = video_open_request(&request)?;
+                self.send_render_command(
+                    RenderCommand::Asset(AssetCommand::Video(VideoSessionCommand::Open {
+                        id: video_id,
+                        request: open,
+                    })),
+                    "failed to queue video create",
+                )?;
+
+                let resolved = ResolvedVideo { video_id };
+                match self.resolved_videos.lock() {
+                    Ok(mut cache) => cache.insert(request, resolved.clone()),
+                    Err(poisoned) => poisoned.into_inner().insert(request, resolved.clone()),
+                }
+                Ok(Some(resolved))
+            }
+            _ => {
+                let _ = request;
+                Ok(None)
             }
         }
+    }
 
-        let video_id = next_host_video_id();
-        let source = match &request.source {
-            VideoResolveSource::File(path) => {
-                MediaSource::File(path.as_utf8_str().unwrap_or_default().to_owned())
+    fn create_video(&self, request: VideoOpenRequest) -> Result<VideoId, String> {
+        cfg_select! {
+            feature = "video" => {
+                let id = next_host_video_id();
+                self.send_render_command(
+                    RenderCommand::Asset(AssetCommand::Video(VideoSessionCommand::Open {
+                        id,
+                        request,
+                    })),
+                    "failed to queue video open",
+                )?;
+                Ok(id)
             }
-            VideoResolveSource::Uri(uri) => {
-                MediaSource::Uri(uri.as_utf8_str().unwrap_or_default().to_owned())
+            _ => {
+                let _ = request;
+                Err("native video support is not compiled into this Neomacs build".to_owned())
             }
-        };
-        self.send_render_command(
-            RenderCommand::Asset(AssetCommand::VideoCreate {
-                id: video_id,
-                source,
-                loop_count: request.loop_count,
-                autoplay: request.autoplay,
-            }),
-            "failed to queue video create",
-        )?;
-
-        let resolved = ResolvedVideo { video_id };
-        match self.resolved_videos.lock() {
-            Ok(mut cache) => cache.insert(request, resolved.clone()),
-            Err(poisoned) => poisoned.into_inner().insert(request, resolved.clone()),
         }
-        Ok(Some(resolved))
+    }
+
+    fn control_video(&self, id: VideoId, action: PlaybackAction) -> Result<(), String> {
+        cfg_select! {
+            feature = "video" => {
+                self.send_render_command(
+                    RenderCommand::Asset(AssetCommand::Video(VideoSessionCommand::Control {
+                        id,
+                        action,
+                    })),
+                    "failed to queue video control",
+                )
+            }
+            _ => {
+                let _ = (id, action);
+                Err("native video support is not compiled into this Neomacs build".to_owned())
+            }
+        }
+    }
+
+    fn destroy_video(&self, id: VideoId) -> Result<(), String> {
+        cfg_select! {
+            feature = "video" => {
+                self.send_render_command(
+                    RenderCommand::Asset(AssetCommand::Video(VideoSessionCommand::Close { id })),
+                    "failed to queue video close",
+                )
+            }
+            _ => {
+                let _ = id;
+                Ok(())
+            }
+        }
     }
 
     fn request_webkit(

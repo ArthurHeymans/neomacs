@@ -4,8 +4,8 @@ use super::{
 };
 use neomacs_display_protocol::types::VideoId;
 use neomacs_video::{
-    MissingVideoPlugin, MissingVideoPlugins, VideoCommandError, VideoEvent, VideoInstallerHint,
-    VideoSessionState,
+    InitialPlayback, LoopMode, MissingVideoPlugin, MissingVideoPlugins, VideoCommandError,
+    VideoEvent, VideoInstallerHint, VideoOpenRequest, VideoSessionState, VideoSource,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -161,6 +161,50 @@ fn native_session_identity_is_distinct_from_stable_video_identity() {
             stable,
         ),
         VideoEvent::Ended { id: stable }
+    );
+}
+
+#[test]
+fn reopening_stable_session_detaches_the_previous_native_incarnation() {
+    let stable = VideoId::new(7);
+    let previous_native = NativeVideoSessionId(VideoId::new(41));
+    let mut cache = VideoCache {
+        sampling: None,
+        channel_targets: None,
+        system: VideoSystemState::unavailable("test fixture"),
+        videos: HashMap::from([(
+            stable,
+            CachedVideo {
+                id: stable,
+                width: 1920,
+                height: 1080,
+                state: VideoState::Playing,
+                frame_count: 3,
+                failure: None,
+                native_id: Some(previous_native),
+                parked: None,
+            },
+        )]),
+        next_id: 8,
+        next_native_id: 42,
+        native_to_video: HashMap::from([(previous_native, stable)]),
+        accounting: Vec::new(),
+        gpu_accounting: VideoGpuAccounting::default(),
+        last_service: Default::default(),
+    };
+
+    cache.open(
+        stable,
+        VideoOpenRequest {
+            source: VideoSource::Uri("https://example.com/reopened.mp4".to_owned()),
+            loop_mode: LoopMode::Off,
+            initial_playback: InitialPlayback::Paused,
+        },
+    );
+
+    assert!(
+        !cache.native_to_video.contains_key(&previous_native),
+        "replacing a stable session must not leave delayed events from its previous decoder routable"
     );
 }
 

@@ -11,11 +11,11 @@ use crate::display_text_output_install::install_display_row;
 use crate::font::metrics::FontMetrics;
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, LayoutBufferView};
-use neomacs_display_protocol::Rect;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::FaceId;
+use neomacs_display_protocol::{Rect, VideoId};
 use neovm_core::buffer::{CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::eval::{
     DisplayHost, GuiFrameHostRequest, ResolvedVideo, ResolvedWebKit, VideoResolveRequest,
@@ -209,7 +209,9 @@ impl DisplayHost for RecordingDisplayRowMediaHost {
             .lock()
             .expect("video requests lock")
             .push(request);
-        Ok(Some(ResolvedVideo { video_id: 84 }))
+        Ok(Some(ResolvedVideo {
+            video_id: VideoId::new(84),
+        }))
     }
 
     fn request_webkit(
@@ -1933,12 +1935,7 @@ fn render_lisp_string_row_resolves_video_display_property_through_display_host()
     let video = &rendered.row().glyphs[GlyphArea::Text.index()][1];
     assert!(matches!(
         video.glyph_type,
-        GlyphType::Video {
-            video_id: 84,
-            loop_count: -1,
-            autoplay: true,
-            ..
-        }
+        GlyphType::Video { video_id, .. } if video_id == VideoId::new(84)
     ));
     assert_eq!((video.pixel_width, video.pixel_height), (120.0, 45.0));
     assert_eq!(
@@ -1947,6 +1944,45 @@ fn render_lisp_string_row_resolves_video_display_property_through_display_host()
             .expect("video requests lock")
             .len(),
         1
+    );
+}
+
+#[test]
+fn render_lisp_string_row_uses_video_handle_without_resolving_a_second_session() {
+    let _eval = Context::new();
+    let handle = Value::make_video_handle(VideoId::new(73));
+    let rendered_text = Value::string_with_text_properties(
+        "AVB",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![
+                    Value::symbol("video"),
+                    Value::keyword("id"),
+                    handle,
+                    Value::keyword("width"),
+                    Value::fixnum(120),
+                    Value::keyword("height"),
+                    Value::fixnum(45),
+                ]),
+            ]),
+        }],
+    );
+    let (rendered, host) = render_tab_line_with_media_host(rendered_text, 0x00FFFFFF, 0x00000000);
+
+    let video = &rendered.row().glyphs[GlyphArea::Text.index()][1];
+    assert!(matches!(
+        video.glyph_type,
+        GlyphType::Video { video_id, .. } if video_id == VideoId::new(73)
+    ));
+    assert!(
+        host.video_requests
+            .lock()
+            .expect("video requests lock")
+            .is_empty(),
+        "a display property referencing a session must not open another session"
     );
 }
 

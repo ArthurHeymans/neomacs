@@ -1,6 +1,6 @@
 use super::*;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
-use neomacs_display_protocol::types::FaceId;
+use neomacs_display_protocol::types::{FaceId, VideoId};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
 
 fn buffer_span(buffer_id: BufferId, start_char: usize, end_char: usize) -> SourceSpan {
@@ -79,11 +79,9 @@ fn display_item_inline_media_slots_are_source_neutral() {
         span.clone(),
         RenderFaceRef::Inherit,
         DisplayItemKind::MediaReplacement(DisplayMediaReplacement::video(DisplayVideoItem {
-            video_id: 43,
+            video_id: VideoId::new(43),
             width: 80.0,
             height: 45.0,
-            loop_count: -1,
-            autoplay: true,
             opacity: 0.75,
         })),
     );
@@ -114,11 +112,9 @@ fn display_item_inline_media_slots_are_source_neutral() {
     assert_eq!(
         video.kind,
         DisplayItemKind::MediaReplacement(DisplayMediaReplacement::video(DisplayVideoItem {
-            video_id: 43,
+            video_id: VideoId::new(43),
             width: 80.0,
             height: 45.0,
-            loop_count: -1,
-            autoplay: true,
             opacity: 0.75,
         }))
     );

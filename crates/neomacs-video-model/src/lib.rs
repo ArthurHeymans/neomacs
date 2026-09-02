@@ -87,6 +87,18 @@ pub enum InitialPlayback {
     Paused,
 }
 
+/// Immutable parameters required to allocate one stable video session.
+///
+/// The host supplies the [`VideoId`]; native decoder incarnations use a
+/// separate identity internal to `neomacs-video` so device recovery cannot
+/// accidentally make stale native events address the replacement session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VideoOpenRequest {
+    pub source: VideoSource,
+    pub initial_playback: InitialPlayback,
+    pub loop_mode: LoopMode,
+}
+
 /// Media timeline position in nanoseconds.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MediaTime(u64);

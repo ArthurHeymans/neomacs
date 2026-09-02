@@ -198,8 +198,6 @@ fn make_video_frame(frame_id: u64, parent_id: u64, video_id: u32) -> FrameGlyphB
         0.0,
         16.0,
         16.0,
-        0,
-        true,
     );
     frame
 }

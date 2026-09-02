@@ -1,7 +1,13 @@
 use super::*;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
-use neomacs_display_protocol::{ImageId, ImageLoadAttempt, ImageLoadToken, ImageStateEvent};
+use neomacs_display_protocol::{
+    ImageId, ImageLoadAttempt, ImageLoadToken, ImageStateEvent, VideoId,
+};
+use neomacs_video_model::{
+    InitialPlayback, LoopMode, PlaybackAction, VideoOpenRequest, VideoSource,
+};
+use std::path::PathBuf;
 
 fn test_image_load(image: u32, attempt: u64) -> ImageLoadToken {
     ImageLoadToken::new(
@@ -1339,46 +1345,46 @@ fn render_command_set_child_frame_style() {
 
 #[test]
 fn render_command_video_lifecycle() {
-    let create = RenderCommand::Asset(AssetCommand::VideoCreate {
-        id: 1,
-        source: MediaSource::File("/home/user/video.mp4".to_string()),
-        loop_count: -1,
-        autoplay: true,
-    });
+    let id = VideoId::new(1);
+    let create = RenderCommand::Asset(AssetCommand::Video(VideoSessionCommand::Open {
+        id,
+        request: VideoOpenRequest {
+            source: VideoSource::File(PathBuf::from("/home/user/video.mp4")),
+            loop_mode: LoopMode::Infinite,
+            initial_playback: InitialPlayback::Playing,
+        },
+    }));
     match create {
-        RenderCommand::Asset(AssetCommand::VideoCreate {
-            id,
-            source,
-            loop_count,
-            autoplay,
-        }) => {
-            assert_eq!(id, 1);
+        RenderCommand::Asset(AssetCommand::Video(VideoSessionCommand::Open { id, request })) => {
+            assert_eq!(id, VideoId::new(1));
             assert!(matches!(
-                source,
-                MediaSource::File(path) if path == "/home/user/video.mp4"
+                request.source,
+                VideoSource::File(path) if path == PathBuf::from("/home/user/video.mp4")
             ));
-            assert_eq!(loop_count, -1);
-            assert!(autoplay);
+            assert_eq!(request.loop_mode, LoopMode::Infinite);
+            assert_eq!(request.initial_playback, InitialPlayback::Playing);
         }
-        other => panic!("Expected VideoCreate, got {:?}", other),
+        other => panic!("expected typed video open, got {other:?}"),
     }
 
-    let play = RenderCommand::Asset(AssetCommand::VideoPlay { id: 1 });
+    let play = RenderCommand::Asset(AssetCommand::Video(VideoSessionCommand::Control {
+        id,
+        action: PlaybackAction::Play,
+    }));
     match play {
-        RenderCommand::Asset(AssetCommand::VideoPlay { id }) => assert_eq!(id, 1),
-        other => panic!("Expected VideoPlay, got {:?}", other),
+        RenderCommand::Asset(AssetCommand::Video(VideoSessionCommand::Control {
+            id,
+            action: PlaybackAction::Play,
+        })) => assert_eq!(id, VideoId::new(1)),
+        other => panic!("expected typed video control, got {other:?}"),
     }
 
-    let pause = RenderCommand::Asset(AssetCommand::VideoPause { id: 1 });
-    match pause {
-        RenderCommand::Asset(AssetCommand::VideoPause { id }) => assert_eq!(id, 1),
-        other => panic!("Expected VideoPause, got {:?}", other),
-    }
-
-    let destroy = RenderCommand::Asset(AssetCommand::VideoDestroy { id: 1 });
+    let destroy = RenderCommand::Asset(AssetCommand::Video(VideoSessionCommand::Close { id }));
     match destroy {
-        RenderCommand::Asset(AssetCommand::VideoDestroy { id }) => assert_eq!(id, 1),
-        other => panic!("Expected VideoDestroy, got {:?}", other),
+        RenderCommand::Asset(AssetCommand::Video(VideoSessionCommand::Close { id })) => {
+            assert_eq!(id, VideoId::new(1));
+        }
+        other => panic!("expected typed video close, got {other:?}"),
     }
 }
 

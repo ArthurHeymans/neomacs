@@ -47,10 +47,8 @@ pub enum GlyphType {
     /// Inline video, represented by the same row primitive that reserves its
     /// layout slot.
     Video {
-        video_id: i32,
+        video_id: VideoId,
         width_cols: u16,
-        loop_count: i32,
-        autoplay: bool,
         opacity: f32,
     },
     /// Inline native/web widget.
@@ -1008,15 +1006,11 @@ impl GlyphRow {
                     GlyphType::Video {
                         video_id,
                         width_cols,
-                        loop_count,
-                        autoplay,
                         opacity,
                     } => {
                         0x6000_0000
-                            ^ (*video_id as u64)
+                            ^ u64::from(video_id.get())
                             ^ u64::from(*width_cols).rotate_left(5)
-                            ^ (*loop_count as u64).rotate_left(11)
-                            ^ u64::from(*autoplay).rotate_left(23)
                             ^ u64::from(opacity.to_bits()).rotate_left(29)
                     }
                     GlyphType::Xwidget {
@@ -3051,11 +3045,7 @@ impl FrameDisplayState {
                         });
                     }
                     GlyphType::Video {
-                        video_id,
-                        loop_count,
-                        autoplay,
-                        opacity,
-                        ..
+                        video_id, opacity, ..
                     } => {
                         let layout_height = if glyph.pixel_height > 0.0 {
                             glyph.pixel_height
@@ -3077,13 +3067,11 @@ impl FrameDisplayState {
                             row_role,
                             clip_rect,
                             slot_id: Some(slot_id),
-                            video_id: VideoId::new(*video_id as u32),
+                            video_id: *video_id,
                             x,
                             y: baseline - layout_ascent + glyph.vertical_offset_px,
                             width: materialized_width,
                             height: layout_height,
-                            loop_count: *loop_count,
-                            autoplay: *autoplay,
                             opacity: *opacity,
                             face_id: glyph.face_id,
                             box_vertical_edges: glyph.box_vertical_edges,

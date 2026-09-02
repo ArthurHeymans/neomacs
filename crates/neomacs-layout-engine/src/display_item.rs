@@ -1270,11 +1270,9 @@ pub(crate) struct DisplayImageItem {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayVideoItem {
-    pub(crate) video_id: i32,
+    pub(crate) video_id: neomacs_display_protocol::VideoId,
     pub(crate) width: f32,
     pub(crate) height: f32,
-    pub(crate) loop_count: i32,
-    pub(crate) autoplay: bool,
     pub(crate) opacity: f32,
 }
 
@@ -1318,9 +1316,7 @@ pub(crate) enum DisplayMediaReplacementKind {
     /// emitted.
     EmptyImageSlice,
     Video {
-        video_id: u32,
-        loop_count: i32,
-        autoplay: bool,
+        video_id: neomacs_display_protocol::VideoId,
         opacity: f32,
     },
     Xwidget {
@@ -1429,9 +1425,7 @@ impl DisplayMediaReplacement {
     pub(crate) fn video(video: DisplayVideoItem) -> Self {
         Self {
             kind: DisplayMediaReplacementKind::Video {
-                video_id: video.video_id.max(0) as u32,
-                loop_count: video.loop_count,
-                autoplay: video.autoplay,
+                video_id: video.video_id,
                 opacity: video.opacity,
             },
             width: display_replacement_dimension(video.width),

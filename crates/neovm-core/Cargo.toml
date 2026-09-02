@@ -10,6 +10,7 @@ description = "Core runtime structures for NeoVM"
 [dependencies]
 neovm-host-abi.workspace = true
 neomacs-display-protocol.workspace = true
+neomacs-video-model.workspace = true
 enumflags2.workspace = true
 crossbeam-channel.workspace = true
 libc.workspace = true
