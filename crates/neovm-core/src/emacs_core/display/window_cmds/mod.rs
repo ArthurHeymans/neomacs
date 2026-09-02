@@ -4268,6 +4268,64 @@ pub(crate) fn builtin_previous_window(
     let prev = if idx == 0 { list.len() - 1 } else { idx - 1 };
     Ok(window_value(list[prev]))
 }
+/// Redisplay obligations produced by one successful `set-window-buffer`.
+///
+/// GNU's `set_window_buffer` always calls `wset_update_mode_line`; changing an
+/// ordinary window's buffer additionally records `FRAME_WINDOW_CHANGE`, while
+/// minibuffer windows are deliberately excluded (window.c).  Keeping those
+/// cases as an enum prevents the ordinary-window menu invalidation from being
+/// lost when the structural mutation is performed through split Rust borrows.
+#[must_use = "a window-buffer transition must publish its redisplay effects"]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WindowBufferDisplayEffect {
+    SameBuffer(crate::window::WindowId),
+    MinibufferChanged(crate::window::WindowId),
+    OrdinaryWindowChanged(crate::window::WindowId),
+}
+
+impl WindowBufferDisplayEffect {
+    fn classify(window: crate::window::WindowId, changed: bool, minibuffer_window: bool) -> Self {
+        match (changed, minibuffer_window) {
+            (false, _) => Self::SameBuffer(window),
+            (true, true) => Self::MinibufferChanged(window),
+            (true, false) => Self::OrdinaryWindowChanged(window),
+        }
+    }
+
+    fn window(self) -> crate::window::WindowId {
+        match self {
+            Self::SameBuffer(window)
+            | Self::MinibufferChanged(window)
+            | Self::OrdinaryWindowChanged(window) => window,
+        }
+    }
+
+    fn apply(self, eval: &mut super::eval::Context) {
+        let window = self.window();
+        let globally_selected = eval
+            .frames
+            .selected_frame()
+            .is_some_and(|frame| frame.selected_window == window);
+
+        // `mark_chrome_dirty_window` is GNU's wset_update_mode_line /
+        // wset_redisplay pair.  It already crosses the broad menu boundary for
+        // every nonselected window, exactly as `wset_redisplay` does.
+        eval.mark_chrome_dirty_window(window);
+
+        // For the globally selected window, wset_redisplay is only a local
+        // repaint.  An ordinary buffer transition still sets
+        // FRAME_WINDOW_CHANGE in GNU; the menu observed on the next redisplay
+        // is therefore rebuilt for the incoming buffer.  Neomacs represents
+        // that next-redisplay boundary directly with the generation instead
+        // of exposing GNU's two-phase C flags to the layout cache.
+        if globally_selected && matches!(self, Self::OrdinaryWindowChanged(_)) {
+            eval.request_menu_bar_rebuild(
+                super::eval::MenuBarRebuildReason::WindowsOrBuffersChanged,
+            );
+        }
+    }
+}
+
 /// `(set-window-buffer WINDOW BUFFER-OR-NAME &optional KEEP-MARGINS)` -> nil.
 pub(crate) fn builtin_set_window_buffer(
     eval: &mut super::eval::Context,
@@ -4275,19 +4333,7 @@ pub(crate) fn builtin_set_window_buffer(
 ) -> EvalResult {
     expect_min_args("set-window-buffer", &args, 2)?;
     expect_max_args("set-window-buffer", &args, 3)?;
-    // GNU's `set-window-buffer` internals call `wset_update_mode_line (w)`
-    // (window.c:4383): the window now shows a different buffer, so every
-    // buffer-derived construct in its chrome (`%b`, `%m`, `%*`, and a
-    // buffer-local mode-line-format) is stale.
-    if let Some(window) = args.first().and_then(window_id_from_designator) {
-        eval.mark_chrome_dirty_window(window);
-    } else {
-        // No designator resolves to a live window id yet (nil means the
-        // selected window, resolved below). GNU's site is unconditional, so
-        // fall back to the frame-wide flag rather than dropping the event.
-        eval.mark_chrome_dirty_all();
-    }
-    let (fid, wid, buf_id, keep_margins, run_buffer_list_hook) = {
+    let (fid, wid, buf_id, keep_margins, run_buffer_list_hook, display_effect) = {
         let (frames, buffers, minibuffers) =
             (&mut eval.frames, &mut eval.buffers, &eval.minibuffers);
         let (fid, wid) = resolve_window_id_in_state(frames, buffers, args.first())?;
@@ -4393,15 +4439,20 @@ pub(crate) fn builtin_set_window_buffer(
                 discard_buffers_from_window_history(frames, wid, &[Value::make_buffer(buf_id)])?;
             }
         }
-        (fid, wid, buf_id, keep_margins, run_buffer_list_hook)
+        let changed = old_state.is_some_and(|(old_buffer_id, _, _, _)| old_buffer_id != buf_id);
+        let minibuffer_window = frames
+            .get(fid)
+            .is_some_and(|frame| frame.minibuffer_window == Some(wid));
+        let display_effect = WindowBufferDisplayEffect::classify(wid, changed, minibuffer_window);
+        (
+            fid,
+            wid,
+            buf_id,
+            keep_margins,
+            run_buffer_list_hook,
+            display_effect,
+        )
     };
-    // Do not turn GNU's `FRAME_WINDOW_CHANGE` side effect into an immediate
-    // menu rebuild.  `redisplay_internal` calls `prepare_menu_bars` before
-    // `run_window_change_functions` promotes that frame flag to
-    // `windows_or_buffers_changed`, so the selected window's previously
-    // prepared menu survives this redisplay.  Explicit update-mode-lines and
-    // actual nonselected-window redisplay events remain the typed rebuild
-    // boundaries in `MenuBarRebuildReason`.
     if run_buffer_list_hook {
         super::builtins::run_buffer_list_update_hook(eval)?;
     }
@@ -4524,6 +4575,7 @@ pub(crate) fn builtin_set_window_buffer(
             buffer.last_selected_window = Some(wid);
         }
     }
+    display_effect.apply(eval);
     builtin_run_window_scroll_functions(eval, vec![window_value(wid)])?;
     Ok(Value::NIL)
 }
