@@ -12449,6 +12449,10 @@ fn display_replacement_string_resumes_on_a_wrapped_row() {
         "the over-wide display string must carry the TTY continuation marker: {rendered:?}"
     );
     assert!(
+        rendered[annotation_row].starts_with(" GiB available)"),
+        "the source character covered by the continuation marker must resume on the next row: {rendered:?}"
+    );
+    assert!(
         annotation_row < following_buffer_row,
         "the replacement must finish before the covered buffer walk resumes: {rendered:?}"
     );

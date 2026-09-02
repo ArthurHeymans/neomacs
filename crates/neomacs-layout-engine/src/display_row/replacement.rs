@@ -293,7 +293,7 @@ impl DisplayReplacementStringRowSession {
         let append_context = DisplayReplacementAppendContext::new(
             self.base_face.face_id(),
             self.base_face.face(),
-            replacement_append_context.full_text_width_active_face_frame(),
+            replacement_append_context.active_face_frame(),
         );
         let mut render_policy = DisplayReplacementStringRenderPolicy {
             item_policy: &mut self.item_policy,
@@ -1330,16 +1330,6 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
 
     fn active_face_frame(self) -> DisplayRowAppendFrame {
         self.append_surface.frame(
-            self.placement,
-            DisplayRowAppendMetrics::from_active_face_state(
-                self.active_face,
-                self.fallback_metrics,
-            ),
-        )
-    }
-
-    fn full_text_width_active_face_frame(self) -> DisplayRowAppendFrame {
-        self.append_surface.full_text_width_surface().frame(
             self.placement,
             DisplayRowAppendMetrics::from_active_face_state(
                 self.active_face,
