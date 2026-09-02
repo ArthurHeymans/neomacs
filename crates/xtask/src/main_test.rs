@@ -237,6 +237,7 @@ fn linux_ci_setup_profiles_expose_capabilities_and_reject_unknown_profiles() {
 
     let build = packages("build");
     assert!(build.lines().any(|package| package == "liblcms2-dev"));
+    assert!(build.lines().any(|package| package == "libncurses-dev"));
     assert!(
         build
             .lines()
@@ -718,6 +719,10 @@ fn ci_builds_shared_test_artifacts_on_treeroot_for_trusted_events() {
     for job_name in ["neomacs-workspace-test-archive", "neomacs-test-runtime"] {
         let job = github_workflow_job(workflow, job_name);
         assert!(job.contains(runner), "{job_name} must select TreeRoot");
+        assert!(
+            job.contains("cache: ${{ github.event_name == 'pull_request' }}"),
+            "{job_name} must disable the GitHub cache on TreeRoot"
+        );
     }
 
     let archive = github_workflow_job(workflow, "neomacs-workspace-test-archive");

@@ -25,6 +25,7 @@ readonly -a build_packages=(
     fontconfig
     libfontconfig1-dev
     libfreetype-dev
+    libncurses-dev
     libglib2.0-dev
     libunwind-dev
     libxkbcommon-dev

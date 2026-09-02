@@ -279,6 +279,7 @@ jobs:
         with:
           cache-key: ci-workspace-archive-linux-x86_64
           cache-shared-key: linux-x86_64-release
+          cache: ${{ github.event_name == 'pull_request' }}
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
           install-nextest: true
 
@@ -356,6 +357,7 @@ jobs:
         with:
           cache-key: ci-shared-runtime-linux-x86_64
           cache-shared-key: linux-x86_64-release
+          cache: ${{ github.event_name == 'pull_request' }}
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Build fresh release runtime
