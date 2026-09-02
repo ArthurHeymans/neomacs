@@ -341,7 +341,7 @@ jobs:
       suite: core
 
   neomacs-test-runtime:
-    name: shared test runtime (linux x86_64)
+    name: Packaged Neomacs Runtime (linux x86_64)
     runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-24.04' || 'treeroot' }}
     timeout-minutes: 150
     env:

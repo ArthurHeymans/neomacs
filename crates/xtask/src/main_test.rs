@@ -725,6 +725,9 @@ fn ci_builds_shared_test_artifacts_on_treeroot_for_trusted_events() {
         );
     }
 
+    let runtime = github_workflow_job(workflow, "neomacs-test-runtime");
+    assert!(runtime.contains("name: Packaged Neomacs Runtime (linux x86_64)"));
+
     let archive = github_workflow_job(workflow, "neomacs-workspace-test-archive");
     assert!(
         archive
