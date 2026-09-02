@@ -11,6 +11,7 @@
 //! post-ZV row-fill seam and composes both decorations without making either
 //! feature control the other's row lifecycle.
 
+use crate::display_row::builder::DisplayRowGlyphCheckpoint;
 use crate::display_row::face_environment::WindowFaces;
 use crate::display_row::geometry::DisplayRowGeometryState;
 use crate::display_row::walk_state::{LineNumberFieldLayout, LineNumberTextPrefix};
@@ -25,6 +26,48 @@ use neomacs_display_protocol::glyph_matrix::{
 };
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::{Context, Value};
+
+/// A `line-prefix` rendered by the ordinary display-string pipeline, isolated
+/// from the line number that precedes it and the buffer text that follows it.
+///
+/// Keeping a complete row fragment, rather than a `Vec<Glyph>`, preserves the
+/// row-local source, pointer, and media tables referenced by its glyphs.  The
+/// wrapper prevents an arbitrary content row from being reused as post-ZV
+/// decoration.
+#[derive(Clone, Debug)]
+pub(crate) struct BeyondAccessibleEndLinePrefix {
+    fragment: GlyphRow,
+}
+
+impl BeyondAccessibleEndLinePrefix {
+    pub(crate) fn capture(
+        checkpoint: DisplayRowGlyphCheckpoint,
+        mut row: GlyphRow,
+    ) -> Option<Self> {
+        checkpoint.retain_added_glyphs(&mut row);
+        if row.total_glyphs() == 0 {
+            return None;
+        }
+
+        row.hash = 0;
+        row.cursor_col = None;
+        row.cursor_type = None;
+        row.truncated_left = false;
+        row.continued = false;
+        row.displays_text = false;
+        row.ends_at_zv = true;
+        row.start_charpos = 0;
+        row.end_charpos = 0;
+        row.left_fringe_bitmap = None;
+        row.right_fringe_bitmap = None;
+        row.overlay_arrow_bitmap = None;
+        Some(Self { fragment: row })
+    }
+
+    fn filler_row(&self) -> GlyphRow {
+        self.fragment.clone()
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum BeyondAccessibleEndTextPrefix {
@@ -47,7 +90,7 @@ impl BeyondAccessibleEndTextPrefix {
 
 /// Geometry + policy needed to fill decorated glyph rows past buffer end.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct EndOfBufferRowsFillRequest {
+pub(crate) struct EndOfBufferRowsFillRequest<'a> {
     /// `indicate-empty-lines` value: 0 = off, 1 = left fringe, 2 = right fringe.
     /// Only the buffer-local capture (0/1) is produced today; 2 is honored if it
     /// ever appears.
@@ -80,9 +123,12 @@ pub(crate) struct EndOfBufferRowsFillRequest {
     zv: LayoutCharPos0,
     /// Optional `TEXT_AREA` decoration for every row beyond ZV.
     text_prefix: BeyondAccessibleEndTextPrefix,
+    /// Fully rendered `line-prefix` fragment captured from the last logical
+    /// line prelude.  It is independent of the blank line-number prefix above.
+    line_prefix: Option<&'a BeyondAccessibleEndLinePrefix>,
 }
 
-impl EndOfBufferRowsFillRequest {
+impl<'a> EndOfBufferRowsFillRequest<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         params: &WindowParams,
@@ -93,6 +139,7 @@ impl EndOfBufferRowsFillRequest {
         char_height: f32,
         char_ascent: f32,
         line_number_field: LineNumberFieldLayout,
+        line_prefix: Option<&'a BeyondAccessibleEndLinePrefix>,
     ) -> Self {
         Self {
             indicate_empty_lines: params.indicate_empty_lines,
@@ -108,6 +155,7 @@ impl EndOfBufferRowsFillRequest {
                 params.display_line_numbers,
                 line_number_field,
             ),
+            line_prefix,
         }
     }
 
@@ -126,6 +174,7 @@ impl EndOfBufferRowsFillRequest {
             is_minibuffer,
             zv: LayoutCharPos0::new(0),
             text_prefix: BeyondAccessibleEndTextPrefix::None,
+            line_prefix: None,
         }
     }
 
@@ -179,6 +228,7 @@ impl EndOfBufferRowsFillRequest {
         });
         if fringe_bitmap_index.is_none()
             && matches!(self.text_prefix, BeyondAccessibleEndTextPrefix::None)
+            && self.line_prefix.is_none()
         {
             return 0;
         }
@@ -257,7 +307,10 @@ impl EndOfBufferRowsFillRequest {
         // fits entirely within the text area.
         while row < self.max_rows && y + char_height <= bottom_y + 0.5 {
             let display_row_index = self.display_text_row_base + row;
-            let mut glyph_row = GlyphRow::new(GlyphRowRole::Text);
+            let mut glyph_row = self
+                .line_prefix
+                .map(BeyondAccessibleEndLinePrefix::filler_row)
+                .unwrap_or_else(|| GlyphRow::new(GlyphRowRole::Text));
             glyph_row.enabled = true;
             glyph_row.displays_text = false;
             glyph_row.ends_at_zv = true;
@@ -268,7 +321,7 @@ impl EndOfBufferRowsFillRequest {
             glyph_row.height_px = char_height;
             glyph_row.ascent_px = ascent;
             if let Some(prefix) = &text_prefix_glyphs {
-                glyph_row.glyphs[GlyphArea::Text.index()].clone_from(prefix);
+                glyph_row.glyphs[GlyphArea::Text.index()].splice(0..0, prefix.iter().cloned());
             }
             match (fringe_side, fringe_info) {
                 (Some(EmptyLineFringeSide::Left), Some(info)) => {

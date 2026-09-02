@@ -1158,6 +1158,34 @@ fn classifier_rejects_active_display_table() {
     );
 }
 
+#[test]
+fn classifier_routes_glyphless_char_display_entries_through_the_buffer_pipeline() {
+    let mut eval = Context::new();
+    let text = "a▼b\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let table = Value::make_char_table(Value::symbol("glyphless-char-display"), Value::NIL, 1);
+    neovm_core::emacs_core::chartable::ct_set_single(
+        &table,
+        '▼' as i64,
+        Value::cons(Value::NIL, Value::string("v")),
+    );
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .set_buffer_local("glyphless-char-display", table);
+
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline
+    );
+}
+
 /// P4.8(b): an active display table is a property of the BUFFER, not of the
 /// row, so it must refuse BEFORE any per-position row scan runs. The pin is
 /// the REASON on a row that also carries a content refusal: the display table

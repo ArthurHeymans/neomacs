@@ -238,7 +238,7 @@ fn publish_fast_path_cursor(
     output: &mut TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
     cursor: FastPathCursorPlacement,
-    selected: bool,
+    cursor_role: crate::types::WindowCursorRole,
     text_area_left: f32,
     window_top: f32,
 ) {
@@ -247,7 +247,7 @@ fn publish_fast_path_cursor(
         output.reborrow(),
         output_emitter,
         TextWindowCursor {
-            role: TextWindowCursorRole::from_selected(selected),
+            role: TextWindowCursorRole::from_window_role(cursor_role),
             window_id: cursor.presented.window_id.get(),
             charpos: cursor.presented.charpos,
             slots: TextWindowCursorSlots::resolved(cursor.coordinates),
@@ -362,7 +362,7 @@ fn decorate_window_cursor(
             output_cursor: cursor,
             char_width: char_w,
         },
-        params.selected,
+        params.cursor_role,
         text_area_left,
         window_top,
     );
@@ -850,7 +850,7 @@ impl BufferSourceOutputSetup {
                 &mut output,
                 &mut output_emitter,
                 cursor,
-                params.selected,
+                params.cursor_role,
                 walk_setup.text_area_left,
                 walk_setup.window_top,
             );
@@ -881,7 +881,7 @@ impl BufferSourceOutputSetup {
                 redisplay_positions,
                 window_end_record: publish_request.window_end_record(redisplay_positions),
                 cursor_only: true,
-                scroll_reused_rows: None,
+                reused_matrix_rows: None,
             };
         }
 
@@ -994,7 +994,8 @@ impl BufferSourceOutputSetup {
 
             // Install the reused (shifted, already-finalized) rows and splice
             // their snapshots/points into the emitter.
-            let reused_count = scroll.reused_rows.len();
+            let reused_matrix_rows =
+                crate::incremental_layout::ReusedMatrixRows::from_replay_rows(&scroll.reused_rows);
             for (idx, row) in &scroll.reused_rows {
                 output
                     .builder()
@@ -1109,7 +1110,7 @@ impl BufferSourceOutputSetup {
                 redisplay_positions,
                 window_end_record: publish_request.window_end_record(redisplay_positions),
                 cursor_only: false,
-                scroll_reused_rows: Some(reused_count),
+                reused_matrix_rows: Some(reused_matrix_rows),
             };
         }
 
@@ -1221,6 +1222,7 @@ impl BufferSourceOutputSetup {
             geometry.char_height,
             window_metrics.ascent(),
             line_number_field,
+            walk_setup.beyond_accessible_end_line_prefix.as_ref(),
         )
         .fill(
             buffer,
@@ -1314,7 +1316,7 @@ impl BufferSourceOutputSetup {
             redisplay_positions,
             window_end_record: publish_request.window_end_record(redisplay_positions),
             cursor_only: false,
-            scroll_reused_rows: None,
+            reused_matrix_rows: None,
         }
     }
 }

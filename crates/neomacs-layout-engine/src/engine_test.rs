@@ -37,7 +37,9 @@ use crate::display_row::{
 use crate::display_source::DisplaySpaceGeometry;
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::glyph_advance::GlyphAdvanceQuantization;
-use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
+use crate::neovm_bridge::{
+    FaceResolver, LayoutBufferSnapshot, RustBufferAccess, RustTextPropAccess,
+};
 use crate::output::builder::DisplayOutputBuilder;
 use crate::types::{VisualCursorSpec, WindowKind};
 use crate::window_output::{TextWindowOutputTarget, WindowOutputEmitter};
@@ -1534,6 +1536,7 @@ fn test_window_params() -> WindowParams {
         bounds: Rect::new(0.0, 0.0, 800.0, 600.0),
         text_bounds: Rect::new(0.0, 0.0, 800.0, 560.0),
         selected: true,
+        cursor_role: crate::types::WindowCursorRole::Active,
         mode_line_active: true,
         kind: WindowKind::Main,
         left_col: 0,
@@ -8558,6 +8561,62 @@ fn layout_frame_rust_preserves_propertized_echo_message_faces() {
     );
 }
 
+/// GNU `get_window_cursor_type` redirects the frame's active cursor to the
+/// inactive echo-area window when Lisp dynamically binds
+/// `cursor-in-echo-area` and an echo message is displayed.  The cursor sits at
+/// the end of that message, not at point in the frame's selected editing
+/// window.
+#[test]
+fn inactive_echo_area_owns_cursor_at_message_end_when_requested() {
+    let mut eval = Context::new();
+    let root = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-echo-cursor", 320, 120, root);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    eval.obarray_mut()
+        .set_symbol_value("cursor-in-echo-area", Value::T);
+    eval.set_current_message(Some(LispString::from_utf8("prompt")));
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let minibuffer = state
+        .window_infos
+        .iter()
+        .find(|info| info.is_minibuffer)
+        .expect("minibuffer window");
+    let cursor = state.phys_cursor.as_ref().expect("active cursor");
+
+    assert_eq!(
+        state
+            .window_infos
+            .iter()
+            .find(|info| info.selected)
+            .expect("Lisp-selected window")
+            .window_id
+            .get(),
+        selected_window.0 as i64,
+        "cursor redirection must not counterfeit Lisp window selection"
+    );
+    assert!(!minibuffer.selected);
+    assert_eq!(cursor.window_id, minibuffer.window_id);
+    assert_eq!(cursor.row, 0);
+    assert_eq!(cursor.col, "prompt".len() as u16);
+}
+
 #[test]
 fn inactive_echo_area_grows_to_contain_tall_display_image() {
     let mut eval = Context::new();
@@ -10271,7 +10330,7 @@ fn layout_frame_rust_remaps_named_faces_on_line_and_wrap_prefix_strings() {
 
     let frame_id =
         eval.frame_manager_mut()
-            .create_frame("layout-remapped-prefix-faces", 632, 160, buf_id);
+            .create_frame("layout-remapped-prefix-faces", 632, 400, buf_id);
     assert!(eval.frame_manager_mut().select_frame(frame_id));
     let face_results = eval.eval_str_each(
         "(internal-make-lisp-face 'prefix-face-probe)
@@ -10349,6 +10408,33 @@ fn layout_frame_rust_remaps_named_faces_on_line_and_wrap_prefix_strings() {
             Color::from_pixel(0x000000ff),
             "unremapped attributes must still come from the {kind} prefix named face"
         );
+    }
+
+    let post_zv_rows = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| {
+            row.enabled
+                && row.role == GlyphRowRole::Text
+                && row.start_charpos == 121
+                && row.end_charpos == 121
+                && row.ends_at_zv
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        post_zv_rows.len() > 1,
+        "fixture must expose more than the first post-ZV row"
+    );
+    for row in post_zv_rows {
+        let text = glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]);
+        assert!(
+            text.starts_with('L'),
+            "GNU applies line-prefix to every post-ZV row; got {text:?} in {row:#?}"
+        );
+        let face = prefix_face(row, 'L');
+        assert_eq!(face.foreground, Color::from_pixel(0x00ff0000));
+        assert_eq!(face.background, Color::from_pixel(0x000000ff));
     }
 }
 
@@ -12478,6 +12564,53 @@ fn eob_overlay_string_enters_from_final_overlay_face() {
         glyph.box_vertical_edges,
         BoxVerticalEdges::Right,
         "EOB string entry continues the final iterator's box and closes only at end-of-source"
+    );
+}
+
+/// GNU `face_at_string_position' merges an overlay string's own face after
+/// resolving the anchor face.  The pushed string must therefore override the
+/// default EOB anchor face.
+#[test]
+fn eob_overlay_after_string_applies_its_own_face() {
+    let (eval, buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with("ab", |eval, _buf_id| {
+            eval.eval_str(
+                "(overlay-put (make-overlay 3 3) 'after-string \
+                   (propertize \"X\" 'face '(:foreground \"#ff0000\")))",
+            )
+            .expect("propertized EOB after-string");
+        });
+
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let overlay_string = RustTextPropAccess::new(buffer)
+        .overlay_strings_at(2)
+        .into_iter()
+        .next()
+        .expect("EOB after-string value")
+        .string;
+    let properties =
+        neovm_core::emacs_core::value::get_string_text_properties_table_for_value(overlay_string)
+            .expect("after-string text properties");
+    assert_eq!(
+        properties.get_property_at_char_pos(CharPos0::ZERO, Value::symbol("face")),
+        Some(Value::list(vec![
+            Value::symbol(":foreground"),
+            Value::string("#ff0000"),
+        ])),
+        "the overlay bridge must retain the string object's own face property"
+    );
+
+    let glyph = rows
+        .iter()
+        .flat_map(|row| row.glyphs[GlyphArea::Text.index()].iter())
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'X' }))
+        .expect("EOB after-string glyph");
+    assert_ne!(
+        glyph.face_id,
+        neomacs_display_protocol::types::FaceId::from(
+            neomacs_display_protocol::face::BasicFaceId::Default,
+        ),
+        "the after-string's own named face must survive the EOB overlay path"
     );
 }
 
@@ -17743,6 +17876,100 @@ fn layout_frame_rust_renders_header_line_text_for_non_nil_header_line_format() {
     assert!(
         header_text.contains("LEFT HEADER"),
         "expected header-line row to render buffer-local header-line-format text, got {header_text:?}"
+    );
+}
+
+#[test]
+fn layout_frame_rust_applies_buffer_glyphless_table_to_header_line_strings() {
+    // GNU tabulated-list.el installs this buffer-local table so a graphical
+    // sort triangle in the header line becomes its TTY acronym.  Window chrome
+    // is still displayed in the window buffer's character environment.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let table = Value::make_char_table(Value::symbol("glyphless-char-display"), Value::NIL, 1);
+    neovm_core::emacs_core::chartable::ct_set_single(
+        &table,
+        '▼' as i64,
+        Value::cons(Value::NIL, Value::string("v")),
+    );
+    let glyphless_foreground = neomacs_display_protocol::types::Color::from_pixel(0x0012_3456);
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("body line\n");
+        buf.set_buffer_local("glyphless-char-display", table);
+        buf.set_buffer_local("header-line-format", Value::string("Sort ▼"));
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-header-line-glyphless", 640, 160, buf_id);
+    if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
+        frame.set_window_system(Some(Value::symbol("neo")));
+    }
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    let results = eval.eval_str_each(
+        "(internal-set-lisp-face-attribute 'glyphless-char :foreground \"#123456\" (selected-frame))",
+    );
+    assert!(
+        results.iter().all(Result::is_ok),
+        "glyphless-char face must accept a foreground, got {results:?}"
+    );
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let header_text = engine
+        .last_frame_display_state
+        .as_ref()
+        .into_iter()
+        .flat_map(|state| state.window_matrices.iter())
+        .flat_map(|window| window.matrix.rows.iter())
+        .filter(|row| row.role == GlyphRowRole::HeaderLine && row.enabled)
+        .flat_map(|row| row.glyphs[GlyphArea::Text.index()].iter())
+        .filter_map(|glyph| match glyph.glyph_type {
+            GlyphType::Char { ch } => Some(ch),
+            _ => None,
+        })
+        .collect::<String>();
+
+    assert!(
+        header_text.starts_with("Sort v"),
+        "GNU's terminal branch should replace the header triangle, got {header_text:?}"
+    );
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let indicator = state
+        .window_matrices
+        .iter()
+        .flat_map(|window| window.matrix.rows.iter())
+        .filter(|row| row.role == GlyphRowRole::HeaderLine && row.enabled)
+        .flat_map(|row| row.glyphs[GlyphArea::Text.index()].iter())
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'v' }))
+        .expect("TTY glyphless acronym");
+    assert_eq!(
+        state
+            .faces
+            .get(&indicator.face_id)
+            .expect("indicator face")
+            .foreground,
+        glyphless_foreground,
+        "GNU merge_glyphless_glyph_face overlays glyphless-char on the source face; indicator={indicator:?}, header_faces={:?}",
+        state
+            .window_matrices
+            .iter()
+            .flat_map(|window| window.matrix.rows.iter())
+            .filter(|row| row.role == GlyphRowRole::HeaderLine && row.enabled)
+            .flat_map(|row| row.glyphs[GlyphArea::Text.index()].iter())
+            .filter_map(|glyph| match glyph.glyph_type {
+                GlyphType::Char { ch } => Some((ch, glyph.face_id)),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
     );
 }
 
@@ -25790,8 +26017,17 @@ fn resetting_speculative_frame_output_discards_fast_path_classification() {
     let mut engine = LayoutEngine::new_without_font_metrics();
     let window = neomacs_display_protocol::DisplayWindowId::new(7);
     engine.cursor_only_window_ids.insert(window);
-    engine.scroll_window_ids.insert(window, (3, 16.0));
-    engine.edit_window_ids.insert(window, 2);
+    engine.scroll_window_ids.insert(
+        window,
+        (
+            crate::incremental_layout::ReusedMatrixRows::from_indices(0..3),
+            16.0,
+        ),
+    );
+    engine.edit_window_ids.insert(
+        window,
+        crate::incremental_layout::ReusedMatrixRows::from_indices(0..2),
+    );
 
     engine.reset_frame_attempt_state();
 
@@ -27094,6 +27330,78 @@ fn phase3_plain_edit_matches_full_rebuild_golden() {
     assert_eq!(
         incremental, reference,
         "localized-edit output must be byte-identical to a full rebuild"
+    );
+}
+
+/// GNU's `try_window_id` validates the regenerated row even when the old row
+/// contains only its newline.  Inserting the first visible character into an
+/// empty line must therefore produce the same matrix through localized edit
+/// replay as through an engine with no retained state.
+#[test]
+fn phase3_insert_into_empty_line_matches_full_rebuild_golden() {
+    let text = "zero\nalpha\n\nbeta\n";
+    let edit_at = "zero\nalpha\n".len();
+
+    let (mut eval_ref, frame_ref, buf_ref, _reference_window) = incr_editing_frame(text, 800, 600);
+    {
+        let buffer = eval_ref
+            .buffer_manager_mut()
+            .get_mut(buf_ref)
+            .expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_at));
+        buffer.insert("X");
+    }
+    let mut reference_engine = LayoutEngine::new();
+    reference_engine.layout_frame_rust(&mut eval_ref, frame_ref);
+    let reference = selected_window_layout_trace(&eval_ref, &reference_engine, frame_ref);
+
+    let (mut eval, frame_id, buf_id, _incremental_window) = incr_editing_frame(text, 800, 600);
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_at));
+    }
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("X");
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        engine.last_layout_stats().edit_windows,
+        1,
+        "the empty-line insertion must exercise localized edit replay"
+    );
+    let incremental_state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("incremental display state");
+    let incremental_window =
+        incremental_state
+            .window_matrices
+            .iter()
+            .find(|window| {
+                window.matrix.rows.iter().any(|row| {
+                    glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).contains('X')
+                })
+            })
+            .expect("window containing the inserted character");
+    let inserted_row = incremental_window
+        .matrix
+        .rows
+        .iter()
+        .position(|row| glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).contains('X'))
+        .expect("row containing the inserted character");
+    assert_eq!(
+        incremental_window.matrix.row_damage(inserted_row),
+        neomacs_display_protocol::glyph_matrix::RowDamage::New,
+        "a regenerated edit row must never be advertised to the TTY as verbatim reuse"
+    );
+    let incremental = selected_window_layout_trace(&eval, &engine, frame_id);
+    assert_eq!(
+        incremental, reference,
+        "localized insertion into an empty row must match a full rebuild"
     );
 }
 
@@ -28703,6 +29011,148 @@ fn gui_overlay_arrow_draws_left_fringe_bitmap_not_text() {
     assert!(
         text.starts_with("beta"),
         "GUI overlay arrow must not overwrite the text; got {text:?}"
+    );
+}
+
+/// GNU copies the TTY overlay-arrow string into the row before
+/// `set_cursor_from_row`. The copied cells belong to the arrow string, not to
+/// the buffer positions they overwrite, so point at the first covered buffer
+/// character resolves to the first surviving buffer glyph after the arrow.
+#[test]
+fn tty_overlay_arrow_moves_cursor_past_covered_buffer_glyphs() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("alpha\nbeta\ngamma\n");
+    }
+    eval.eval_str("(progn (goto-char 7) (setq overlay-arrow-position (copy-marker 7)))")
+        .expect("set overlay-arrow-position");
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("tty-arrow", 400, 200, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("window matrix entry");
+    let beta = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.start_charpos == 6)
+        .unwrap_or_else(|| panic!("no beta row: {:#?}", entry.matrix.rows));
+    let text: String = beta.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .filter_map(|glyph| match glyph.glyph_type {
+            GlyphType::Char { ch } => Some(ch),
+            _ => None,
+        })
+        .collect();
+    assert!(text.starts_with("=>ta"), "TTY arrow text: {text:?}");
+
+    let cursor = state.phys_cursor.as_ref().expect("active cursor");
+    assert_eq!(cursor.window_id.get(), selected_window.0 as i64);
+    assert_eq!(cursor.row, 1);
+    assert_eq!(cursor.col, 2, "cursor must follow the two covered glyphs");
+}
+
+/// An empty buffer line has no leading buffer glyphs for GNU's TTY overlay
+/// arrow to replace.  The arrow string is therefore appended as two synthetic
+/// display cells, and `set_cursor_from_row` places point after those cells.
+/// Their provenance must remain redisplay-owned: spelling the old
+/// `NO_BUFFER_POSITION_CHARPOS` sentinel as a buffer position makes the cursor
+/// resolver mistake the first arrow cell for a visible buffer glyph after
+/// point and snap the cursor back to column zero.
+#[test]
+fn tty_overlay_arrow_moves_empty_line_cursor_past_appended_arrow_cells() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("alpha\n\ngamma\n");
+    }
+    eval.eval_str("(progn (goto-char 7) (setq overlay-arrow-position (copy-marker 7)))")
+        .expect("set overlay-arrow-position");
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("tty-empty-arrow", 400, 200, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("window matrix entry");
+    let empty = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| {
+            row.enabled
+                && row.role == GlyphRowRole::Text
+                && row.start_charpos == 6
+                && row.end_charpos == 6
+        })
+        .unwrap_or_else(|| panic!("no empty row: {:#?}", entry.matrix.rows));
+    let arrow_cells: Vec<_> = empty.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .filter(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '=' | '>' }))
+        .collect();
+    assert_eq!(
+        arrow_cells.len(),
+        2,
+        "empty row must display the full arrow"
+    );
+    assert!(
+        arrow_cells
+            .iter()
+            .all(|glyph| glyph.provenance == GlyphProvenance::mark()),
+        "appended arrow cells must carry redisplay provenance"
+    );
+
+    let cursor = state.phys_cursor.as_ref().expect("active cursor");
+    assert_eq!(cursor.window_id.get(), selected_window.0 as i64);
+    assert_eq!(cursor.row, 1);
+    assert_eq!(cursor.col, 2, "cursor must follow the appended arrow cells");
+    assert_eq!(
+        cursor.x,
+        state.char_width * 2.0,
+        "TTY publication derives its terminal column from cursor x, which must follow the arrow"
     );
 }
 

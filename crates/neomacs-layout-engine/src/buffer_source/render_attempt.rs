@@ -14,6 +14,7 @@ use crate::display_text_window_row_lifecycle::{
 };
 use crate::font::metrics::FontMetricsService;
 use crate::frame_face_arena::FrameFaceAttempt;
+use crate::incremental_layout::ReusedMatrixRows;
 use crate::layout_effect::{LayoutEffect, WindowScrollEffect, WindowScrollHookSite};
 use crate::neovm_bridge::FaceResolver;
 use crate::types::WindowParams;
@@ -156,10 +157,10 @@ pub(crate) enum BufferSourceRenderAttemptOutcome {
         /// Whether this window took the Phase 1 cursor-only fast path (body rows
         /// reused verbatim) rather than a full body walk.
         cursor_only: bool,
-        /// `Some(reused_row_count)` when this window took the Phase 2 pure-scroll
-        /// fast path (that many overlapping rows reused shifted; only the
-        /// newly-exposed rows walked); `None` otherwise.
-        scroll_reused_rows: Option<usize>,
+        /// Exact matrix rows installed from an incremental replay.  A localized
+        /// edit can reuse rows on both sides of its regenerated span, so a
+        /// prefix count cannot faithfully carry this provenance.
+        reused_matrix_rows: Option<ReusedMatrixRows>,
     },
 }
 

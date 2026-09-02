@@ -14,7 +14,7 @@ use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
 use neomacs_display_protocol::glyph_matrix::{
     Glyph, GlyphArea, GlyphProvenance, GlyphRow, RedisplayGlyphProvenance,
 };
-use neomacs_display_protocol::types::{Color, DisplayWindowId};
+use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
 use neovm_core::window::{DisplayPointSnapshot, WindowCursorPos};
@@ -370,6 +370,25 @@ pub(crate) struct ResolvedCursorCoordinatePair {
     display_col: CursorDisplayCol,
 }
 
+/// Coherent cursor placement after a late row decoration changed the
+/// materialized glyph sequence.
+///
+/// The slot and measured pixel pen are deliberately one value.  A decoration
+/// cannot publish a new column while leaving `PhysCursor::x` in the old row
+/// geometry, which is observable on TTY frames and in cursor effects.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ResolvedDecoratedCursorPlacement {
+    coordinates: ResolvedCursorCoordinatePair,
+    x: f32,
+}
+
+impl ResolvedDecoratedCursorPlacement {
+    pub(crate) fn apply_to(self, cursor: &mut neomacs_display_protocol::frame_glyphs::PhysCursor) {
+        self.coordinates.apply_display_to(cursor);
+        cursor.x = self.x;
+    }
+}
+
 impl ResolvedCursorCoordinatePair {
     pub(crate) const fn same(slot: DisplaySlotId) -> Self {
         Self {
@@ -656,6 +675,58 @@ impl CursorVisualColumnResolutionRequest {
             output_col: CursorOutputCol(output_col),
             display_col: CursorDisplayCol(display_slot.col()),
         })
+    }
+
+    /// Resolve the cursor after a post-layout decoration has changed the row's
+    /// glyphs.  Unlike ordinary semantic resolution, this also recomputes the
+    /// exact measured text-area pen consumed by pixel and terminal backends.
+    pub(crate) fn resolve_after_row_decoration(
+        self,
+        context: CursorVisualColumnResolutionContext<'_>,
+        text_bounds: Rect,
+        char_width: f32,
+    ) -> Option<ResolvedDecoratedCursorPlacement> {
+        let coordinates = self.resolve_cursor_coordinates(context)?;
+        let row = context.rows?.row(self.row)?;
+        let target_col = coordinates.display_col();
+        let left_margin_cols = row.glyphs[GlyphArea::LeftMargin.index()]
+            .iter()
+            .filter(|glyph| !glyph.padding)
+            .fold(row.start_col, |col, glyph| {
+                col.saturating_add(glyph.materialized_slot_span())
+            });
+        if target_col < left_margin_cols {
+            return None;
+        }
+
+        let char_width = char_width.max(1.0);
+        let text_glyphs = &row.glyphs[GlyphArea::Text.index()];
+        let used_text_width = text_glyphs
+            .iter()
+            .filter(|glyph| !glyph.padding)
+            .map(|glyph| glyph.materialized_pixel_advance(char_width))
+            .sum::<f32>();
+        let mut x = if row.reversed_p {
+            text_bounds.x + (text_bounds.width - used_text_width).max(0.0)
+        } else {
+            text_bounds.x + row.pixel_x.max(0.0)
+        };
+        let mut col = left_margin_cols;
+        for glyph in text_glyphs {
+            if glyph.padding {
+                continue;
+            }
+            if target_col <= col {
+                return Some(ResolvedDecoratedCursorPlacement { coordinates, x });
+            }
+            let next_col = col.saturating_add(glyph.materialized_slot_span());
+            if target_col < next_col {
+                return Some(ResolvedDecoratedCursorPlacement { coordinates, x });
+            }
+            x += glyph.materialized_pixel_advance(char_width);
+            col = next_col;
+        }
+        (target_col == col).then_some(ResolvedDecoratedCursorPlacement { coordinates, x })
     }
 }
 
@@ -1395,7 +1466,7 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
             output,
             output_emitter,
             TextWindowCursor {
-                role: TextWindowCursorRole::from_selected(self.params.selected),
+                role: TextWindowCursorRole::from_window_role(self.params.cursor_role),
                 window_id: resolved_cursor.window_id(),
                 charpos: self.point_charpos.max(0) as usize,
                 slots: TextWindowCursorSlots::from_capture(

@@ -169,6 +169,27 @@ impl SharedImageCatalog {
     }
 }
 
+/// Whether this window owns the frame's one active physical cursor.
+///
+/// This is deliberately independent of Lisp window selection and active
+/// mode-line styling.  GNU can redirect the active cursor to an inactive
+/// echo-area mini-window without selecting that window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowCursorRole {
+    Active,
+    Inactive,
+}
+
+impl WindowCursorRole {
+    pub const fn from_active(active: bool) -> Self {
+        if active { Self::Active } else { Self::Inactive }
+    }
+
+    pub const fn is_active(self) -> bool {
+        matches!(self, Self::Active)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct WindowParams {
     /// Window identifier (pointer value)
@@ -181,6 +202,8 @@ pub struct WindowParams {
     pub text_bounds: Rect,
     /// Whether this is the selected window
     pub selected: bool,
+    /// Whether this window owns the frame's active physical cursor.
+    pub cursor_role: WindowCursorRole,
     /// Whether this window's mode/header-line chrome uses the active face.
     /// During an active minibuffer this remains true for the window that
     /// invoked the minibuffer even though the minibuffer owns input/cursor

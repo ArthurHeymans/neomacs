@@ -832,6 +832,12 @@ impl<'a> TextRowSourceRenderState<'a> {
         self.output_render.reborrow()
     }
 
+    pub(crate) fn current_row_snapshot(&mut self) -> Option<GlyphRow> {
+        self.output_render
+            .current_row_output()
+            .current_row_snapshot()
+    }
+
     pub(crate) fn measurement_mode(&self) -> DisplayRowMeasurementMode {
         self.measurement_mode
     }

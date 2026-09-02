@@ -548,6 +548,52 @@ pub(crate) enum DisplayItemKind {
     RowBreak(DisplayRowBreak),
 }
 
+/// The named GNU face merged over an item's source face because of the
+/// item's display semantics rather than a text property.
+///
+/// Keeping this closed and adjacent to [`DisplayItemKind`] makes a newly
+/// introduced special-character kind choose its face behavior explicitly;
+/// source pipelines only consume the decision and cannot drift apart.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DisplayItemFaceOverlay {
+    EscapeGlyph,
+    GlyphlessChar,
+}
+
+impl DisplayItemFaceOverlay {
+    pub(crate) const fn face_name(self) -> &'static str {
+        match self {
+            Self::EscapeGlyph => "escape-glyph",
+            Self::GlyphlessChar => "glyphless-char",
+        }
+    }
+}
+
+impl DisplayItemKind {
+    pub(crate) const fn semantic_face_overlay(&self) -> Option<DisplayItemFaceOverlay> {
+        match self {
+            Self::ControlChar { .. } => Some(DisplayItemFaceOverlay::EscapeGlyph),
+            Self::Glyphless(DisplayGlyphless {
+                method: GlyphlessMethod::ZeroWidth,
+                ..
+            }) => None,
+            Self::Glyphless(DisplayGlyphless {
+                method:
+                    GlyphlessMethod::ThinSpace
+                    | GlyphlessMethod::HexCode
+                    | GlyphlessMethod::EmptyBox
+                    | GlyphlessMethod::Acronym(_),
+                ..
+            }) => Some(DisplayItemFaceOverlay::GlyphlessChar),
+            Self::TextRun(_)
+            | Self::SourceMappedText(_)
+            | Self::Stretch(_)
+            | Self::MediaReplacement(_)
+            | Self::RowBreak(_) => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct BufferDisplayReplacementSource {
     buffer_id: BufferId,
@@ -1017,15 +1063,61 @@ fn split_face_runs_at(
     (prefix, remainder)
 }
 
+/// GNU accepts at most six ASCII bytes for a glyphless-character acronym
+/// (`term.c:produce_glyphless_glyph`).  Encoding that bound in the value keeps
+/// arbitrary Lisp strings out of the rendering pipeline and lets the method
+/// remain `Copy` like the other display policies.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct GlyphlessAcronym {
+    bytes: [u8; 6],
+    len: u8,
+}
+
+impl GlyphlessAcronym {
+    pub(crate) fn from_ascii(text: &str) -> Option<Self> {
+        if !text.is_ascii() {
+            return None;
+        }
+        let mut bytes = [0; 6];
+        let source = text
+            .as_bytes()
+            .split(|byte| *byte == 0)
+            .next()
+            .unwrap_or_default();
+        let len = source.len().min(bytes.len());
+        bytes[..len].copy_from_slice(&source[..len]);
+        Some(Self {
+            bytes,
+            len: len as u8,
+        })
+    }
+
+    pub(crate) fn tty_text(self) -> String {
+        let bytes = &self.bytes[..usize::from(self.len)];
+        let acronym = std::str::from_utf8(bytes).expect("glyphless acronym is ASCII");
+        if self.len == 1 {
+            acronym.to_owned()
+        } else {
+            format!("[{acronym}]")
+        }
+    }
+
+    pub(crate) const fn tty_column_count(self) -> usize {
+        if self.len == 1 {
+            1
+        } else {
+            self.len as usize + 2
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GlyphlessMethod {
     ZeroWidth,
-    #[allow(dead_code)]
     ThinSpace,
-    #[allow(dead_code)]
-    // supported rendering mode; current production classifier does not select it
     HexCode,
     EmptyBox,
+    Acronym(GlyphlessAcronym),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

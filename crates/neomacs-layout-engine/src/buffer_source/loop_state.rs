@@ -6,6 +6,7 @@
 //! says which part of the walk it touches. Each group reborrows like the
 //! whole, so handing a group on is the same move as handing the state on.
 
+use crate::buffer_source::end_of_buffer_rows::BeyondAccessibleEndLinePrefix;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_row::append_context::DisplayRowAppendSurface;
 use crate::display_row::geometry::{
@@ -23,6 +24,26 @@ use crate::display_row::walk_state::{
 use crate::display_source_progress::DisplaySourceProgressState;
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::hit_test::HitRow;
+
+pub(crate) enum BeyondAccessibleEndLinePrefixCapture<'a> {
+    Ignored,
+    Store(&'a mut Option<BeyondAccessibleEndLinePrefix>),
+}
+
+impl BeyondAccessibleEndLinePrefixCapture<'_> {
+    pub(crate) fn replace(&mut self, value: Option<BeyondAccessibleEndLinePrefix>) {
+        if let Self::Store(target) = self {
+            **target = value;
+        }
+    }
+
+    fn reborrow(&mut self) -> BeyondAccessibleEndLinePrefixCapture<'_> {
+        match self {
+            Self::Ignored => BeyondAccessibleEndLinePrefixCapture::Ignored,
+            Self::Store(target) => BeyondAccessibleEndLinePrefixCapture::Store(target),
+        }
+    }
+}
 
 /// The glyph row currently under construction.
 ///
@@ -188,6 +209,7 @@ pub(crate) struct BufferSourceLoopMutableState<'rows, 'emit, 'surface> {
     pub(crate) row_y_positions: &'rows mut DisplayRowYPositions,
     pub(crate) cursor_info: &'emit mut CursorCaptureState,
     pub(crate) face_ids: &'emit mut FrameFaceAttempt,
+    pub(crate) beyond_accessible_end_line_prefix: BeyondAccessibleEndLinePrefixCapture<'emit>,
     pub(crate) surface: BufferSourceSurfaceContext<'surface>,
 }
 
@@ -217,8 +239,26 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
             row_y_positions,
             cursor_info,
             face_ids,
+            beyond_accessible_end_line_prefix: BeyondAccessibleEndLinePrefixCapture::Ignored,
             surface,
         }
+    }
+
+    pub(crate) fn with_beyond_accessible_end_line_prefix_capture(
+        mut self,
+        target: &'emit mut Option<BeyondAccessibleEndLinePrefix>,
+    ) -> Self {
+        self.beyond_accessible_end_line_prefix =
+            BeyondAccessibleEndLinePrefixCapture::Store(target);
+        self
+    }
+
+    pub(crate) fn with_beyond_accessible_end_line_prefix_capture_state(
+        mut self,
+        capture: BeyondAccessibleEndLinePrefixCapture<'emit>,
+    ) -> Self {
+        self.beyond_accessible_end_line_prefix = capture;
+        self
     }
 
     pub(crate) fn reborrow(&mut self) -> BufferSourceLoopMutableState<'_, '_, 'surface> {
@@ -233,6 +273,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
             row_y_positions: self.row_y_positions,
             cursor_info: self.cursor_info,
             face_ids: self.face_ids,
+            beyond_accessible_end_line_prefix: self.beyond_accessible_end_line_prefix.reborrow(),
             surface: self.surface,
         }
     }

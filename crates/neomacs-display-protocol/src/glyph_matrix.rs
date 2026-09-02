@@ -785,6 +785,23 @@ impl Glyph {
         }
     }
 
+    /// Pixel advance used when this glyph is materialized into a row.
+    ///
+    /// This is the measured counterpart of [`Self::materialized_slot_span`].
+    /// Keeping both on `Glyph` lets cursor placement and presentation walk the
+    /// same geometry instead of reconstructing advances from a column delta.
+    pub fn materialized_pixel_advance(&self, char_width: f32) -> f32 {
+        if self.pixel_width > 0.0 {
+            self.pixel_width
+        } else {
+            match &self.glyph_type {
+                GlyphType::Stretch { width_cols } => *width_cols as f32 * char_width,
+                _ if self.wide => char_width * 2.0,
+                _ => char_width,
+            }
+        }
+    }
+
     /// Pointer-paint primitive produced when this glyph is materialized.
     ///
     /// Keep this exhaustive beside [`GlyphType`]: a pointer run may only name
@@ -1208,7 +1225,7 @@ impl GlyphRow {
         let used_width = self.glyphs[GlyphArea::Text.index()]
             .iter()
             .filter(|glyph| !glyph.padding)
-            .map(|glyph| glyph_pixel_width(glyph, char_width))
+            .map(|glyph| glyph.materialized_pixel_advance(char_width))
             .sum::<f32>();
         let mut x = if self.reversed_p {
             (row_width - used_width).max(0.0)
@@ -1221,7 +1238,7 @@ impl GlyphRow {
                 if glyph.padding {
                     continue;
                 }
-                let width = glyph_pixel_width(glyph, char_width);
+                let width = glyph.materialized_pixel_advance(char_width);
                 let col_width = u32::from(glyph.materialized_slot_span());
                 if let Some(appearance) = glyph.pointer_appearance
                     && let Some(kind) = glyph.pointer_primitive_kind()
@@ -1313,18 +1330,6 @@ impl GlyphRow {
         self.ascent_px = 0.0;
         self.start_charpos = 0;
         self.end_charpos = 0;
-    }
-}
-
-fn glyph_pixel_width(glyph: &Glyph, char_width: f32) -> f32 {
-    if glyph.pixel_width > 0.0 {
-        glyph.pixel_width
-    } else {
-        match &glyph.glyph_type {
-            GlyphType::Stretch { width_cols } => *width_cols as f32 * char_width,
-            _ if glyph.wide => char_width * 2.0,
-            _ => char_width,
-        }
     }
 }
 

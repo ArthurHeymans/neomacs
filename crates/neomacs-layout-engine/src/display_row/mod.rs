@@ -191,6 +191,7 @@ pub(crate) struct DisplayRowLispStringSourceSessionRequest {
     value: Value,
     base_face_id: FaceId,
     face_scope: DisplaySourceFaceScope,
+    tty_glyphless_char_display: crate::neovm_bridge::TtyGlyphlessCharDisplay,
 }
 
 pub(crate) struct DisplayRowLispStringSourceRenderRequest<'a> {
@@ -210,6 +211,7 @@ pub(crate) struct DisplayRowLispStringSourceRequest<'a> {
     face_scope: DisplaySourceFaceScope,
     symbol_values: std::collections::HashMap<String, Value>,
     image_scale_environment: ImageScaleEnvironment,
+    tty_glyphless_char_display: crate::neovm_bridge::TtyGlyphlessCharDisplay,
 }
 
 impl<'a> DisplayRowLispStringSourceRequest<'a> {
@@ -228,6 +230,7 @@ impl<'a> DisplayRowLispStringSourceRequest<'a> {
             face_scope,
             symbol_values: std::collections::HashMap::new(),
             image_scale_environment: ImageScaleEnvironment::default(),
+            tty_glyphless_char_display: crate::neovm_bridge::TtyGlyphlessCharDisplay::default(),
         }
     }
 
@@ -244,6 +247,14 @@ impl<'a> DisplayRowLispStringSourceRequest<'a> {
         image_scale_environment: ImageScaleEnvironment,
     ) -> Self {
         self.image_scale_environment = image_scale_environment;
+        self
+    }
+
+    pub(crate) fn with_tty_glyphless_char_display(
+        mut self,
+        display: crate::neovm_bridge::TtyGlyphlessCharDisplay,
+    ) -> Self {
+        self.tty_glyphless_char_display = display;
         self
     }
 
@@ -264,6 +275,7 @@ impl<'a> DisplayRowLispStringSourceRequest<'a> {
             self.value,
             self.face_scope,
         )
+        .with_tty_glyphless_char_display(self.tty_glyphless_char_display)
         .with_image_scale_environment(self.image_scale_environment)
     }
 
@@ -307,6 +319,14 @@ impl<'a> DisplayRowLispStringSourceRenderRequest<'a> {
         self
     }
 
+    fn with_tty_glyphless_char_display(
+        mut self,
+        display: crate::neovm_bridge::TtyGlyphlessCharDisplay,
+    ) -> Self {
+        self.session_request.tty_glyphless_char_display = display;
+        self
+    }
+
     pub(crate) fn base_face_id(&self) -> FaceId {
         self.row_request.base_face_id()
     }
@@ -342,6 +362,7 @@ impl DisplayRowLispStringSourceSessionRequest {
             value,
             base_face_id,
             face_scope,
+            tty_glyphless_char_display: crate::neovm_bridge::TtyGlyphlessCharDisplay::default(),
         }
     }
 }
@@ -358,7 +379,8 @@ impl DisplayRowLispStringSourceSession {
             request.value,
             RenderFaceRef::FaceId(request.base_face_id),
             LispStringSourceOrigin::Normal,
-        )?;
+        )?
+        .with_tty_glyphless_char_display(request.tty_glyphless_char_display);
         Some(Self {
             source,
             state: DisplayRowSourceState::with_face_scope(request.face_scope),

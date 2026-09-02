@@ -6290,6 +6290,57 @@ fn resolve_next_display_source_item_returns_item_and_pending_faces() {
 }
 
 #[test]
+fn resolve_next_display_source_item_merges_glyphless_char_face() {
+    let _eval = Context::new();
+    let mut table = neovm_core::face::FaceTable::new();
+    let mut glyphless = neovm_core::face::Face::new("glyphless-char");
+    glyphless.foreground = Some(neovm_core::face::Color::rgb(0x12, 0x34, 0x56));
+    table.define("glyphless-char", glyphless);
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
+    let mut resolve_state = crate::display_source_resolver::DisplaySourceResolveState::default();
+    let acronym =
+        crate::display_item::GlyphlessAcronym::from_ascii("v").expect("one-byte ASCII acronym");
+    let mut source = crate::display_source::DisplayItemSegmentSource::new(DisplayItem::new(
+        crate::display_item::SourceSpan::synthetic(1, 0, 1),
+        RenderFaceRef::FaceId(FaceId::new(0)),
+        DisplayItemKind::Glyphless(crate::display_item::DisplayGlyphless {
+            ch: '▼',
+            method: GlyphlessMethod::Acronym(acronym),
+        }),
+    ));
+
+    let resolved = crate::display_source_resolver::resolve_next_display_source_item(
+        &mut source,
+        crate::display_source_resolver::DisplaySourceFaceScope::FrameLocal,
+        crate::display_source_resolver::DisplaySourceResolveParams::new(
+            crate::display_source_resolver::DisplaySourceFaceBasis::new(
+                &face_resolver,
+                FaceId::new(0),
+                base_face,
+                crate::display_row::metrics::DisplayRowFallbackMetrics::from_default_face_extents(
+                    8.0, 16.0, 12.0,
+                ),
+            ),
+            None,
+            neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
+        ),
+        &mut resolve_state,
+        &mut face_ids,
+    );
+
+    let (item, pending_faces) = resolved.into_parts();
+    let item = item.expect("glyphless source item");
+    assert!(matches!(item.kind, DisplayItemKind::Glyphless(_)));
+    assert_eq!(item.face, RenderFaceRef::FaceId(FaceId::new(20)));
+    assert_eq!(pending_faces.len(), 1);
+    assert_eq!(pending_faces[0].face_id(), FaceId::new(20));
+    assert_eq!(pending_faces[0].resolved().fg, 0x00123456);
+}
+
+#[test]
 fn resolve_next_display_source_item_resolves_height_modifier_to_pending_face() {
     let _eval = Context::new();
     let table = neovm_core::face::FaceTable::new();
@@ -10533,6 +10584,7 @@ fn test_display_space_window_params() -> WindowParams {
         bounds: Rect::new(0.0, 0.0, 800.0, 600.0),
         text_bounds: Rect::new(0.0, 0.0, 800.0, 560.0),
         selected: true,
+        cursor_role: crate::types::WindowCursorRole::Active,
         mode_line_active: true,
         kind: WindowKind::Main,
         left_col: 0,

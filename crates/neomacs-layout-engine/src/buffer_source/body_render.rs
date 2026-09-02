@@ -103,6 +103,8 @@ pub(crate) struct BufferSourceWalkSetup {
     pub(crate) cursor_info: CursorCaptureState,
     pub(crate) hit_rows: Vec<HitRow>,
     pub(crate) hit_row_range: HitRowRangeTracker,
+    pub(crate) beyond_accessible_end_line_prefix:
+        Option<crate::buffer_source::end_of_buffer_rows::BeyondAccessibleEndLinePrefix>,
 }
 
 struct BufferSourceWalkRenderState<'emit> {
@@ -306,6 +308,7 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
             cursor_info: CursorCaptureState::new(),
             hit_rows: Vec::new(),
             hit_row_range: HitRowRangeTracker::new(self.window_start),
+            beyond_accessible_end_line_prefix: None,
         }
     }
 }
@@ -361,6 +364,7 @@ impl BufferSourceWalkSetup {
             state.face_ids,
             BufferSourceSurfaceContext::new(&self.text_append_surface, overlay_text_row_context),
         )
+        .with_beyond_accessible_end_line_prefix_capture(&mut self.beyond_accessible_end_line_prefix)
         .render_visible_steps(
             loop_context,
             &mut source_walk,

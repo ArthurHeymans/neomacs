@@ -46,6 +46,7 @@ fn window_params() -> WindowParams {
         bounds: Rect::new(10.0, 20.0, 120.0, 100.0),
         text_bounds: Rect::new(20.0, 30.0, 80.0, 70.0),
         selected: true,
+        cursor_role: crate::types::WindowCursorRole::Active,
         mode_line_active: true,
         kind: WindowKind::Main,
         left_col: 0,

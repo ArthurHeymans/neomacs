@@ -422,6 +422,7 @@ pub(crate) struct WindowChromeDisplayRowRequest<'face> {
     pub(crate) formatted: ModeLineDisplayOutput,
     pub(crate) face_scope: DisplaySourceFaceScope,
     pub(crate) image_scale_environment: ImageScaleEnvironment,
+    pub(crate) tty_glyphless_char_display: crate::neovm_bridge::TtyGlyphlessCharDisplay,
 }
 
 pub(crate) struct WindowChromeRowsRenderRequest<'face, 'params> {
@@ -596,11 +597,17 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
             .or(regions.tab_line)
             .map_or(regions.outer.width, |bounds| bounds.width);
         let mut status_line_symbol_values = std::collections::HashMap::new();
-        if let Some(buffer) = state
+        let tty_glyphless_char_display = state
             .evaluator
             .buffer_manager()
             .get(BufferId(params.buffer_id))
-            && let Some(value) = buffer.buffer_local_value("header-line-indent-width")
+            .map(crate::neovm_bridge::TtyGlyphlessCharDisplay::capture)
+            .unwrap_or_default();
+        if let Some(value) = state
+            .evaluator
+            .buffer_manager()
+            .get(BufferId(params.buffer_id))
+            .and_then(|buffer| buffer.buffer_local_value("header-line-indent-width"))
         {
             status_line_symbol_values.insert("header-line-indent-width".to_string(), value);
         }
@@ -653,6 +660,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                     formatted: tab_line_text,
                     face_scope,
                     image_scale_environment: params.image_scale_environment,
+                    tty_glyphless_char_display,
                 },
                 ChromeRowVerticalAnchor::Top,
             ) {
@@ -700,6 +708,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                     formatted: header_line_text,
                     face_scope,
                     image_scale_environment: params.image_scale_environment,
+                    tty_glyphless_char_display,
                 },
                 ChromeRowVerticalAnchor::Top,
             ) {
@@ -766,6 +775,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                     formatted: mode_line_text,
                     face_scope,
                     image_scale_environment: params.image_scale_environment,
+                    tty_glyphless_char_display,
                 },
                 ChromeRowVerticalAnchor::Bottom(window_bottom),
             ) {
@@ -1064,6 +1074,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
             self.face_scope,
         )
         .with_image_scale_environment(self.image_scale_environment)
+        .with_tty_glyphless_char_display(self.tty_glyphless_char_display)
     }
 
     fn into_render_request(

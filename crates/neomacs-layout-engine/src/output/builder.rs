@@ -6,9 +6,9 @@
 //! consumer side; layout no longer treats `FrameGlyphBuffer` as the primary
 //! output contract.
 
-use crate::display_cursor::CursorVisualColumnResolutionContext;
-#[cfg(test)]
-use crate::display_cursor::CursorVisualColumnResolutionRequest;
+use crate::display_cursor::{
+    CursorVisualColumnResolutionContext, CursorVisualColumnResolutionRequest,
+};
 #[cfg(test)]
 use crate::display_row::face_state::resolved_display_row_face;
 #[cfg(test)]
@@ -172,6 +172,34 @@ impl DisplayOutputBuilder {
         source: neomacs_display_protocol::glyph_matrix::MatrixRow,
     ) {
         self.window_state.install_finalized_window_row(row, source);
+    }
+
+    /// Re-resolve the active cursor after a post-layout decoration replaces
+    /// glyph provenance in the current window row.
+    ///
+    /// GNU performs overlay-arrow replacement before `set_cursor_from_row`.
+    /// Neomacs publishes the cursor with the body and then applies late row
+    /// decorations, so this explicit seam restores the same ordering without
+    /// giving decorations arbitrary mutable access to frame cursor state.
+    pub(crate) fn reconcile_phys_cursor_after_row_decoration(&mut self, char_width: f32) {
+        let Some(mut cursor) = self.frame_state.phys_cursor().cloned() else {
+            return;
+        };
+        let Some(placement) = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
+            .resolve_after_row_decoration(
+                self.cursor_visual_column_context(),
+                self.window_state.current_window_text_pixel_bounds(),
+                char_width,
+            )
+        else {
+            return;
+        };
+        placement.apply_to(&mut cursor);
+        let row = cursor.row;
+        let col = cursor.col;
+        let style = cursor.style;
+        self.install_output_frame_artifact(OutputFrameArtifactInstallRequest::phys_cursor(cursor));
+        self.install_output_row_lifecycle(OutputRowLifecycleRequest::cursor(row, col, style));
     }
 
     /// Find the current window's buffer-text row containing `charpos` (Phase 2

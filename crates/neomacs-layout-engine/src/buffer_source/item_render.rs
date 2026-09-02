@@ -233,6 +233,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             row_y_positions,
             cursor_info,
             face_ids,
+            beyond_accessible_end_line_prefix,
             surface,
         } = state;
         let mut source_render = source_render;
@@ -386,6 +387,9 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
                 cursor_info,
                 face_ids,
                 surface,
+            )
+            .with_beyond_accessible_end_line_prefix_capture_state(
+                beyond_accessible_end_line_prefix,
             ),
         )
     }

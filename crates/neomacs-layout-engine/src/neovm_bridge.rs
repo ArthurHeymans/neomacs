@@ -27,18 +27,19 @@ use neovm_core::face::{
 pub(crate) use neovm_core::window::WindowLayoutVariable as LayoutVar;
 use neovm_core::window::{
     CursorTypeSymbol, Frame, FrameDivider, FrameId, VerticalScrollBarType, Window, WindowEndState,
-    resolve_window_scroll_bar_geometry,
+    WindowId, resolve_window_scroll_bar_geometry,
 };
 
 use super::types::{
-    DisplayLineNumbersMode, FrameParams, LineWrapMode, VisualCursorSpec, WindowKind, WindowParams,
+    DisplayLineNumbersMode, FrameParams, LineWrapMode, VisualCursorSpec, WindowCursorRole,
+    WindowKind, WindowParams,
 };
 use crate::coords::{
     clamped_lisp_charpos_to_layout_i64, layout_char_pos_from_i64, layout_emacs_byte_pos_from_i64,
     lisp_char_pos_to_layout_i64, lisp_charpos_to_layout_char_pos,
 };
 use crate::display_face_policy::BaseFacePolicy;
-use crate::display_item::DisplaySourceMappedFaceRun;
+use crate::display_item::{DisplaySourceMappedFaceRun, GlyphlessAcronym, GlyphlessMethod};
 use crate::display_origin::DisplayOrigin;
 use crate::font::frame_metrics::{FaceSizeCandidate, FrameFontDomain, GraphicFontSizePx};
 use crate::font::sizing::FontSizing;
@@ -377,6 +378,7 @@ fn layout_var_info(var: LayoutVar) -> &'static LayoutVarInfo {
                             | LayoutVar::DisplayLineNumbersWiden
                             | LayoutVar::DisplayLineNumbersWidth
                             | LayoutVar::FaceRemappingAlist
+                            | LayoutVar::GlyphlessCharDisplay
                             | LayoutVar::LinePrefix
                             | LayoutVar::NeomacsCursorEffect
                             | LayoutVar::NeomacsVisualCursors
@@ -1142,6 +1144,54 @@ pub(crate) fn buffer_display_table_glyph_vector_p<B: LayoutBufferView + ?Sized>(
         .is_some()
 }
 
+/// A captured terminal character-display environment for one buffer.
+///
+/// GNU's `lookup_glyphless_char_display` (`xdisp.c:8314`) selects the cdr of a
+/// `(GRAPHICAL . TEXT)` entry on a TTY, then converts the Lisp value into a
+/// closed display method. Capturing the validated table once lets buffer text,
+/// replacement strings, and window chrome share the same policy without
+/// carrying an untyped Lisp variable through each rendering pipeline.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct TtyGlyphlessCharDisplay {
+    table: Option<Value>,
+}
+
+impl TtyGlyphlessCharDisplay {
+    pub(crate) fn capture<B: LayoutBufferView + ?Sized>(buffer: &B) -> Self {
+        let table = buffer_local_value(buffer, LayoutVar::GlyphlessCharDisplay).filter(|value| {
+            value
+                .as_char_table_obj()
+                .is_some_and(|table| !table.extras.is_empty())
+        });
+        Self { table }
+    }
+
+    pub(crate) fn method_for(self, ch: char) -> Option<GlyphlessMethod> {
+        let mut method = neovm_core::emacs_core::chartable::ct_ref(&self.table?, ch as i64);
+        if method.is_cons() {
+            method = method.cons_cdr();
+        }
+        match method.as_symbol_name() {
+            Some("zero-width") => Some(GlyphlessMethod::ZeroWidth),
+            Some("thin-space") => Some(GlyphlessMethod::ThinSpace),
+            Some("empty-box") => Some(GlyphlessMethod::EmptyBox),
+            Some("hex-code") => Some(GlyphlessMethod::HexCode),
+            _ => method
+                .as_runtime_string_owned()
+                .and_then(|text| GlyphlessAcronym::from_ascii(&text))
+                .map(GlyphlessMethod::Acronym),
+        }
+    }
+}
+
+/// Resolve the active terminal character mapping for one buffer character.
+pub(crate) fn buffer_glyphless_char_display<B: LayoutBufferView + ?Sized>(
+    buffer: &B,
+    ch: char,
+) -> Option<GlyphlessMethod> {
+    TtyGlyphlessCharDisplay::capture(buffer).method_for(ch)
+}
+
 /// Resolve the ellipsis string GNU renders for invisible/selective-display
 /// folds from the active display table's `DISP_INVIS_VECTOR` slot.
 ///
@@ -1465,7 +1515,7 @@ fn parse_visual_cursors(buffer: &Buffer, default_color: u32) -> Vec<VisualCursor
 fn effective_cursor_spec(
     frame: &Frame,
     buffer: &Buffer,
-    is_selected: bool,
+    cursor_role: WindowCursorRole,
     is_minibuffer: bool,
     window_cursor_type: Value,
 ) -> Option<CursorSpec> {
@@ -1481,7 +1531,7 @@ fn effective_cursor_spec(
         Some(frame_cursor_spec(frame))
     }?;
 
-    if is_selected {
+    if cursor_role.is_active() {
         return Some(base);
     }
 
@@ -1536,6 +1586,7 @@ pub fn window_params_from_neovm(
         default_font_ascent,
         WindowDisplayRole {
             is_selected,
+            cursor_role: WindowCursorRole::from_active(is_selected),
             mode_line_active: is_selected,
             is_minibuffer,
         },
@@ -1552,7 +1603,11 @@ pub fn window_params_from_neovm(
 /// retains its active mode line.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WindowDisplayRole {
+    /// Lisp/frame selection, published to consumers as window identity.
     pub is_selected: bool,
+    /// Ownership of the frame's physical cursor; GNU may redirect this to the
+    /// inactive echo-area mini-window without selecting it.
+    pub cursor_role: WindowCursorRole,
     pub mode_line_active: bool,
     pub is_minibuffer: bool,
 }
@@ -1571,6 +1626,7 @@ pub fn window_params_from_neovm_with_font_sizing(
 ) -> Option<WindowParams> {
     let WindowDisplayRole {
         is_selected,
+        cursor_role,
         mode_line_active,
         is_minibuffer,
     } = display_role;
@@ -1776,7 +1832,7 @@ pub fn window_params_from_neovm_with_font_sizing(
     let cursor_spec = effective_cursor_spec(
         frame,
         buffer,
-        is_selected,
+        cursor_role,
         is_minibuffer,
         window_cursor_type,
     )
@@ -1829,6 +1885,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         bounds: display_bounds,
         text_bounds,
         selected: is_selected,
+        cursor_role,
         mode_line_active,
         kind: window_kind,
         left_col: window.left_col(),
@@ -1977,6 +2034,53 @@ pub fn window_params_from_neovm_with_font_sizing(
     })
 }
 
+/// The sole owner of a frame's active physical cursor for one redisplay.
+///
+/// Window selection remains a separate fact.  `InactiveEchoArea` models GNU's
+/// `cursor-in-echo-area` redirection without manufacturing a selected
+/// minibuffer window, while `None` prevents non-selected frames from
+/// publishing an active cursor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RedisplayCursorTarget {
+    None,
+    LiveWindow(WindowId),
+    InactiveEchoArea(WindowId),
+}
+
+impl RedisplayCursorTarget {
+    pub(crate) fn role_for(self, window_id: WindowId) -> WindowCursorRole {
+        WindowCursorRole::from_active(matches!(
+            self,
+            Self::LiveWindow(owner) | Self::InactiveEchoArea(owner) if owner == window_id
+        ))
+    }
+}
+
+pub(crate) fn redisplay_cursor_target(
+    evaluator: &Context,
+    frame_id: FrameId,
+) -> RedisplayCursorTarget {
+    let Some(frame) = evaluator.frame_manager().get(frame_id) else {
+        return RedisplayCursorTarget::None;
+    };
+    let frame_is_selected = evaluator
+        .frame_manager()
+        .selected_frame()
+        .is_some_and(|selected| selected.id == frame_id);
+    if !frame_is_selected {
+        return RedisplayCursorTarget::None;
+    }
+
+    if evaluator.inactive_echo_area_cursor_requested()
+        && let Some(minibuffer) = frame.minibuffer_window
+        && !evaluator.minibuffer_window_is_active(minibuffer)
+    {
+        return RedisplayCursorTarget::InactiveEchoArea(minibuffer);
+    }
+
+    RedisplayCursorTarget::LiveWindow(frame.selected_window)
+}
+
 /// Collect all leaf windows from a frame (including minibuffer) and build
 /// `WindowParams` for each.
 ///
@@ -2007,6 +2111,7 @@ pub fn collect_layout_params_with_font_sizing(
         .selected_frame()
         .is_some_and(|selected| selected.id == frame_id);
     let minibuffer_caller = evaluator.minibuffer_selected_window_id();
+    let cursor_target = redisplay_cursor_target(evaluator, frame_id);
     let frame_params = frame_params_from_neovm(frame, evaluator.face_table(), evaluator.obarray());
 
     let mut window_params = Vec::new();
@@ -2040,6 +2145,7 @@ pub fn collect_layout_params_with_font_sizing(
             default_font_ascent,
             WindowDisplayRole {
                 is_selected,
+                cursor_role: cursor_target.role_for(*win_id),
                 mode_line_active,
                 is_minibuffer: frame.minibuffer_window == Some(*win_id),
             },
@@ -2092,6 +2198,7 @@ pub fn collect_layout_params_with_font_sizing(
                 default_font_ascent,
                 WindowDisplayRole {
                     is_selected,
+                    cursor_role: cursor_target.role_for(mini_leaf.id()),
                     mode_line_active: is_selected,
                     is_minibuffer: true,
                 },

@@ -291,6 +291,22 @@ fn display_row_progress_writer_uses_thin_space_glyphless_width() {
 }
 
 #[test]
+fn display_row_progress_writer_renders_tty_glyphless_acronyms_as_text() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer =
+        DisplayRowProgressWriter::new(&row_layout, &mut row, DisplayRowPosition::new(0.0, 0), 80.0);
+    let acronym = crate::display_item::GlyphlessAcronym::from_ascii("v")
+        .expect("one-character ASCII acronym");
+
+    let progress = writer.push_item(glyphless_item('▼', GlyphlessMethod::Acronym(acronym)));
+
+    assert_eq!(progress.status(), DisplayRowAppendStatus::Complete);
+    assert_eq!(progress.end(), DisplayRowPosition::new(8.0, 1));
+    assert_eq!(row_text(&row), "v");
+}
+
+#[test]
 fn display_row_progress_writer_clips_glyphless_before_row_mutation() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
     let row_layout = layout();

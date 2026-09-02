@@ -776,11 +776,10 @@ pub(crate) enum TextWindowCursorRole {
 }
 
 impl TextWindowCursorRole {
-    pub(crate) const fn from_selected(selected: bool) -> Self {
-        if selected {
-            Self::Active
-        } else {
-            Self::Inactive
+    pub(crate) const fn from_window_role(role: crate::types::WindowCursorRole) -> Self {
+        match role {
+            crate::types::WindowCursorRole::Active => Self::Active,
+            crate::types::WindowCursorRole::Inactive => Self::Inactive,
         }
     }
 }

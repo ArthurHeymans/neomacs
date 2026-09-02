@@ -140,6 +140,8 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
         self.render_pending_line_number_prefix(context);
 
         let wrap_prefix = self.row_carryover.prefix_request.is_wrap();
+        let line_prefix_checkpoint =
+            (!wrap_prefix).then(|| self.source_render.capture_glyph_checkpoint());
         let row_position = if wrap_prefix {
             // GNU computes TABs inside a wrap-prefix from the current screen
             // row, not from the continued physical line.
@@ -174,6 +176,15 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
         if wrap_prefix {
             self.progress
                 .record_wrap_prefix_width((prefix_end_x - prefix_start_x).max(0.0));
+        } else if let (Some(checkpoint), Some(row)) = (
+            line_prefix_checkpoint,
+            self.source_render.current_row_snapshot(),
+        ) {
+            self.beyond_accessible_end_line_prefix.replace(
+                crate::buffer_source::end_of_buffer_rows::BeyondAccessibleEndLinePrefix::capture(
+                    checkpoint, row,
+                ),
+            );
         }
     }
 

@@ -32,6 +32,7 @@ pub struct TtyMenuBarItem {
     pub hpos: u16,
 }
 use neovm_core::emacs_core::Context;
+use neovm_core::emacs_core::MenuBarRebuildGeneration;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::keymap::{
     KeymapMarker, list_keymap_for_each_binding_recursive, list_keymap_lookup_one_unresolved,
@@ -41,65 +42,82 @@ use neovm_core::emacs_core::keymap::{
 use neovm_core::window::FrameId;
 use std::cell::RefCell;
 
+/// Identity of the evaluator that owns a frame menu cache.
+///
+/// Test processes construct many evaluators on one thread.  Giving the raw
+/// process-unique number a domain type prevents it from being confused with
+/// the independently restarting menu-rebuild generation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct MenuBarContextId(u64);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct MenuBarCacheKey {
+    context: MenuBarContextId,
+    frame: FrameId,
+    rebuild: MenuBarRebuildGeneration,
+    modified_indicator: MenuBarModifiedIndicator,
+}
+
+impl MenuBarCacheKey {
+    fn capture(eval: &Context, frame: FrameId) -> Self {
+        Self {
+            context: MenuBarContextId(eval.context_instance_id()),
+            frame,
+            rebuild: eval.menu_bar_rebuild_generation(),
+            modified_indicator: MenuBarModifiedIndicator::for_frame(eval, frame),
+        }
+    }
+}
+
+/// The selected window's mode-line `*` state sampled by GNU
+/// `window_buffer_changed` (`xdisp.c:13820-13827`).
+///
+/// This is intentionally not buffer identity: switching between two saved
+/// buffers does not by itself cross this particular menu-rebuild boundary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MenuBarModifiedIndicator {
+    Saved,
+    Modified,
+}
+
+impl MenuBarModifiedIndicator {
+    fn for_frame(eval: &Context, frame: FrameId) -> Self {
+        let modified = eval
+            .frame_manager()
+            .get(frame)
+            .and_then(|frame| frame.selected_window())
+            .and_then(|window| window.buffer_id())
+            .and_then(|buffer| eval.buffer_manager().get(buffer))
+            .is_some_and(|buffer| buffer.is_modified());
+        if modified {
+            Self::Modified
+        } else {
+            Self::Saved
+        }
+    }
+}
+
 /// Per-frame cache of collected menu-bar items.
 ///
-/// A typing profile put `collect_tty_menu_bar_items_for_frame` at 22.8% of
-/// the whole session: the full active-keymap walk ran on EVERY redisplay,
-/// per keystroke, for a menu bar whose content essentially never changes.
-/// GNU caches the result on the frame (`fset_menu_bar_items`, xdisp.c
-/// `update_menu_bar`) and recomputes only on `windows_or_buffers_changed`
-/// / `update_mode_lines` / `window_buffer_changed`.
+/// A typing profile put the recursive active-keymap walk at 22.8% of a typing
+/// session.  GNU avoids that work by retaining `menu_bar_items_vector` on the
+/// frame until `update_menu_bar` crosses its invalidation boundary.  This
+/// cache has the same observable boundary: the dedicated rebuild generation
+/// models `windows_or_buffers_changed || update_mode_lines`, while the typed
+/// modified indicator models `window_buffer_changed`. Keymap identities,
+/// mutations and `menu-bar-final-items` are sampled only while rebuilding,
+/// never used as eager cache keys.
 ///
-/// Our key is those triggers translated, plus one GNU lacks:
-///
-/// * `redisplay_generation` — the `update_mode_lines` family
-///   (`force-mode-line-update`, which `define-minor-mode` always calls;
-///   display-variable writes; media changes);
-/// * the identity bits of the ACTIVE maps in order — catches buffer and
-///   window switches, `use-local-map`, global-map replacement, and
-///   minor-mode toggles that change the active-map list, all without any
-///   flag needing to fire;
-/// * `keymap_mutation_epoch` — `define-key`/`set-keymap-parent` interior
-///   mutations, which GNU's cache misses until the next broad trigger;
-/// * `menu-bar-final-items` value bits, read by the reorder step;
-/// * `context_instance_id` — refuses entries from a previous evaluator
-///   (tests create many per thread; generations restart and heap
-///   addresses recycle).
-///
-/// Remaining staleness (raw `setcdr` surgery on a keymap's interior)
-/// matches GNU's own cache exactly and is resolved by the same triggers.
-/// Items are plain data (`String`s + `u16`) — no Lisp values, so the
-/// cache is invisible to GC by construction, not by accident.
+/// Items are plain owned data (`String`s + `u16`), so the cache is invisible
+/// to Lisp GC by construction.
 struct MenuBarItemsCache {
-    context_id: u64,
-    frame_bits: u64,
-    generation: u64,
-    keymap_epoch: neovm_core::emacs_core::keymap::KeymapMutationEpoch,
-    inputs_key: u64,
+    key: MenuBarCacheKey,
     items: Vec<TtyMenuBarItem>,
 }
 
 thread_local! {
     static MENU_BAR_ITEMS_CACHE: RefCell<Vec<MenuBarItemsCache>> =
         const { RefCell::new(Vec::new()) };
-}
-
-/// Fold the identity bits of every cache input into one key (FNV-1a).
-fn menu_bar_inputs_key(eval: &Context, maps: &[Value]) -> u64 {
-    let mut key: u64 = 0xcbf2_9ce4_8422_2325;
-    let mut fold = |bits: u64| {
-        key = (key ^ bits).wrapping_mul(0x0000_0100_0000_01b3);
-    };
-    for map in maps {
-        fold(map.bits() as u64);
-    }
-    fold(
-        eval.obarray()
-            .symbol_value("menu-bar-final-items")
-            .map(|v| v.bits() as u64)
-            .unwrap_or(0),
-    );
-    key
 }
 
 /// Walk the active `[menu-bar]` keymap(s) and return the items to draw.
@@ -127,31 +145,19 @@ pub fn collect_tty_menu_bar_items_for_frame(
     eval: &Context,
     frame_id: FrameId,
 ) -> Vec<TtyMenuBarItem> {
-    // Resolving the ACTIVE maps is cheap; the recursive walk below is what
-    // cost 22.8% of a typing session when run per redisplay. Key the cache
-    // on the walk's inputs (see `MenuBarItemsCache`) and skip the walk when
-    // none have changed.
-    let maps = menu_bar_active_keymaps_for_frame_read_only(eval, frame_id);
-    let context_id = eval.context_instance_id();
-    let frame_bits = frame_id.0;
-    let generation = eval.redisplay_generation();
-    let keymap_epoch = neovm_core::emacs_core::keymap::keymap_mutation_epoch();
-    let inputs_key = menu_bar_inputs_key(eval, &maps);
+    let key = MenuBarCacheKey::capture(eval, frame_id);
 
     let cached = MENU_BAR_ITEMS_CACHE.with(|cache| {
-        cache.borrow().iter().find_map(|entry| {
-            (entry.context_id == context_id
-                && entry.frame_bits == frame_bits
-                && entry.generation == generation
-                && entry.keymap_epoch == keymap_epoch
-                && entry.inputs_key == inputs_key)
-                .then(|| entry.items.clone())
-        })
+        cache
+            .borrow()
+            .iter()
+            .find_map(|entry| (entry.key == key).then(|| entry.items.clone()))
     });
     if let Some(items) = cached {
         return items;
     }
 
+    let maps = menu_bar_active_keymaps_for_frame_read_only(eval, frame_id);
     let mut items: Vec<TtyMenuBarItem> = Vec::new();
     for keymap in &maps {
         collect_from_keymap(eval, keymap, &mut items);
@@ -160,13 +166,9 @@ pub fn collect_tty_menu_bar_items_for_frame(
 
     MENU_BAR_ITEMS_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
-        cache.retain(|entry| entry.context_id == context_id && entry.frame_bits != frame_bits);
+        cache.retain(|entry| entry.key.context == key.context && entry.key.frame != key.frame);
         cache.push(MenuBarItemsCache {
-            context_id,
-            frame_bits,
-            generation,
-            keymap_epoch,
-            inputs_key,
+            key,
             items: items.clone(),
         });
     });
@@ -209,26 +211,58 @@ fn collect_menu_bar_keymap_bindings(
     // `define-key` and do not use that shape.
     list_keymap_for_each_binding_recursive(menu_bar_keymap, None, |key, def| {
         let key_str = key_symbol_name(&key);
-        if seen_keys.insert(key_str.clone())
-            && let Some(label) = extract_menu_label(&def)
-        {
-            // Dedup-by-key: GNU's `menu_bar_item` calls `Fmemq (key,
-            // menu_bar_one_keymap_changed_items)` to skip a key it has
-            // already seen for the *current* keymap. Here we apply the
-            // same idea across the union of keymaps so that a major
-            // mode that re-binds an existing top-level menu (rare)
-            // doesn't produce a duplicate label. The first occurrence
-            // wins, mirroring the natural reverse-insertion-order walk
-            // (newest binding first within each map).
-            if !items.iter().any(|item| item.key == key_str) {
-                items.push(TtyMenuBarItem {
-                    label,
-                    key: key_str,
-                    hpos: 0,
-                });
+        if !seen_keys.insert(key_str.clone()) {
+            return;
+        }
+
+        match MenuBarBindingContribution::from_definition(&def) {
+            MenuBarBindingContribution::Suppress => {
+                // GNU `menu_bar_item` removes a contribution from an earlier
+                // active map when a later map explicitly binds the same key
+                // to `undefined` (keyboard.c).  Calendar relies on this to
+                // hide the global Edit menu.
+                items.retain(|item| item.key != key_str);
             }
+            MenuBarBindingContribution::Item { label } => {
+                // Active maps are walked global-first, like GNU.  A later
+                // valid definition augments the existing menu's map list but
+                // retains the first user-visible label.
+                if !items.iter().any(|item| item.key == key_str) {
+                    items.push(TtyMenuBarItem {
+                        label,
+                        key: key_str,
+                        hpos: 0,
+                    });
+                }
+            }
+            MenuBarBindingContribution::NoItem => {}
         }
     });
+}
+
+/// The three semantically distinct outcomes of GNU's `menu_bar_item` parser.
+///
+/// Keeping suppression separate from an unparseable/non-menu binding matters:
+/// only the literal `undefined` tombstone removes an item contributed by an
+/// earlier active map.  An ordinary non-menu binding merely contributes no
+/// item of its own.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MenuBarBindingContribution {
+    Suppress,
+    Item { label: String },
+    NoItem,
+}
+
+impl MenuBarBindingContribution {
+    fn from_definition(definition: &Value) -> Self {
+        if definition.as_symbol_name() == Some("undefined") {
+            Self::Suppress
+        } else if let Some(label) = extract_menu_label(definition) {
+            Self::Item { label }
+        } else {
+            Self::NoItem
+        }
+    }
 }
 
 /// Resolve a keymap reference: either a `(keymap ...)` cons or a symbol
@@ -246,9 +280,10 @@ fn resolve_keymap(eval: &Context, value: &Value) -> Option<Value> {
     None
 }
 
-/// Reorder `items` so that any whose key matches an entry in
-/// `menu-bar-final-items` is moved to the end of the list, preserving
-/// relative order. Mirrors `keyboard.c:8697-8716`.
+/// Reorder `items` exactly as GNU's `menu_bar_items` does: walk
+/// `menu-bar-final-items` from left to right and move each matching item to
+/// the current end.  The declared list therefore defines the final items'
+/// order; this is not a stable partition of their source-keymap order.
 fn move_final_items_to_end(eval: &Context, items: &mut Vec<TtyMenuBarItem>) {
     let final_items = match eval.obarray().symbol_value("menu-bar-final-items") {
         Some(value) => *value,
@@ -258,32 +293,17 @@ fn move_final_items_to_end(eval: &Context, items: &mut Vec<TtyMenuBarItem>) {
         return;
     }
 
-    // Collect the symbol names referenced by `menu-bar-final-items`.
     let mut tail = final_items;
-    let mut final_keys: Vec<String> = Vec::new();
     while tail.is_cons() {
         let head = tail.cons_car();
         if let Some(name) = head.as_symbol_name() {
-            final_keys.push(name.to_string());
+            if let Some(index) = items.iter().position(|item| item.key == name) {
+                let item = items.remove(index);
+                items.push(item);
+            }
         }
         tail = tail.cons_cdr();
     }
-    if final_keys.is_empty() {
-        return;
-    }
-
-    // Stable partition: keep non-final items first, then final items.
-    let mut non_final: Vec<TtyMenuBarItem> = Vec::with_capacity(items.len());
-    let mut moved: Vec<TtyMenuBarItem> = Vec::new();
-    for item in items.drain(..) {
-        if final_keys.iter().any(|k| k == &item.key) {
-            moved.push(item);
-        } else {
-            non_final.push(item);
-        }
-    }
-    *items = non_final;
-    items.extend(moved);
 }
 
 /// Extract the user-visible label from a menu-bar binding.

@@ -20,7 +20,7 @@ use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan, DisplaySourceFallbackWidth,
 };
 use crate::display_spec::{DisplaySpaceKey, display_space_positive_number};
-use crate::neovm_bridge::{LayoutBufferView, OrderedFaceSources};
+use crate::neovm_bridge::{LayoutBufferView, OrderedFaceSources, TtyGlyphlessCharDisplay};
 use crate::types::WindowParams;
 use crate::unicode::decode_utf8;
 use neomacs_display_protocol::face::BoxVerticalEdges;
@@ -2602,6 +2602,14 @@ impl LispStringSourceCursor {
         })
     }
 
+    pub(crate) fn with_tty_glyphless_char_display(
+        mut self,
+        display: TtyGlyphlessCharDisplay,
+    ) -> Self {
+        self.stack = self.stack.with_tty_glyphless_char_display(display);
+        self
+    }
+
     pub(crate) fn discard_until_row_break(&mut self) -> bool {
         let mut context = DisplaySourceContext::empty();
         while let Some(item) = self.next_item(&mut context) {
@@ -2676,13 +2684,15 @@ struct LispStringResolvedSpan {
 pub(crate) struct LispStringSourceStack {
     frames: Vec<LispStringSourceFrame>,
     next_source_id: u64,
+    tty_glyphless_char_display: TtyGlyphlessCharDisplay,
 }
 
 impl LispStringSourceStack {
-    pub(crate) const fn empty(next_source_id: u64) -> Self {
+    pub(crate) fn empty(next_source_id: u64) -> Self {
         Self {
             frames: Vec::new(),
             next_source_id,
+            tty_glyphless_char_display: TtyGlyphlessCharDisplay::default(),
         }
     }
 
@@ -2696,6 +2706,7 @@ impl LispStringSourceStack {
         Some(Self {
             frames: vec![frame],
             next_source_id: source_id.saturating_add(1),
+            tty_glyphless_char_display: TtyGlyphlessCharDisplay::default(),
         })
     }
 
@@ -2718,7 +2729,16 @@ impl LispStringSourceStack {
         Some(Self {
             frames: vec![frame],
             next_source_id: source_id.saturating_add(1),
+            tty_glyphless_char_display: TtyGlyphlessCharDisplay::default(),
         })
+    }
+
+    pub(crate) fn with_tty_glyphless_char_display(
+        mut self,
+        display: TtyGlyphlessCharDisplay,
+    ) -> Self {
+        self.tty_glyphless_char_display = display;
+        self
     }
 
     pub(crate) fn push_with_replacement_source(
@@ -2757,7 +2777,10 @@ impl LispStringSourceStack {
         loop {
             let (action, replacement_source) = {
                 let frame = self.frames.last_mut()?;
-                (frame.next_action(context), frame.replacement_source)
+                (
+                    frame.next_action(context, self.tty_glyphless_char_display),
+                    frame.replacement_source,
+                )
             };
 
             match action {
@@ -2889,7 +2912,11 @@ impl LispStringSourceFrame {
         })
     }
 
-    fn next_action(&mut self, context: &mut DisplaySourceContext<'_>) -> LispStringAction {
+    fn next_action(
+        &mut self,
+        context: &mut DisplaySourceContext<'_>,
+        tty_glyphless_char_display: TtyGlyphlessCharDisplay,
+    ) -> LispStringAction {
         if self.char_index >= self.char_count() {
             return LispStringAction::PopFrame;
         }
@@ -2976,6 +3003,7 @@ impl LispStringSourceFrame {
                 item_layout,
             },
             context,
+            tty_glyphless_char_display,
         )
         .into()
     }
@@ -2987,6 +3015,7 @@ impl LispStringSourceFrame {
         &mut self,
         span: LispStringResolvedSpan,
         context: &mut DisplaySourceContext<'_>,
+        tty_glyphless_char_display: TtyGlyphlessCharDisplay,
     ) -> LispStringResolvedAction {
         let LispStringResolvedSpan {
             start,
@@ -3022,7 +3051,10 @@ impl LispStringSourceFrame {
                 );
             }
         }
-        if let Some(mut kind) = display_item_kind_for_text_source_char(ch) {
+        if let Some(mut kind) = display_item_kind_for_text_source_char_with_tty_mapping(
+            ch,
+            tty_glyphless_char_display.method_for(ch),
+        ) {
             if let DisplayItemKind::RowBreak(row_break) = &mut kind {
                 let property = |name| {
                     self.props.as_ref().and_then(|props| {
@@ -3049,7 +3081,7 @@ impl LispStringSourceFrame {
             );
         }
 
-        let end = self.next_text_run_end(start, property_end);
+        let end = self.next_text_run_end(start, property_end, tty_glyphless_char_display);
         self.char_index = end;
         LispStringResolvedAction::Emit(
             DisplayItem::new(
@@ -3118,13 +3150,20 @@ impl LispStringSourceFrame {
             .min(self.char_count())
     }
 
-    fn next_text_run_end(&self, start: usize, limit: usize) -> usize {
+    fn next_text_run_end(
+        &self,
+        start: usize,
+        limit: usize,
+        tty_glyphless_char_display: TtyGlyphlessCharDisplay,
+    ) -> usize {
         let mut end = start;
         while end < limit {
             let Some(ch) = self.char_at(end) else {
                 break;
             };
-            if classify_text_source_char(ch) != TextSourceCharClassification::Text {
+            if classify_text_source_char(ch) != TextSourceCharClassification::Text
+                || tty_glyphless_char_display.method_for(ch).is_some()
+            {
                 break;
             }
             end += 1;
@@ -3528,8 +3567,17 @@ pub(crate) fn classify_text_source_char(ch: char) -> TextSourceCharClassificatio
 }
 
 pub(crate) fn display_item_kind_for_text_source_char(ch: char) -> Option<DisplayItemKind> {
+    display_item_kind_for_text_source_char_with_tty_mapping(ch, None)
+}
+
+fn display_item_kind_for_text_source_char_with_tty_mapping(
+    ch: char,
+    tty_mapping: Option<GlyphlessMethod>,
+) -> Option<DisplayItemKind> {
     match classify_text_source_char(ch) {
-        TextSourceCharClassification::Text => None,
+        TextSourceCharClassification::Text => {
+            tty_mapping.map(|method| DisplayItemKind::Glyphless(DisplayGlyphless { ch, method }))
+        }
         TextSourceCharClassification::RowBreak => Some(DisplayItemKind::RowBreak(
             DisplayRowBreak::explicit_newline(),
         )),
@@ -3542,7 +3590,10 @@ pub(crate) fn display_item_kind_for_text_source_char(ch: char) -> Option<Display
             ))
         }
         TextSourceCharClassification::Glyphless { ch, method } => {
-            Some(DisplayItemKind::Glyphless(DisplayGlyphless { ch, method }))
+            Some(DisplayItemKind::Glyphless(DisplayGlyphless {
+                ch,
+                method: tty_mapping.unwrap_or(method),
+            }))
         }
     }
 }

@@ -79,7 +79,7 @@ use crate::frame_layout_transaction::{FrameLayoutCoordinator, FrameRelayoutReque
 use crate::frame_visual_history::{FrameVisualHistories, FrameVisualHistory};
 use crate::incremental_layout::{
     CursorOnlyReplay, EditDamage, LayoutClass, LayoutStats, MatrixValidity, RetainedWindowKey,
-    RetainedWindowMatrix, RowDamage, ScrollReplay,
+    RetainedWindowMatrix, ReusedMatrixRows, RowDamage, ScrollReplay,
 };
 use crate::layout_effect::{LayoutEffect, WindowScrollHookSite};
 use crate::redisplay_fontification::VisibleFontificationCoverage;
@@ -447,7 +447,13 @@ fn resolve_window_display_source_params(
     resolved.buffer_id = buf_id.0;
     resolved.window_start = 0;
     resolved.previous_visible_end = None;
-    resolved.point = 0;
+    resolved.point = if resolved.cursor_role.is_active() {
+        // GNU's echo-area cursor is the insertion position immediately after
+        // the displayed message, not point in the minibuffer's live buffer.
+        buffer_size
+    } else {
+        0
+    };
     resolved.buffer_begv = 0;
     resolved.buffer_size = buffer_size;
     ResolvedWindowDisplaySource {
@@ -513,6 +519,13 @@ fn collect_live_window_layout_inputs(
             .selected_frame()
             .is_some_and(|selected| selected.id == frame_id);
         let is_selected = frame_is_selected && live_frame.selected_window == window_id;
+        let cursor_role = match purpose {
+            WindowLayoutWalkPurpose::Redisplay => {
+                super::neovm_bridge::redisplay_cursor_target(evaluator, frame_id)
+                    .role_for(window_id)
+            }
+            WindowLayoutWalkPurpose::SynchronousQuery => WindowCursorRole::from_active(is_selected),
+        };
         let mode_line_active = frame_is_selected
             && (is_selected || evaluator.minibuffer_selected_window_id() == Some(window_id));
         let is_minibuffer = live_frame.minibuffer_window == Some(window_id);
@@ -531,6 +544,7 @@ fn collect_live_window_layout_inputs(
             default_font_ascent,
             super::neovm_bridge::WindowDisplayRole {
                 is_selected,
+                cursor_role,
                 mode_line_active,
                 is_minibuffer,
             },
@@ -687,13 +701,13 @@ pub struct LayoutEngine {
     /// window `CursorOnly`. Reset per frame.
     cursor_only_window_ids: rustc_hash::FxHashSet<DisplayWindowId>,
     /// Windows that took the Phase 2 pure-scroll fast path this frame, mapped to
-    /// `(reused_shifted_row_count, dvpos)`. Read by the commit path to attribute
+    /// `(exact_reused_rows, dvpos)`. Read by the commit path to attribute
     /// rows + classify `Scroll` + emit `RowDamage::ReusedShifted`.
-    scroll_window_ids: rustc_hash::FxHashMap<DisplayWindowId, (usize, f32)>,
+    scroll_window_ids: rustc_hash::FxHashMap<DisplayWindowId, (ReusedMatrixRows, f32)>,
     /// Windows that took the Phase 3 localized-edit fast path this frame, mapped
-    /// to their reused (verbatim, above-the-edit) row count. Read by the commit
-    /// path to attribute rows + classify `Edit`.
-    edit_window_ids: rustc_hash::FxHashMap<DisplayWindowId, usize>,
+    /// to the exact matrix rows reused verbatim on either side of the relaid
+    /// span. Read by the commit path to attribute rows + classify `Edit`.
+    edit_window_ids: rustc_hash::FxHashMap<DisplayWindowId, ReusedMatrixRows>,
     /// Per-buffer dirty span snapshotted BEFORE this frame's fontification
     /// pass (GNU: the this_line decision reads BEG/END_UNCHANGED before
     /// fontification fires). Phase A edit classification consumes this so the
@@ -2590,8 +2604,8 @@ impl LayoutEngine {
             for entry in &mut frame_state.window_matrices {
                 let window_id = entry.window_id;
                 let cursor_only = self.cursor_only_window_ids.contains(&window_id);
-                let scroll_reused = self.scroll_window_ids.get(&window_id).copied();
-                let edit_reused = self.edit_window_ids.get(&window_id).copied();
+                let scroll_reused = self.scroll_window_ids.get(&window_id).cloned();
+                let edit_reused = self.edit_window_ids.get(&window_id).cloned();
                 // Fast paths classify body vs chrome by ROLE (they reuse the
                 // buffer-text `Text` rows and re-walk all chrome roles); a full
                 // rebuild counts by the `mode_line` flag (the Phase 0a baseline).
@@ -2618,17 +2632,16 @@ impl LayoutEngine {
                     // Body rows were reused verbatim (0 relaid); chrome re-walked.
                     next_layout_stats.reused_rows += enabled_body;
                     next_layout_stats.record_window_class(LayoutClass::CursorOnly);
-                } else if let Some((reused, _dvpos)) = scroll_reused {
+                } else if let Some((ref reused, _dvpos)) = scroll_reused {
                     // Overlapping rows reused shifted; the rest were newly exposed
                     // and walked.
-                    let reused = reused.min(enabled_body);
+                    let reused = reused.len().min(enabled_body);
                     next_layout_stats.reused_shifted_rows += reused;
                     next_layout_stats.relaid_body_rows += enabled_body - reused;
                     next_layout_stats.record_window_class(LayoutClass::Scroll);
-                } else if let Some(reused) = edit_reused {
-                    // Rows above the edit reused verbatim; the dirty line + below
-                    // were relaid.
-                    let reused = reused.min(enabled_body);
+                } else if let Some(ref reused) = edit_reused {
+                    // Rows outside the regenerated edit span reused verbatim.
+                    let reused = reused.len().min(enabled_body);
                     next_layout_stats.reused_rows += reused;
                     next_layout_stats.relaid_body_rows += enabled_body - reused;
                     next_layout_stats.record_window_class(LayoutClass::Edit);
@@ -2638,10 +2651,9 @@ impl LayoutEngine {
                 }
 
                 // Phase 5 (#44) per-row provenance. The fast paths reuse the
-                // FIRST `reused` enabled body rows (cursor-only reuses all);
-                // chrome + disabled + relaid body rows are `New`.
+                // exact reused matrix-row identities; chrome + disabled +
+                // relaid body rows are `New`.
                 {
-                    let mut body_seen = 0usize;
                     for idx in 0..entry.matrix.rows.len() {
                         let row = &entry.matrix.rows[idx];
                         let is_chrome = if role_based {
@@ -2655,14 +2667,14 @@ impl LayoutEngine {
                         }
                         let d = if cursor_only {
                             RowDamage::Reused
-                        } else if let Some((reused, dvpos)) = scroll_reused {
-                            if body_seen < reused {
+                        } else if let Some((ref reused, dvpos)) = scroll_reused {
+                            if reused.contains(idx) {
                                 RowDamage::ReusedShifted { dvpos: Px(dvpos) }
                             } else {
                                 RowDamage::New
                             }
-                        } else if let Some(reused) = edit_reused {
-                            if body_seen < reused {
+                        } else if let Some(ref reused) = edit_reused {
+                            if reused.contains(idx) {
                                 RowDamage::Reused
                             } else {
                                 RowDamage::New
@@ -2671,7 +2683,6 @@ impl LayoutEngine {
                             RowDamage::New
                         };
                         entry.matrix.set_row_damage(idx, d);
-                        body_seen += 1;
                     }
                 }
 
@@ -3513,7 +3524,7 @@ impl LayoutEngine {
                 redisplay_positions,
                 window_end_record,
                 cursor_only,
-                scroll_reused_rows,
+                reused_matrix_rows,
             } => {
                 if let Some(snapshot) = self
                     .window_snapshots
@@ -3528,7 +3539,7 @@ impl LayoutEngine {
                     self.cursor_only_window_ids
                         .insert(DisplayWindowId::new(params.window_id));
                 }
-                if let Some(reused) = scroll_reused_rows {
+                if let Some(reused) = reused_matrix_rows {
                     let window_id = DisplayWindowId::new(params.window_id);
                     if is_edit {
                         self.edit_window_ids.insert(window_id, reused);

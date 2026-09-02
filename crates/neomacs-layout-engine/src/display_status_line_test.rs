@@ -169,6 +169,7 @@ fn window_chrome_display_row_request_renders_measured_lifecycle_row() {
         face_scope: DisplaySourceFaceScope::FrameLocal,
         image_scale_environment:
             neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
+        tty_glyphless_char_display: Default::default(),
     }
     .into_render_request(render_services.face_ids())
     .render_measured(&mut render_services, None)
@@ -217,6 +218,7 @@ fn header_line_fills_the_complete_window_width_with_its_base_face() {
         face_scope: DisplaySourceFaceScope::FrameLocal,
         image_scale_environment:
             neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
+        tty_glyphless_char_display: Default::default(),
     }
     .into_render_request(render_services.face_ids())
     .render_measured(&mut render_services, None)
@@ -307,6 +309,7 @@ fn window_chrome_gui_tab_and_mode_lines_use_font_backed_glyph_advances() {
             face_scope: DisplaySourceFaceScope::FrameLocal,
             image_scale_environment:
                 neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
+            tty_glyphless_char_display: Default::default(),
         }
         .into_render_request(render_services.face_ids())
         .render_measured(&mut render_services, None)
@@ -894,6 +897,7 @@ fn window_chrome_mode_line_row_grows_for_tall_display_element() {
         face_scope: DisplaySourceFaceScope::FrameLocal,
         image_scale_environment:
             neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
+        tty_glyphless_char_display: Default::default(),
     }
     .into_render_request(render_services.face_ids())
     .render_measured(&mut render_services, None)
@@ -932,6 +936,7 @@ fn window_chrome_mode_line_row_grows_for_tall_display_element() {
         face_scope: DisplaySourceFaceScope::FrameLocal,
         image_scale_environment:
             neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
+        tty_glyphless_char_display: Default::default(),
     }
     .into_render_request(render_services.face_ids())
     .render_measured(&mut render_services, None)

@@ -690,6 +690,9 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
     }
 
     fn resolve_item_layout(&mut self, mut item: DisplayItem) -> DisplayItem {
+        if let Some(overlay) = item.kind.semantic_face_overlay() {
+            item.face = self.resolve_face_ref(item.face, Value::symbol(overlay.face_name()));
+        }
         if let Some(factor) = item
             .layout
             .height

@@ -161,7 +161,8 @@ pub(super) struct RoutedLineScan {
 /// before committing. `tail` evolves as the writer's row view would: a
 /// pushed char becomes `(ch, lone-regional-indicator)`, a merged extender
 /// becomes the cluster's last char, a tab's stretch glyph clears it.
-pub(super) fn routed_line_scan(
+pub(super) fn routed_line_scan<B: LayoutBufferView + ?Sized>(
+    buffer: &B,
     text: &[u8],
     byte_idx: usize,
     fit: RowRouteFit<'_>,
@@ -278,6 +279,12 @@ pub(super) fn routed_line_scan(
         // Reject malformed UTF-8 (decode yields U+FFFD over fewer bytes than
         // the char re-encodes to): raw bytes have their own display path.
         if consumed == 0 || ch.len_utf8() != consumed {
+            return Err(RouteRefusal::ScanChar);
+        }
+        // A glyphless-char-display entry changes both the emitted text and
+        // its width.  Leave this row to the typed buffer pipeline, which has
+        // the Lisp table and GNU's TTY-branch semantics.
+        if crate::neovm_bridge::buffer_glyphless_char_display(buffer, ch).is_some() {
             return Err(RouteRefusal::ScanChar);
         }
         // Pipeline decision order: non-Text chars break the text run into

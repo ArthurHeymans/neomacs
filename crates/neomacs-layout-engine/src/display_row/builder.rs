@@ -783,6 +783,24 @@ impl DisplayRowGlyphCheckpoint {
         row.truncate_string_sources(self.string_sources_len);
     }
 
+    /// Keep only glyphs appended after this checkpoint while retaining the
+    /// row-local dependency tables that those glyphs reference.
+    ///
+    /// A rendered structural fragment can contain string-source, pointer, or
+    /// image tokens whose indices are meaningful only with the source row's
+    /// side tables.  Draining the earlier glyphs instead of rebuilding the
+    /// fragment preserves those typed references without exposing raw table
+    /// indices to callers.  Unreferenced earlier entries are harmless and are
+    /// preferable to an incomplete fragment.
+    pub(crate) fn retain_added_glyphs(self, row: &mut GlyphRow) {
+        for area in GlyphArea::ALL {
+            let area_index = area.index();
+            let added_from = self.area_lengths[area_index].min(row.glyphs[area_index].len());
+            row.glyphs[area_index].drain(..added_from);
+        }
+        row.displays_text = false;
+    }
+
     pub(crate) fn first_new_text_glyph<'a>(
         self,
         row: &'a GlyphRow,
@@ -2430,6 +2448,12 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn push_glyphless(&mut self, glyphless: DisplayGlyphless, face_id: FaceId, charpos: usize) {
+        if let GlyphlessMethod::Acronym(acronym) = glyphless.method {
+            for ch in acronym.tty_text().chars() {
+                self.push_text_char(ch, face_id, charpos);
+            }
+            return;
+        }
         let Some(pixel_width) = self.glyphless_pixel_width(&glyphless) else {
             return;
         };
@@ -2470,6 +2494,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     8
                 };
                 Some(char_width_px * label_cols as f32)
+            }
+            GlyphlessMethod::Acronym(acronym) => {
+                Some(char_width_px * acronym.tty_column_count() as f32)
             }
         }
     }

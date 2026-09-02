@@ -3,10 +3,11 @@ use crate::buffer_source::producer::frame::{
     DisplayReplacementExtentLookup, ReplacementCoveredSpan,
 };
 use crate::display_item::{
-    BufferDisplayPropertyReplacementItem, BufferDisplayReplacementSource, DisplayItem,
-    DisplayItemKind, DisplayItemLayout, DisplayLineHeightPolicy, DisplayLineSpacingPolicy,
-    DisplayPointerAppearance, DisplayPointerSourceRange, DisplaySourceMappedText,
-    DisplaySourcePosition, DisplayStringBoxBoundaries, DisplayTextRun, RenderFaceRef, SourceSpan,
+    BufferDisplayPropertyReplacementItem, BufferDisplayReplacementSource, DisplayGlyphless,
+    DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLineHeightPolicy,
+    DisplayLineSpacingPolicy, DisplayPointerAppearance, DisplayPointerSourceRange,
+    DisplaySourceMappedText, DisplaySourcePosition, DisplayStringBoxBoundaries, DisplayTextRun,
+    RenderFaceRef, SourceSpan,
 };
 use crate::display_property::DisplayPropertyClassification;
 use crate::display_source::{
@@ -214,7 +215,9 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             char_granularity_end: None,
             overlay_strings_produced_at: None,
             base_face,
-            replacement_strings: LispStringSourceStack::empty(1),
+            replacement_strings: LispStringSourceStack::empty(1).with_tty_glyphless_char_display(
+                crate::neovm_bridge::TtyGlyphlessCharDisplay::capture(buffer),
+            ),
             mouse_faces: MouseFaceRuns::new(
                 buffer,
                 EmacsByteRange::new(
@@ -639,6 +642,9 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             if crate::neovm_bridge::buffer_display_table_glyph_vector_p(self.buffer, ch) {
                 break;
             }
+            if crate::neovm_bridge::buffer_glyphless_char_display(self.buffer, ch).is_some() {
+                break;
+            }
             end = end.add_len(CharLen::new(1));
         }
         end.max(start.add_len(CharLen::new(1))).min(limit)
@@ -774,6 +780,28 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                         self.span(start, self.char_pos),
                         face,
                         DisplayItemKind::SourceMappedText(mapped_text),
+                    )
+                    .with_layout(layout),
+                    start,
+                    self.char_pos,
+                    face,
+                    context,
+                ),
+            );
+        }
+
+        // GNU consults `glyphless-char-display` after the active display
+        // table and before falling through to the ordinary character path.
+        // Resolve the TTY branch into a closed method here so the row writer
+        // never needs to interpret Lisp values.
+        if let Some(method) = crate::neovm_bridge::buffer_glyphless_char_display(self.buffer, ch) {
+            self.char_pos = start.add_len(CharLen::new(1));
+            return Some(
+                self.bind_box_run_topology(
+                    DisplayItem::new(
+                        self.span(start, self.char_pos),
+                        face,
+                        DisplayItemKind::Glyphless(DisplayGlyphless { ch, method }),
                     )
                     .with_layout(layout),
                     start,

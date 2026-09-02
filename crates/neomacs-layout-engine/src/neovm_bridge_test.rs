@@ -750,7 +750,7 @@ fn test_effective_cursor_spec_prefers_window_cursor_type() {
     let spec = effective_cursor_spec(
         frame,
         buffer,
-        true,
+        WindowCursorRole::Active,
         false,
         Value::cons(Value::symbol("bar"), Value::fixnum(5)),
     )
@@ -841,7 +841,8 @@ fn test_effective_cursor_spec_nonselected_box_becomes_hollow() {
     let frame = evaluator.frame_manager().get(frame_id).unwrap();
     let buffer = evaluator.buffer_manager().get(buf_id).unwrap();
 
-    let spec = effective_cursor_spec(frame, buffer, false, false, Value::T).unwrap();
+    let spec =
+        effective_cursor_spec(frame, buffer, WindowCursorRole::Inactive, false, Value::T).unwrap();
 
     assert_eq!(spec.cursor_kind, CursorKind::HollowBox);
 }
@@ -864,7 +865,8 @@ fn test_effective_cursor_spec_nonselected_bar_narrows_under_t() {
 
     let frame = evaluator.frame_manager().get(frame_id).unwrap();
     let buffer = evaluator.buffer_manager().get(buf_id).unwrap();
-    let spec = effective_cursor_spec(frame, buffer, false, false, Value::T).unwrap();
+    let spec =
+        effective_cursor_spec(frame, buffer, WindowCursorRole::Inactive, false, Value::T).unwrap();
 
     assert_eq!(spec.cursor_kind, CursorKind::Bar);
     assert_eq!(spec.bar_width, CursorBarWidth::new(4));
@@ -887,7 +889,8 @@ fn test_effective_cursor_spec_nonselected_explicit_bar_is_preserved() {
 
     let frame = evaluator.frame_manager().get(frame_id).unwrap();
     let buffer = evaluator.buffer_manager().get(buf_id).unwrap();
-    let spec = effective_cursor_spec(frame, buffer, false, false, Value::T).unwrap();
+    let spec =
+        effective_cursor_spec(frame, buffer, WindowCursorRole::Inactive, false, Value::T).unwrap();
 
     assert_eq!(spec.cursor_kind, CursorKind::Bar);
     assert_eq!(spec.bar_width, CursorBarWidth::new(3));
@@ -907,7 +910,8 @@ fn test_effective_cursor_spec_nonselected_nil_disables_cursor() {
 
     let frame = evaluator.frame_manager().get(frame_id).unwrap();
     let buffer = evaluator.buffer_manager().get(buf_id).unwrap();
-    let spec = effective_cursor_spec(frame, buffer, false, false, Value::T).unwrap();
+    let spec =
+        effective_cursor_spec(frame, buffer, WindowCursorRole::Inactive, false, Value::T).unwrap();
 
     assert_eq!(spec.cursor_kind, CursorKind::NoCursor);
 }
@@ -922,7 +926,7 @@ fn test_effective_cursor_spec_nonselected_minibuffer_hides_cursor() {
     let frame = evaluator.frame_manager().get(frame_id).unwrap();
     let buffer = evaluator.buffer_manager().get(buf_id).unwrap();
 
-    let spec = effective_cursor_spec(frame, buffer, false, true, Value::T);
+    let spec = effective_cursor_spec(frame, buffer, WindowCursorRole::Inactive, true, Value::T);
 
     assert!(spec.is_none());
 }
@@ -1911,6 +1915,35 @@ fn buffer_display_table_glyphs_decodes_per_char_vector() {
     assert_eq!(buffer_display_table_glyphs(buf, 'n'), None);
     // An unmapped char -> None (the hot path).
     assert_eq!(buffer_display_table_glyphs(buf, 'z'), None);
+}
+
+#[test]
+fn glyphless_char_display_uses_the_tty_branch_as_a_typed_acronym() {
+    // GNU `lookup_glyphless_char_display` selects the cdr of a
+    // (GRAPHICAL . TEXT) entry on a terminal frame.  tabulated-list.el uses
+    // this exact shape to display its GUI triangles as ASCII `v` / `^`.
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator
+        .buffer_manager_mut()
+        .create_buffer("*glyphless-tty*");
+    let table = Value::make_char_table(Value::symbol("glyphless-char-display"), Value::NIL, 1);
+    neovm_core::emacs_core::chartable::ct_set_single(
+        &table,
+        '▼' as i64,
+        Value::cons(Value::NIL, Value::string("v")),
+    );
+    if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
+        set_buffer_text(buf, "▼");
+        buf.set_buffer_local("glyphless-char-display", table);
+    }
+
+    let buf = evaluator.buffer_manager().get(buf_id).unwrap();
+    assert_eq!(
+        buffer_glyphless_char_display(buf, '▼'),
+        Some(GlyphlessMethod::Acronym(
+            GlyphlessAcronym::from_ascii("v").expect("one ASCII acronym")
+        )),
+    );
 }
 
 #[test]

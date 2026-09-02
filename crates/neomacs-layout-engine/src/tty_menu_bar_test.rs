@@ -102,6 +102,84 @@ fn collect_from_keymap_hides_inherited_undefined_menu_items() {
     assert_eq!(labels, vec!["Org", "Text"]);
 }
 
+/// GNU builds the top-level menu from the global map first and then lets the
+/// selected buffer's local map contribute.  `menu_bar_item` treats an
+/// explicit `undefined` contribution as a tombstone: it removes an item that
+/// an earlier active map already contributed.  Calendar uses exactly this to
+/// suppress the global Edit menu.
+#[test]
+fn later_active_keymap_undefined_removes_earlier_menu_item() {
+    let mut eval = Context::new();
+    eval.setup_thread_locals();
+
+    let global_map = make_sparse_list_keymap();
+    let global_menu = make_sparse_list_keymap();
+    list_keymap_define(
+        global_menu,
+        Value::symbol("edit"),
+        Value::cons(Value::string("Edit"), Value::symbol("ignore")),
+    );
+    list_keymap_define(global_map, Value::symbol("menu-bar"), global_menu);
+
+    let local_map = make_sparse_list_keymap();
+    let local_menu = make_sparse_list_keymap();
+    list_keymap_define(
+        local_menu,
+        Value::symbol("edit"),
+        Value::symbol("undefined"),
+    );
+    list_keymap_define(local_map, Value::symbol("menu-bar"), local_menu);
+
+    let mut items = Vec::new();
+    collect_from_keymap(&eval, &global_map, &mut items);
+    collect_from_keymap(&eval, &local_map, &mut items);
+
+    assert!(
+        items.is_empty(),
+        "local tombstone left global item: {items:?}"
+    );
+}
+
+/// GNU `menu_bar_items` does not merely stable-partition final items.  It
+/// walks `menu-bar-final-items` from left to right, moving each named item to
+/// the end in that order.  This is observable in comint and bookmark buffers,
+/// where the source keymap order differs from the requested final order.
+#[test]
+fn final_menu_items_follow_the_declared_order() {
+    let mut eval = Context::new();
+    eval.setup_thread_locals();
+    eval.eval_str("(setq menu-bar-final-items '(completion inout signals help-menu))")
+        .expect("set final menu order through the forwarded Lisp variable");
+    assert_eq!(
+        eval.obarray()
+            .symbol_value("menu-bar-final-items")
+            .copied()
+            .expect("menu-bar-final-items is bound")
+            .cons_car()
+            .as_symbol_name(),
+        Some("completion"),
+    );
+    let mut items = [
+        ("file", "File"),
+        ("help-menu", "Help"),
+        ("completion", "Complete"),
+        ("signals", "Signals"),
+        ("inout", "In/Out"),
+    ]
+    .into_iter()
+    .map(|(key, label)| TtyMenuBarItem {
+        key: key.to_owned(),
+        label: label.to_owned(),
+        hpos: 0,
+    })
+    .collect();
+
+    move_final_items_to_end(&eval, &mut items);
+
+    let labels: Vec<_> = items.iter().map(|item| item.label.as_str()).collect();
+    assert_eq!(labels, ["File", "Complete", "In/Out", "Signals", "Help"]);
+}
+
 #[test]
 fn collect_from_keymap_descends_embedded_menu_bar_keymaps() {
     let mut eval = Context::new();
@@ -180,13 +258,12 @@ fn collect_tty_menu_bar_items_uses_selected_window_local_map() {
     );
 }
 
-/// The per-frame item cache must never serve stale content: a `define-key`
-/// that adds a menu-bar entry, or a switch to a buffer with a different
-/// local map, must be visible on the very next collection. (GNU's frame
-/// cache tolerates define-key staleness until the next broad redisplay
-/// trigger; ours keys on the keymap mutation epoch, so it must be stricter.)
+/// GNU's frame item cache observes redisplay invalidation, not the raw identity
+/// or contents of the active maps.  A map mutation or selected-window buffer
+/// switch can therefore retain the previous menu until an update-mode-lines /
+/// windows-or-buffers-changed trigger asks `update_menu_bar` to rebuild it.
 #[test]
-fn menu_bar_item_cache_invalidates_on_keymap_mutation_and_buffer_switch() {
+fn menu_bar_item_cache_rebuilds_only_at_the_redisplay_invalidation_boundary() {
     let mut eval = Context::new();
     eval.setup_thread_locals();
 
@@ -219,24 +296,26 @@ fn menu_bar_item_cache_invalidates_on_keymap_mutation_and_buffer_switch() {
     // with the walked path.
     assert_eq!(labels(&eval), vec!["First".to_string()]);
 
-    // Interior mutation through the low-level store (the chokepoint that
-    // bumps the keymap mutation epoch; builtin define-key funnels here too):
-    // the new entry must appear immediately.
+    // A bare keymap mutation does not cross GNU's menu-bar invalidation
+    // boundary, even though the next rebuild must observe it.
     list_keymap_define(
         local_menu,
         Value::symbol("second-menu"),
         Value::cons(Value::string("Second"), Value::symbol("ignore")),
     );
-    // Sparse-keymap define PREPENDS, so the newer binding walks first --
-    // the invariant under test is presence, immediately, not order.
+    eval.eval_str("(message \"ordinary redisplay is not a menu rebuild\")")
+        .expect("invalidate general redisplay without crossing the menu boundary");
+    assert_eq!(labels(&eval), vec!["First".to_string()]);
+
+    eval.eval_str("(force-mode-line-update)")
+        .expect("cross the GNU update-mode-lines boundary");
     assert_eq!(
         labels(&eval),
         vec!["Second".to_string(), "First".to_string()]
     );
 
-    // A different buffer with a different local map on ANOTHER frame: the
-    // per-frame keying and the active-map identity bits must keep the two
-    // frames' items independent, with no epoch or generation movement.
+    // Buffer identity is not itself a GNU cache key.  A same-state selected
+    // window switch can remain cached until another rebuild predicate fires.
     let buffer_b = eval.buffer_manager_mut().create_buffer("cache-b");
     let other_map = make_sparse_list_keymap();
     let other_menu = make_sparse_list_keymap();
@@ -249,17 +328,25 @@ fn menu_bar_item_cache_invalidates_on_keymap_mutation_and_buffer_switch() {
     eval.buffer_manager_mut()
         .set_buffer_local_map(buffer_b, other_map)
         .expect("set other local map");
-    let frame_b = eval
-        .frame_manager_mut()
-        .create_frame("menu-cache-b", 800, 600, buffer_b);
-    let other_labels: Vec<String> = collect_tty_menu_bar_items_for_frame(&eval, frame_b)
-        .into_iter()
-        .map(|item| item.label)
-        .collect();
-    assert_eq!(other_labels, vec!["Other".to_string()]);
-    // And frame A's cached items are untouched by frame B's collection.
+
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .selected_window_mut()
+        .expect("selected window")
+        .set_buffer(buffer_b);
     assert_eq!(
         labels(&eval),
         vec!["Second".to_string(), "First".to_string()]
     );
+
+    // GNU's third predicate is `window_buffer_changed`: whether the selected
+    // buffer's modified-star state differs from what the window last showed.
+    // Model that state explicitly, without turning buffer identity into an
+    // eager cache key.
+    eval.buffer_manager_mut()
+        .get_mut(buffer_b)
+        .expect("other buffer")
+        .insert("modified");
+    assert_eq!(labels(&eval), vec!["Other".to_string()]);
 }

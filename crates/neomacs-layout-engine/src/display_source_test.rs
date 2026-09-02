@@ -408,10 +408,14 @@ fn nested_boxed_string_uses_distinct_underlying_faces_at_each_boundary() {
     let mut resolver = BoxedFaceResolver;
     let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
 
-    let LispStringAction::Emit(text) = frame.next_action(&mut context) else {
+    let LispStringAction::Emit(text) =
+        frame.next_action(&mut context, TtyGlyphlessCharDisplay::default())
+    else {
         panic!("text item");
     };
-    let LispStringAction::Emit(newline) = frame.next_action(&mut context) else {
+    let LispStringAction::Emit(newline) =
+        frame.next_action(&mut context, TtyGlyphlessCharDisplay::default())
+    else {
         panic!("newline item");
     };
 

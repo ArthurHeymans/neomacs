@@ -25,7 +25,7 @@ use crate::neovm_bridge::{LayoutBufferView, resolve_fringe_indicator_bitmap_inde
 use crate::window_output::TextWindowOutputTarget;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{
-    FringeBitmapInfo, Glyph, GlyphArea, GlyphType, NO_BUFFER_POSITION_CHARPOS,
+    FringeBitmapInfo, Glyph, GlyphArea, GlyphProvenance, GlyphType,
 };
 use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::intern::intern;
@@ -312,9 +312,14 @@ fn overwrite_leading_glyphs(
                 slot.glyph_type = GlyphType::Char { ch };
                 slot.face_id = face_id;
                 slot.wide = false;
+                // GNU copies the arrow string's whole glyph, including its
+                // non-buffer object/position. Retaining the overwritten
+                // buffer provenance leaves point addressable underneath the
+                // arrow and pins the TTY cursor to column zero.
+                slot.provenance = GlyphProvenance::mark();
             }
             None => {
-                let mut glyph = Glyph::char(ch, face_id, NO_BUFFER_POSITION_CHARPOS);
+                let mut glyph = Glyph::char_with_provenance(ch, face_id, GlyphProvenance::mark());
                 glyph.pixel_width = char_width;
                 glyphs.push(glyph);
             }
@@ -326,6 +331,9 @@ fn overwrite_leading_glyphs(
             row_index,
             neomacs_display_protocol::glyph_matrix::MatrixRow::new(row),
         );
+        output
+            .builder()
+            .reconcile_phys_cursor_after_row_decoration(char_width);
     }
     drawn
 }

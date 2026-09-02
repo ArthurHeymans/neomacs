@@ -121,6 +121,7 @@ pub(crate) fn plan_plain_row_classified<B: LayoutBufferView>(
     // filling the row keeps the buffer pipeline (continuation/truncation
     // policy owns that edge).
     let scan = routed_line_scan(
+        buffer,
         row.text,
         row.byte_idx,
         fit,

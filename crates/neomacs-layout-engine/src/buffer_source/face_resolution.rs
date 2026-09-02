@@ -6,7 +6,7 @@
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_face_ref::render_face_ref_id;
-use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
+use crate::display_item::{DisplayItem, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::face_state::{
     DisplayRowActiveFaceState, DisplayRowMeasurementPolicy, stable_face_id_for_resolved,
@@ -361,20 +361,18 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
 
         let active_face_state = active_face_state.clone();
 
-        // GNU `merge_escape_glyph_face` (xdisp.c:8372-8389): a control char shown
-        // as `^A` paints in the `escape-glyph` face merged over the surrounding
-        // base face. Realize that merged face here, install it, and use it as the
-        // ACTIVE face for the append so `push_control_char` writes both `^` and
-        // the caret letter with the one merged face id (GNU's `dpvec_face_id`),
-        // and the row's face table picks up the realized face under that id.
-        if matches!(item.kind, DisplayItemKind::ControlChar { .. })
+        // GNU merges semantic faces after resolving the source face:
+        // `escape-glyph` for control notation and `glyphless-char` for every
+        // visible glyphless representation.  The item kind owns this closed
+        // decision so buffer and Lisp-string pipelines cannot disagree.
+        if let Some(overlay) = item.kind.semantic_face_overlay()
             && let Some(merged) = self.merge_named_active_face(
                 source_render,
                 face_ids,
                 row_geometry,
                 &active_face_state,
                 item,
-                "escape-glyph",
+                overlay.face_name(),
             )
         {
             return merged;

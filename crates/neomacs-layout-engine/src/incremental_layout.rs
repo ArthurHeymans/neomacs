@@ -113,9 +113,11 @@ pub struct RetainedWindowKey {
     pub extra_line_spacing: f32,
     /// `selective-display`; hides/shows lines past a column.
     pub selective_display: i32,
-    /// Whether this is the frame's selected window; drives the solid-vs-hollow
-    /// cursor, so a selection change must re-decorate (full rebuild).
+    /// Whether this is the frame's Lisp-selected window.
     pub selected: bool,
+    /// Physical cursor ownership and active-vs-inactive cursor presentation.
+    /// This can differ from `selected` while the cursor is in the echo area.
+    pub cursor_role: crate::types::WindowCursorRole,
     /// `show-trailing-whitespace` + the resolved background color.
     pub show_trailing_whitespace: bool,
     pub trailing_ws_bg: u32,
@@ -208,6 +210,7 @@ impl RetainedWindowKey {
             extra_line_spacing: p.extra_line_spacing,
             selective_display: p.selective_display,
             selected: p.selected,
+            cursor_role: p.cursor_role,
             show_trailing_whitespace: p.show_trailing_whitespace,
             trailing_ws_bg: p.trailing_ws_bg,
             nobreak_char_display: p.nobreak_char_display,
@@ -460,6 +463,33 @@ pub struct ScrollReplay {
     pub chrome: Option<RetainedChrome>,
     /// Sealed frame-face generation that owns every ID in `reused_rows`.
     pub(crate) face_generation: FrameFaceGeneration,
+}
+
+/// Exact matrix-row identities reused by one accepted incremental replay.
+///
+/// Edit replay can reuse rows both above and below the regenerated span, so
+/// the set is deliberately not representable as a prefix length.  Keeping the
+/// identities in this type prevents commit and renderer provenance from
+/// reconstructing a different set of rows from a lossy count.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ReusedMatrixRows(std::collections::BTreeSet<usize>);
+
+impl ReusedMatrixRows {
+    pub(crate) fn from_indices(indices: impl IntoIterator<Item = usize>) -> Self {
+        Self(indices.into_iter().collect())
+    }
+
+    pub(crate) fn from_replay_rows(rows: &[(usize, MatrixRow)]) -> Self {
+        Self::from_indices(rows.iter().map(|(index, _)| *index))
+    }
+
+    pub(crate) fn contains(&self, index: usize) -> bool {
+        self.0.contains(&index)
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
 /// The current-frame facts a chrome reuse decision compares the retained
@@ -1502,6 +1532,7 @@ mod scroll_classifier_tests {
             extra_line_spacing: 0.0,
             selective_display: 0,
             selected: true,
+            cursor_role: crate::types::WindowCursorRole::Active,
             show_trailing_whitespace: false,
             trailing_ws_bg: 0,
             nobreak_char_display: 0,
