@@ -7,14 +7,20 @@ use std::path::PathBuf;
 mod kqueue;
 #[cfg(not(target_os = "macos"))]
 mod notify_rs;
-mod subrs;
+
+std::cfg_select! {
+    any(target_os = "linux", target_os = "macos") => {
+        mod subrs;
+
+        #[cfg(test)]
+        pub(crate) use self::subrs::SUBRS;
+        pub(crate) use self::subrs::register_subrs;
+    }
+    _ => {}
+}
 
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 mod kqueue_test;
-
-#[cfg(test)]
-pub(crate) use subrs::SUBRS;
-pub(crate) use subrs::register_subrs;
 
 thread_local! {
     static FILE_NOTIFY_STATE: RefCell<FileNotifyState> = RefCell::new(FileNotifyState::default());

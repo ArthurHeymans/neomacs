@@ -28,6 +28,7 @@ const LOCALIZED_SUBR_CATALOG: &[SubrBatch] = &[
     crate::emacs_core::video::SUBRS,
     crate::emacs_core::xwidget::SUBRS,
     crate::emacs_core::indent::SUBRS,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     file_notify::SUBRS,
     crate::emacs_core::sqlite::SUBRS,
     crate::emacs_core::font::SUBRS,
@@ -5284,7 +5285,12 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         )
         .placeholder(NoEvalPlaceholder::Nil),
     );
-    file_notify::register_subrs(ctx);
+    std::cfg_select! {
+        any(target_os = "linux", target_os = "macos") => {
+            file_notify::register_subrs(ctx);
+        }
+        _ => {}
+    }
     ctx.register_subr(SubrSpec::new(
         "lock-buffer",
         NativeFn::ContextVec(crate::emacs_core::filelock::builtin_lock_buffer),
