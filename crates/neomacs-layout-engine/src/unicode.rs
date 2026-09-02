@@ -3,6 +3,38 @@
 //! Pure functions for UTF-8 decoding, character width classification,
 //! grapheme cluster collection, and glyphless character detection.
 
+use neovm_core::emacs_core::emacs_char::{EmacsChar, string_char};
+
+/// The two character interpretations used by GNU string and buffer storage.
+///
+/// Keeping this distinction explicit prevents an unibyte `0x80` from being
+/// mistaken for the first byte of an Emacs multibyte character.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum EmacsTextStorage {
+    Unibyte,
+    Multibyte,
+}
+
+/// Decode one character without narrowing Emacs's 22-bit character domain to
+/// Rust's Unicode-only [`char`].
+pub(crate) fn decode_emacs_char(
+    bytes: &[u8],
+    storage: EmacsTextStorage,
+) -> Option<(EmacsChar, usize)> {
+    let first = *bytes.first()?;
+    match storage {
+        // GNU `get_next_display_element` converts every non-ASCII character
+        // from unibyte text with `BYTE8_TO_CHAR` before display-table,
+        // glyphless, and printable classification (xdisp.c:8469-8481).  Use
+        // the corresponding typed constructor here, while ASCII stays itself.
+        EmacsTextStorage::Unibyte => Some((EmacsChar::from_unibyte_byte(first), 1)),
+        EmacsTextStorage::Multibyte => {
+            let (code, len) = string_char(bytes);
+            EmacsChar::from_code(code).map(|character| (character, len))
+        }
+    }
+}
+
 /// Decode one UTF-8 character from a byte slice.
 /// Returns (char, bytes_consumed).
 pub(crate) fn decode_utf8(bytes: &[u8]) -> (char, usize) {

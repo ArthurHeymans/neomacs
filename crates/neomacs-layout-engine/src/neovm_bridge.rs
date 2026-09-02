@@ -87,6 +87,7 @@ impl DisplayLineNumbersMode {
 }
 
 pub(crate) trait LayoutBufferView {
+    fn layout_is_multibyte(&self) -> bool;
     fn layout_buffer_local_value(&self, var: LayoutVar) -> Option<Value>;
     fn layout_point_min_emacs_byte_pos(&self) -> EmacsBytePos;
     fn layout_point_max_emacs_byte_pos(&self) -> EmacsBytePos;
@@ -394,6 +395,10 @@ fn layout_var_info(var: LayoutVar) -> &'static LayoutVarInfo {
 }
 
 impl LayoutBufferView for Buffer {
+    fn layout_is_multibyte(&self) -> bool {
+        self.get_multibyte()
+    }
+
     fn layout_buffer_local_value(&self, var: LayoutVar) -> Option<Value> {
         self.buffer_local_value_id(var.sym_id())
     }
@@ -480,6 +485,10 @@ impl LayoutBufferView for Buffer {
 }
 
 impl LayoutBufferView for LayoutBufferSnapshot {
+    fn layout_is_multibyte(&self) -> bool {
+        self.text_snapshot.is_multibyte()
+    }
+
     fn layout_buffer_local_value(&self, var: LayoutVar) -> Option<Value> {
         self.vars[var as usize]
     }
@@ -1134,12 +1143,12 @@ pub(crate) fn buffer_has_active_display_table<B: LayoutBufferView + ?Sized>(buff
 /// the mapped item is emitted.
 pub(crate) fn buffer_display_table_glyph_vector_p<B: LayoutBufferView + ?Sized>(
     buffer: &B,
-    ch: char,
+    character: neovm_core::emacs_core::emacs_char::EmacsChar,
 ) -> bool {
     let Some(table) = active_buffer_display_table(buffer) else {
         return false;
     };
-    neovm_core::emacs_core::chartable::ct_ref(&table, ch as i64)
+    neovm_core::emacs_core::chartable::ct_ref(&table, i64::from(character.code()))
         .as_vector_data()
         .is_some()
 }
@@ -1166,8 +1175,12 @@ impl TtyGlyphlessCharDisplay {
         Self { table }
     }
 
-    pub(crate) fn method_for(self, ch: char) -> Option<GlyphlessMethod> {
-        let mut method = neovm_core::emacs_core::chartable::ct_ref(&self.table?, ch as i64);
+    pub(crate) fn method_for(
+        self,
+        character: neovm_core::emacs_core::emacs_char::EmacsChar,
+    ) -> Option<GlyphlessMethod> {
+        let mut method =
+            neovm_core::emacs_core::chartable::ct_ref(&self.table?, i64::from(character.code()));
         if method.is_cons() {
             method = method.cons_cdr();
         }
@@ -1187,9 +1200,9 @@ impl TtyGlyphlessCharDisplay {
 /// Resolve the active terminal character mapping for one buffer character.
 pub(crate) fn buffer_glyphless_char_display<B: LayoutBufferView + ?Sized>(
     buffer: &B,
-    ch: char,
+    character: neovm_core::emacs_core::emacs_char::EmacsChar,
 ) -> Option<GlyphlessMethod> {
-    TtyGlyphlessCharDisplay::capture(buffer).method_for(ch)
+    TtyGlyphlessCharDisplay::capture(buffer).method_for(character)
 }
 
 /// Resolve the ellipsis string GNU renders for invisible/selective-display
@@ -1236,10 +1249,10 @@ pub(crate) fn buffer_invisible_ellipsis_text<B: LayoutBufferView>(buffer: &B) ->
 ///
 pub(crate) fn buffer_display_table_glyphs<B: LayoutBufferView + ?Sized>(
     buffer: &B,
-    ch: char,
+    character: neovm_core::emacs_core::emacs_char::EmacsChar,
 ) -> Option<BufferDisplayTableGlyphs> {
     let table = active_buffer_display_table(buffer)?;
-    let entry = neovm_core::emacs_core::chartable::ct_ref(&table, ch as i64);
+    let entry = neovm_core::emacs_core::chartable::ct_ref(&table, i64::from(character.code()));
     let glyphs = entry.as_vector_data()?;
     let decoded: Vec<_> = glyphs
         .iter()

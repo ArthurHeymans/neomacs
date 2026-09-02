@@ -3,28 +3,28 @@ use crate::buffer_source::producer::frame::{
     DisplayReplacementExtentLookup, ReplacementCoveredSpan,
 };
 use crate::display_item::{
-    BufferDisplayPropertyReplacementItem, BufferDisplayReplacementSource, DisplayGlyphless,
-    DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLineHeightPolicy,
-    DisplayLineSpacingPolicy, DisplayPointerAppearance, DisplayPointerSourceRange,
-    DisplaySourceMappedText, DisplaySourcePosition, DisplayStringBoxBoundaries, DisplayTextRun,
-    RenderFaceRef, SourceSpan,
+    BufferDisplayPropertyReplacementItem, BufferDisplayReplacementSource, DisplayItem,
+    DisplayItemKind, DisplayItemLayout, DisplayLineHeightPolicy, DisplayLineSpacingPolicy,
+    DisplayPointerAppearance, DisplayPointerSourceRange, DisplaySourceMappedText,
+    DisplaySourcePosition, DisplayStringBoxBoundaries, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_property::DisplayPropertyClassification;
 use crate::display_source::{
     DisplayItemSource, DisplayPropertySourceCursorAction, DisplayPropertySourceFaces,
     DisplayPropertySourcePlan, DisplaySourceContext, LispStringSourceStack,
     TextSourceCharClassification, classify_text_source_char,
-    display_item_kind_for_text_source_char,
+    display_item_kind_for_text_source_char_with_tty_mapping,
 };
 use crate::neovm_bridge::{
     LayoutBufferView, LayoutCharPropertyLookup, OrderedFaceSources, OverlayDisplayString,
     RustTextPropAccess,
 };
-use crate::unicode::decode_utf8;
+use crate::unicode::{EmacsTextStorage, decode_emacs_char, decode_utf8};
 use neomacs_display_protocol::face::BoxVerticalEdges;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::composite::composition_display_text_for_property;
+use neovm_core::emacs_core::emacs_char::EmacsChar;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferTextDisplayReplacementMode {
@@ -336,7 +336,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         self.buffer.layout_char_pos_to_emacs_byte_pos(char_pos)
     }
 
-    pub(crate) fn char_at(&self, char_pos: CharPos0) -> Option<char> {
+    pub(crate) fn char_at(&self, char_pos: CharPos0) -> Option<EmacsChar> {
         if char_pos >= self.end {
             return None;
         }
@@ -345,8 +345,15 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         let mut bytes = Vec::new();
         self.buffer
             .layout_copy_emacs_byte_range_to(EmacsByteRange::new(start, end), &mut bytes);
-        let (ch, len) = decode_utf8(&bytes);
-        (len > 0).then_some(ch)
+        decode_emacs_char(
+            &bytes,
+            if self.buffer.layout_is_multibyte() {
+                EmacsTextStorage::Multibyte
+            } else {
+                EmacsTextStorage::Unibyte
+            },
+        )
+        .map(|(character, _)| character)
     }
 
     fn text_slice(&self, start: CharPos0, end: CharPos0) -> String {
@@ -358,10 +365,21 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         let mut text = String::new();
         let mut offset = 0usize;
         while offset < bytes.len() {
-            let (ch, len) = decode_utf8(&bytes[offset..]);
-            if len == 0 {
+            let Some((character, len)) = decode_emacs_char(
+                &bytes[offset..],
+                if self.buffer.layout_is_multibyte() {
+                    EmacsTextStorage::Multibyte
+                } else {
+                    EmacsTextStorage::Unibyte
+                },
+            ) else {
                 break;
-            }
+            };
+            let TextSourceCharClassification::Text(ch) = classify_text_source_char(character)
+            else {
+                debug_assert!(false, "special Emacs character entered a plain text run");
+                break;
+            };
             text.push(ch);
             offset += len;
         }
@@ -633,7 +651,10 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             let Some(ch) = self.char_at(end) else {
                 break;
             };
-            if classify_text_source_char(ch) != TextSourceCharClassification::Text {
+            if !matches!(
+                classify_text_source_char(ch),
+                TextSourceCharClassification::Text(_)
+            ) {
                 break;
             }
             // A char that the active display table remaps to a glyph vector must
@@ -656,9 +677,9 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
     /// entry / not a vector) and leaves `ch` to render literally.
     fn display_table_glyphs(
         &self,
-        ch: char,
+        character: EmacsChar,
     ) -> Option<crate::neovm_bridge::BufferDisplayTableGlyphs> {
-        crate::neovm_bridge::buffer_display_table_glyphs(self.buffer, ch)
+        crate::neovm_bridge::buffer_display_table_glyphs(self.buffer, character)
     }
 
     fn display_property_cursor_action(
@@ -700,7 +721,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         layout: DisplayItemLayout,
         context: &mut DisplaySourceContext<'_>,
     ) -> Option<DisplayItem> {
-        let ch = self.char_at(start)?;
+        let character = self.char_at(start)?;
 
         if let Some(composition) = self
             .composition_prop_at(start)
@@ -736,7 +757,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         // (the single char) exactly once, so byte/charpos never desync; each
         // decoded glyph is appended as a real glyph (a `?\t` glyph re-expands
         // through the ordinary tab path), keeping the row non-blank.
-        if let Some(glyphs) = self.display_table_glyphs(ch) {
+        if let Some(glyphs) = self.display_table_glyphs(character) {
             let crate::neovm_bridge::BufferDisplayTableGlyphs {
                 text,
                 lisp_face_runs,
@@ -755,7 +776,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             // the next row resumes on the following char. An entry WITHOUT a
             // trailing `\n` (e.g. `[$]`) keeps the plain no-break replacement,
             // matching GNU (the newline's break is fully replaced -> lines join).
-            if ch == '\n' && mapped_text.text.ends_with('\n') {
+            if character.code() == u32::from(b'\n') && mapped_text.text.ends_with('\n') {
                 return Some(
                     self.bind_box_run_topology(
                         DisplayItem::new(
@@ -794,25 +815,10 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         // table and before falling through to the ordinary character path.
         // Resolve the TTY branch into a closed method here so the row writer
         // never needs to interpret Lisp values.
-        if let Some(method) = crate::neovm_bridge::buffer_glyphless_char_display(self.buffer, ch) {
-            self.char_pos = start.add_len(CharLen::new(1));
-            return Some(
-                self.bind_box_run_topology(
-                    DisplayItem::new(
-                        self.span(start, self.char_pos),
-                        face,
-                        DisplayItemKind::Glyphless(DisplayGlyphless { ch, method }),
-                    )
-                    .with_layout(layout),
-                    start,
-                    self.char_pos,
-                    face,
-                    context,
-                ),
-            );
-        }
-
-        if let Some(mut kind) = display_item_kind_for_text_source_char(ch) {
+        if let Some(mut kind) = display_item_kind_for_text_source_char_with_tty_mapping(
+            character,
+            crate::neovm_bridge::buffer_glyphless_char_display(self.buffer, character),
+        ) {
             if let DisplayItemKind::RowBreak(row_break) = &mut kind {
                 let bytepos = self.byte_pos(start);
                 *row_break = row_break

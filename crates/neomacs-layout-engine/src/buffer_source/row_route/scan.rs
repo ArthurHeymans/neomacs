@@ -57,7 +57,10 @@ pub(super) fn classify_routed_row_char(ch: char) -> Option<RoutedRowCharAdvance>
     if ch.is_ascii() {
         return None;
     }
-    if classify_text_source_char(ch) != TextSourceCharClassification::Text {
+    if !matches!(
+        classify_text_source_char(EmacsChar::from_char(ch)),
+        TextSourceCharClassification::Text(_)
+    ) {
         return None;
     }
     if is_regional_indicator(ch as u32)
@@ -284,15 +287,19 @@ pub(super) fn routed_line_scan<B: LayoutBufferView + ?Sized>(
         // A glyphless-char-display entry changes both the emitted text and
         // its width.  Leave this row to the typed buffer pipeline, which has
         // the Lisp table and GNU's TTY-branch semantics.
-        if crate::neovm_bridge::buffer_glyphless_char_display(buffer, ch).is_some() {
+        if crate::neovm_bridge::buffer_glyphless_char_display(buffer, EmacsChar::from_char(ch))
+            .is_some()
+        {
             return Err(RouteRefusal::ScanChar);
         }
         // Pipeline decision order: non-Text chars break the text run into
         // their own items BEFORE any composition (the classify arm below
         // refuses those), while a Text-class char consults the writer's
         // compose ladder first.
-        if classify_text_source_char(ch) == TextSourceCharClassification::Text
-            && routed_char_would_compose(ch, tail)
+        if matches!(
+            classify_text_source_char(EmacsChar::from_char(ch)),
+            TextSourceCharClassification::Text(_)
+        ) && routed_char_would_compose(ch, tail)
         {
             if !(routed_composable_extender(ch) && merge_target == RoutedScanMergeTarget::Simple) {
                 return Err(RouteRefusal::ScanCompose);

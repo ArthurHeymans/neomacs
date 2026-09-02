@@ -585,11 +585,10 @@ impl DisplayItemKind {
                     | GlyphlessMethod::Acronym(_),
                 ..
             }) => Some(DisplayItemFaceOverlay::GlyphlessChar),
-            Self::TextRun(_)
-            | Self::SourceMappedText(_)
-            | Self::Stretch(_)
-            | Self::MediaReplacement(_)
-            | Self::RowBreak(_) => None,
+            Self::SourceMappedText(mapped) => mapped.semantic_face_overlay(),
+            Self::TextRun(_) | Self::Stretch(_) | Self::MediaReplacement(_) | Self::RowBreak(_) => {
+                None
+            }
         }
     }
 }
@@ -922,6 +921,10 @@ impl DisplaySourceMappedFaceRun {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DisplaySourceMappedText {
     pub(crate) text: Box<str>,
+    /// A semantic face introduced by the mapping itself rather than by a text
+    /// property. Octal escapes own `escape-glyph` here so the source character
+    /// need not be representable as a Rust `char` downstream.
+    semantic_face_overlay: Option<DisplayItemFaceOverlay>,
     /// Source of glyph indices when buffer coverage and glyph provenance are
     /// intentionally different (a string-valued `display` replacement).
     /// `None` retains the covered-start rule used by escape/composition
@@ -938,6 +941,7 @@ impl DisplaySourceMappedText {
     pub(crate) fn new(text: impl Into<Box<str>>) -> Self {
         Self {
             text: text.into(),
+            semantic_face_overlay: None,
             glyph_string_start: None,
             lisp_face_runs: None,
         }
@@ -953,6 +957,7 @@ impl DisplaySourceMappedText {
         ));
         Self {
             text: text.into(),
+            semantic_face_overlay: None,
             glyph_string_start: Some(glyph_string_start),
             lisp_face_runs: None,
         }
@@ -973,12 +978,22 @@ impl DisplaySourceMappedText {
         self
     }
 
+    pub(crate) fn with_semantic_face_overlay(mut self, overlay: DisplayItemFaceOverlay) -> Self {
+        self.semantic_face_overlay = Some(overlay);
+        self
+    }
+
+    pub(crate) const fn semantic_face_overlay(&self) -> Option<DisplayItemFaceOverlay> {
+        self.semantic_face_overlay
+    }
+
     pub(crate) fn face_segment(
         text: impl Into<Box<str>>,
         glyph_string_start: Option<DisplaySourcePosition>,
     ) -> Self {
         Self {
             text: text.into(),
+            semantic_face_overlay: None,
             glyph_string_start,
             lisp_face_runs: None,
         }
@@ -1023,6 +1038,7 @@ impl DisplaySourceMappedText {
             .map(|(byte, _)| byte)?;
         Some(Self {
             text: self.text[split_byte..].into(),
+            semantic_face_overlay: self.semantic_face_overlay,
             glyph_string_start: self
                 .glyph_string_start
                 .map(|start| start.advanced_by(emitted_chars, split_byte)),

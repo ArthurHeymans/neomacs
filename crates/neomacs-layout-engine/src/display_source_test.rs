@@ -3,18 +3,20 @@ use crate::buffer_source::consumption::{BufferSourceConsumedItem, BufferSourceCo
 use crate::buffer_source::text_source::{BufferTextCursorItem, BufferTextSourceCursor};
 use crate::display_item::{
     BufferDisplayReplacementSource, DisplayGlyphless, DisplayImageItem, DisplayItem,
-    DisplayItemKind, DisplayLength, DisplayMediaReplacement, DisplayRowBreakReason,
-    DisplaySourceId, DisplaySourceMappedFaceRun, DisplaySourceMappedText, DisplaySourcePosition,
-    DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessMethod, RenderFaceRef,
-    SourceSpan,
+    DisplayItemFaceOverlay, DisplayItemKind, DisplayLength, DisplayMediaReplacement,
+    DisplayRowBreakReason, DisplaySourceId, DisplaySourceMappedFaceRun, DisplaySourceMappedText,
+    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessMethod,
+    RenderFaceRef, SourceSpan,
 };
 use crate::display_property::DisplayReplacementProperty;
 use crate::display_source::DisplaySourceTextPosition;
 use crate::neovm_bridge::{LayoutBufferSnapshot, LayoutBufferView};
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange};
+use neovm_core::emacs_core::emacs_char::{EmacsChar, MAX_5_BYTE_CHAR};
 use neovm_core::emacs_core::value::StringTextPropertyRun;
 use neovm_core::emacs_core::{Context, Value};
+use neovm_core::heap_types::LispString;
 
 fn collect_items(source: &mut impl DisplayItemSource) -> Vec<DisplayItem> {
     let mut context = DisplaySourceContext::empty();
@@ -94,6 +96,85 @@ fn snapshot_with_text(text: &str) -> (BufferId, LayoutBufferSnapshot, CharPos0) 
     (buffer_id, snapshot, end)
 }
 
+#[test]
+fn text_sources_preserve_emacs_non_unicode_and_raw_byte_characters_for_display() {
+    let mut bytes = Vec::new();
+    for character in [
+        EmacsChar::from_code(MAX_5_BYTE_CHAR).expect("maximum five-byte character"),
+        EmacsChar::from_byte8(0x80),
+        EmacsChar::from_byte8(0xff),
+    ] {
+        bytes.extend(character.to_emacs_bytes());
+    }
+
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    eval.buffer_manager_mut()
+        .get_mut(buffer_id)
+        .expect("buffer")
+        .insert_lisp_string(&LispString::from_emacs_bytes(bytes.clone()));
+    let buffer = eval.buffer_manager().get(buffer_id).expect("buffer");
+    let end = buffer.total_char_end_pos();
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::FaceId(FaceId::new(0)),
+    );
+
+    let buffer_items = collect_items(&mut source);
+    assert_eq!(
+        item_texts(&buffer_items),
+        ["\\17777577", "\\200", "\\377"],
+        "GNU xdisp displays non-Unicode Emacs characters by full octal code and raw-byte characters by their underlying byte"
+    );
+    assert!(buffer_items.iter().all(|item| {
+        item.kind.semantic_face_overlay() == Some(DisplayItemFaceOverlay::EscapeGlyph)
+    }));
+
+    let value = Value::heap_string(LispString::from_emacs_bytes(bytes));
+    let mut source = LispStringSourceCursor::new(
+        1,
+        value,
+        RenderFaceRef::FaceId(FaceId::new(0)),
+        LispStringSourceOrigin::Normal,
+    )
+    .expect("Lisp string source");
+    let multibyte_string_items = collect_items(&mut source);
+    assert_eq!(
+        item_texts(&multibyte_string_items),
+        ["\\17777577", "\\200", "\\377"],
+        "buffer and Lisp-string display sources must share Emacs character semantics"
+    );
+    assert!(multibyte_string_items.iter().all(|item| {
+        item.kind.semantic_face_overlay() == Some(DisplayItemFaceOverlay::EscapeGlyph)
+    }));
+
+    let value = Value::heap_string(LispString::from_unibyte(vec![0x80, 0xff]));
+    let mut source = LispStringSourceCursor::new(
+        2,
+        value,
+        RenderFaceRef::FaceId(FaceId::new(0)),
+        LispStringSourceOrigin::Normal,
+    )
+    .expect("unibyte Lisp string source");
+    let unibyte_string_items = collect_items(&mut source);
+    assert_eq!(
+        item_texts(&unibyte_string_items),
+        ["\\200", "\\377"],
+        "unibyte source storage must decode each high byte independently"
+    );
+    assert!(unibyte_string_items.iter().all(|item| {
+        item.kind.semantic_face_overlay() == Some(DisplayItemFaceOverlay::EscapeGlyph)
+    }));
+}
+
 fn expected_source_coords(text: &str) -> Vec<(char, usize, i64)> {
     let mut byte_offset = 0usize;
     let mut charpos = 0i64;
@@ -110,27 +191,27 @@ fn expected_source_coords(text: &str) -> Vec<(char, usize, i64)> {
 #[test]
 fn text_source_char_classification_matches_display_items() {
     assert_eq!(
-        classify_text_source_char('\n'),
+        classify_text_source_char(EmacsChar::from_char('\n')),
         TextSourceCharClassification::RowBreak
     );
     assert_eq!(
-        classify_text_source_char('\u{7f}'),
+        classify_text_source_char(EmacsChar::from_char('\u{7f}')),
         TextSourceCharClassification::ControlChar { ch: '\u{7f}' }
     );
     assert_eq!(
-        classify_text_source_char('\u{feff}'),
+        classify_text_source_char(EmacsChar::from_char('\u{feff}')),
         TextSourceCharClassification::Glyphless {
             ch: '\u{feff}',
             method: GlyphlessMethod::ZeroWidth,
         }
     );
     assert_eq!(
-        classify_text_source_char('\t'),
-        TextSourceCharClassification::Text
+        classify_text_source_char(EmacsChar::from_char('\t')),
+        TextSourceCharClassification::Text('\t')
     );
     assert_eq!(
-        classify_text_source_char('x'),
-        TextSourceCharClassification::Text
+        classify_text_source_char(EmacsChar::from_char('x')),
+        TextSourceCharClassification::Text('x')
     );
 }
 
@@ -1096,16 +1177,22 @@ fn classify_non_printable_c1_and_specials_as_escape_octal() {
         ('\u{fdd0}', "\\176720"),
     ] {
         assert_eq!(
-            classify_text_source_char(ch),
-            TextSourceCharClassification::EscapeOctal { ch },
+            classify_text_source_char(EmacsChar::from_char(ch)),
+            TextSourceCharClassification::EscapeOctal {
+                displayed_code: ch as u32,
+            },
             "{ch:?} must classify as escape-octal"
         );
-        assert_eq!(escape_glyph_octal_text(ch), octal, "octal text for {ch:?}");
+        assert_eq!(
+            escape_glyph_octal_text(ch as u32),
+            octal,
+            "octal text for {ch:?}"
+        );
     }
     // A printable-but-glyphless char (U+FFFC, So) is NOT escaped -- it stays a
     // glyphless item so the two behaviors don't collide.
     assert!(matches!(
-        classify_text_source_char('\u{fffc}'),
+        classify_text_source_char(EmacsChar::from_char('\u{fffc}')),
         TextSourceCharClassification::Glyphless { .. }
     ));
 }

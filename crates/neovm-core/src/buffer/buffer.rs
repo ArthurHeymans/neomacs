@@ -1975,6 +1975,10 @@ pub struct BufferTextSnapshot {
 }
 
 impl BufferTextSnapshot {
+    pub fn is_multibyte(&self) -> bool {
+        self.text.is_multibyte()
+    }
+
     pub fn emacs_byte_len(&self) -> EmacsByteLen {
         self.text.emacs_byte_len()
     }

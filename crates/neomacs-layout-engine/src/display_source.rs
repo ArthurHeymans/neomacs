@@ -22,7 +22,7 @@ use crate::display_source_append_plan::{
 use crate::display_spec::{DisplaySpaceKey, display_space_positive_number};
 use crate::neovm_bridge::{LayoutBufferView, OrderedFaceSources, TtyGlyphlessCharDisplay};
 use crate::types::WindowParams;
-use crate::unicode::decode_utf8;
+use crate::unicode::{EmacsTextStorage, decode_emacs_char, decode_utf8};
 use neomacs_display_protocol::face::BoxVerticalEdges;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{
@@ -30,6 +30,7 @@ use neovm_core::buffer::{
 };
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::composite::composition_display_text_for_property;
+use neovm_core::emacs_core::emacs_char::EmacsChar;
 use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, list_to_vec};
 use neovm_core::face::LispFaceId;
 
@@ -851,7 +852,15 @@ impl DisplaySourceItem {
             }
             DisplayItemKind::ControlChar { ch } => Some(*ch),
             DisplayItemKind::Glyphless(glyphless) => Some(glyphless.ch),
-            DisplayItemKind::SourceMappedText(_) => self.source_char,
+            DisplayItemKind::SourceMappedText(mapped) => self.source_char.or_else(|| {
+                mapped
+                    .semantic_face_overlay()
+                    .is_some_and(|overlay| {
+                        overlay == crate::display_item::DisplayItemFaceOverlay::EscapeGlyph
+                    })
+                    .then(|| mapped.text.chars().next())
+                    .flatten()
+            }),
             _ => None,
         }
     }
@@ -1696,8 +1705,8 @@ pub(crate) fn is_escape_glyph_octal(ch: char) -> bool {
 /// The `\`+octal escape substitute string for a non-printable char (see
 /// [`is_escape_glyph_octal`]): GNU `sprintf(str, "%03o", c)` prefixed with the
 /// escape glyph (xdisp.c:8654). U+FFFF -> `\177777`, U+0080 -> `\200`.
-pub(crate) fn escape_glyph_octal_text(ch: char) -> String {
-    format!("\\{:03o}", ch as u32)
+pub(crate) fn escape_glyph_octal_text(code: u32) -> String {
+    format!("\\{code:03o}")
 }
 
 impl DisplaySourceAppendItem {
@@ -2836,7 +2845,8 @@ impl LispStringSourceStack {
 
 struct LispStringSourceFrame {
     source_id: u64,
-    text: String,
+    text: Vec<u8>,
+    storage: EmacsTextStorage,
     char_byte_offsets: Vec<usize>,
     props: Option<TextPropertyTable>,
     char_index: usize,
@@ -2896,15 +2906,25 @@ impl LispStringSourceFrame {
         pointer_occurrence: DisplayPointerOccurrence,
         box_boundaries: DisplayStringBoxBoundaries,
     ) -> Option<Self> {
-        let text = value.as_runtime_string_owned()?;
-        let mut char_byte_offsets = text
-            .char_indices()
-            .map(|(byte, _)| byte)
-            .collect::<Vec<_>>();
+        let string = value.as_lisp_string()?;
+        let text = string.as_bytes().to_vec();
+        let storage = if string.is_multibyte() {
+            EmacsTextStorage::Multibyte
+        } else {
+            EmacsTextStorage::Unibyte
+        };
+        let mut char_byte_offsets = Vec::with_capacity(string.schars().saturating_add(1));
+        let mut byte_offset = 0;
+        while byte_offset < text.len() {
+            char_byte_offsets.push(byte_offset);
+            let (_, len) = decode_emacs_char(&text[byte_offset..], storage)?;
+            byte_offset = byte_offset.saturating_add(len);
+        }
         char_byte_offsets.push(text.len());
         Some(Self {
             source_id,
             text,
+            storage,
             char_byte_offsets,
             props: get_string_text_properties_table_for_value(value),
             char_index: 0,
@@ -3028,7 +3048,7 @@ impl LispStringSourceFrame {
             pointer_appearance,
             item_layout,
         } = span;
-        let Some(ch) = self.char_at(start) else {
+        let Some(character) = self.char_at(start) else {
             return LispStringResolvedAction::PopFrame;
         };
         if let Some(composition) = self
@@ -3056,8 +3076,8 @@ impl LispStringSourceFrame {
             }
         }
         if let Some(mut kind) = display_item_kind_for_text_source_char_with_tty_mapping(
-            ch,
-            tty_glyphless_char_display.method_for(ch),
+            character,
+            tty_glyphless_char_display.method_for(character),
         ) {
             if let DisplayItemKind::RowBreak(row_break) = &mut kind {
                 let property = |name| {
@@ -3129,17 +3149,32 @@ impl LispStringSourceFrame {
             .unwrap_or(self.text.len())
     }
 
-    fn char_at(&self, char_index: usize) -> Option<char> {
+    fn char_at(&self, char_index: usize) -> Option<EmacsChar> {
         let start = self.byte_offset(char_index);
         let end = self.byte_offset(char_index + 1);
-        self.text.get(start..end)?.chars().next()
+        decode_emacs_char(self.text.get(start..end)?, self.storage).map(|(character, _)| character)
     }
 
     fn text_slice(&self, start: usize, end: usize) -> String {
-        self.text
+        let bytes = self
+            .text
             .get(self.byte_offset(start)..self.byte_offset(end))
-            .unwrap_or_default()
-            .to_string()
+            .unwrap_or_default();
+        let mut text = String::with_capacity(bytes.len());
+        let mut offset = 0;
+        while offset < bytes.len() {
+            let Some((character, len)) = decode_emacs_char(&bytes[offset..], self.storage) else {
+                break;
+            };
+            let TextSourceCharClassification::Text(ch) = classify_text_source_char(character)
+            else {
+                debug_assert!(false, "special Emacs character entered a plain text run");
+                break;
+            };
+            text.push(ch);
+            offset = offset.saturating_add(len);
+        }
+        text
     }
 
     fn next_property_change(&self, char_index: usize) -> usize {
@@ -3165,8 +3200,10 @@ impl LispStringSourceFrame {
             let Some(ch) = self.char_at(end) else {
                 break;
             };
-            if classify_text_source_char(ch) != TextSourceCharClassification::Text
-                || tty_glyphless_char_display.method_for(ch).is_some()
+            if !matches!(
+                classify_text_source_char(ch),
+                TextSourceCharClassification::Text(_)
+            ) || tty_glyphless_char_display.method_for(ch).is_some()
             {
                 break;
             }
@@ -3529,7 +3566,9 @@ impl DisplayPropertySourceReplacement {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum TextSourceCharClassification {
-    Text,
+    /// Ordinary renderable text. Carrying the Rust scalar here makes it
+    /// impossible for a non-Unicode Emacs character to enter a text run.
+    Text(char),
     RowBreak,
     ControlChar {
         ch: char,
@@ -3538,7 +3577,7 @@ pub(crate) enum TextSourceCharClassification {
     /// (see [`is_escape_glyph_octal`]); emitted as a single-char
     /// `SourceMappedText` item so its escape-glyph face merges via the hook.
     EscapeOctal {
-        ch: char,
+        displayed_code: u32,
     },
     Glyphless {
         ch: char,
@@ -3546,7 +3585,13 @@ pub(crate) enum TextSourceCharClassification {
     },
 }
 
-pub(crate) fn classify_text_source_char(ch: char) -> TextSourceCharClassification {
+pub(crate) fn classify_text_source_char(character: EmacsChar) -> TextSourceCharClassification {
+    let code = character.code();
+    let Some(ch) = character.as_rust_char() else {
+        return TextSourceCharClassification::EscapeOctal {
+            displayed_code: character.to_byte8().map(u32::from).unwrap_or(code),
+        };
+    };
     if ch == '\n' {
         return TextSourceCharClassification::RowBreak;
     }
@@ -3560,26 +3605,30 @@ pub(crate) fn classify_text_source_char(ch: char) -> TextSourceCharClassificatio
     // controls U+0080..U+009F. This precedes the glyphless methods so those all
     // resolve to GNU's octal escape rather than a hex-code box.
     if is_escape_glyph_octal(ch) {
-        return TextSourceCharClassification::EscapeOctal { ch };
+        return TextSourceCharClassification::EscapeOctal {
+            displayed_code: code,
+        };
     }
     if let Some(method) =
         glyphless_method_for_char(ch, GlyphlessJoinerPolicy::PreserveForComposition)
     {
         return TextSourceCharClassification::Glyphless { ch, method };
     }
-    TextSourceCharClassification::Text
+    TextSourceCharClassification::Text(ch)
 }
 
-pub(crate) fn display_item_kind_for_text_source_char(ch: char) -> Option<DisplayItemKind> {
-    display_item_kind_for_text_source_char_with_tty_mapping(ch, None)
+pub(crate) fn display_item_kind_for_text_source_char(
+    character: EmacsChar,
+) -> Option<DisplayItemKind> {
+    display_item_kind_for_text_source_char_with_tty_mapping(character, None)
 }
 
-fn display_item_kind_for_text_source_char_with_tty_mapping(
-    ch: char,
+pub(crate) fn display_item_kind_for_text_source_char_with_tty_mapping(
+    character: EmacsChar,
     tty_mapping: Option<GlyphlessMethod>,
 ) -> Option<DisplayItemKind> {
-    match classify_text_source_char(ch) {
-        TextSourceCharClassification::Text => {
+    match classify_text_source_char(character) {
+        TextSourceCharClassification::Text(ch) => {
             tty_mapping.map(|method| DisplayItemKind::Glyphless(DisplayGlyphless { ch, method }))
         }
         TextSourceCharClassification::RowBreak => Some(DisplayItemKind::RowBreak(
@@ -3588,9 +3637,12 @@ fn display_item_kind_for_text_source_char_with_tty_mapping(
         TextSourceCharClassification::ControlChar { ch } => {
             Some(DisplayItemKind::ControlChar { ch })
         }
-        TextSourceCharClassification::EscapeOctal { ch } => {
+        TextSourceCharClassification::EscapeOctal { displayed_code } => {
             Some(DisplayItemKind::SourceMappedText(
-                DisplaySourceMappedText::new(escape_glyph_octal_text(ch)),
+                DisplaySourceMappedText::new(escape_glyph_octal_text(displayed_code))
+                    .with_semantic_face_overlay(
+                        crate::display_item::DisplayItemFaceOverlay::EscapeGlyph,
+                    ),
             ))
         }
         TextSourceCharClassification::Glyphless { ch, method } => {

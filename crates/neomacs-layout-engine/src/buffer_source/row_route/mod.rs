@@ -132,6 +132,7 @@ use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
 
 use neovm_core::emacs_core::Value;
+use neovm_core::emacs_core::emacs_char::EmacsChar;
 
 use neovm_core::emacs_core::composite::composition_display_text_for_property;
 

@@ -4,6 +4,7 @@ use neovm_core::buffer::{
     Buffer, BufferId, BufferManager, BufferTextBackendKind, CharPos0, EmacsBytePos, EmacsByteRange,
     LispCharPos1,
 };
+use neovm_core::emacs_core::emacs_char::EmacsChar;
 use neovm_core::emacs_core::value::Value;
 use neovm_core::window::{FrameManager, FrameParam, Rect as NeoRect, WindowId, WindowMargins};
 
@@ -1898,23 +1899,29 @@ fn buffer_display_table_glyphs_decodes_per_char_vector() {
 
     let buf = evaluator.buffer_manager().get(buf_id).unwrap();
     assert_eq!(
-        buffer_display_table_glyphs(buf, '\t').map(|glyphs| glyphs.text),
+        buffer_display_table_glyphs(buf, EmacsChar::from_char('\t')).map(|glyphs| glyphs.text),
         Some(">\t".to_string()),
         "tab maps to '>' then a literal tab glyph"
     );
     assert_eq!(
-        buffer_display_table_glyphs(buf, 'x').map(|glyphs| glyphs.text),
+        buffer_display_table_glyphs(buf, EmacsChar::from_char('x')).map(|glyphs| glyphs.text),
         Some("A".to_string())
     );
     // Empty vector -> Some("") (display nothing), distinct from None (no entry).
     assert_eq!(
-        buffer_display_table_glyphs(buf, 'q').map(|glyphs| glyphs.text),
+        buffer_display_table_glyphs(buf, EmacsChar::from_char('q')).map(|glyphs| glyphs.text),
         Some(String::new())
     );
     // A plain-character entry is NOT a glyph vector -> None (render literally).
-    assert_eq!(buffer_display_table_glyphs(buf, 'n'), None);
+    assert_eq!(
+        buffer_display_table_glyphs(buf, EmacsChar::from_char('n')),
+        None
+    );
     // An unmapped char -> None (the hot path).
-    assert_eq!(buffer_display_table_glyphs(buf, 'z'), None);
+    assert_eq!(
+        buffer_display_table_glyphs(buf, EmacsChar::from_char('z')),
+        None
+    );
 }
 
 #[test]
@@ -1939,7 +1946,7 @@ fn glyphless_char_display_uses_the_tty_branch_as_a_typed_acronym() {
 
     let buf = evaluator.buffer_manager().get(buf_id).unwrap();
     assert_eq!(
-        buffer_glyphless_char_display(buf, '▼'),
+        buffer_glyphless_char_display(buf, EmacsChar::from_char('▼')),
         Some(GlyphlessMethod::Acronym(
             GlyphlessAcronym::from_ascii("v").expect("one ASCII acronym")
         )),
@@ -1998,7 +2005,8 @@ fn buffer_display_table_glyphs_preserves_typed_face_runs() {
     }
 
     let buf = evaluator.buffer_manager().get(buf_id).unwrap();
-    let decoded = buffer_display_table_glyphs(buf, '\n').expect("display-table vector");
+    let decoded =
+        buffer_display_table_glyphs(buf, EmacsChar::from_char('\n')).expect("display-table vector");
     assert_eq!(decoded.text, "↪\n");
     assert_eq!(
         decoded.lisp_face_runs.as_ref(),
@@ -2009,7 +2017,7 @@ fn buffer_display_table_glyphs_preserves_typed_face_runs() {
         "the terminal newline keeps its own typed face until row-break extraction"
     );
     assert_eq!(
-        buffer_display_table_glyphs(buf, 'm')
+        buffer_display_table_glyphs(buf, EmacsChar::from_char('m'))
             .expect("mixed display-table vector")
             .lisp_face_runs
             .as_ref(),
@@ -2020,7 +2028,7 @@ fn buffer_display_table_glyphs_preserves_typed_face_runs() {
         "mixed visible faces must stay distinct"
     );
     assert_eq!(
-        buffer_display_table_glyphs(buf, 'z')
+        buffer_display_table_glyphs(buf, EmacsChar::from_char('z'))
             .expect("zero-face display-table vector")
             .lisp_face_runs
             .as_ref(),
@@ -2028,7 +2036,7 @@ fn buffer_display_table_glyphs_preserves_typed_face_runs() {
         "adjacent zero face ids coalesce into one inherited run"
     );
     assert_eq!(
-        buffer_display_table_glyphs(buf, 'p')
+        buffer_display_table_glyphs(buf, EmacsChar::from_char('p'))
             .expect("packed-face display-table vector")
             .lisp_face_runs
             .as_ref(),
@@ -2039,7 +2047,7 @@ fn buffer_display_table_glyphs_preserves_typed_face_runs() {
         "packed positive face ids stay typed"
     );
     assert_eq!(
-        buffer_display_table_glyphs(buf, 'n')
+        buffer_display_table_glyphs(buf, EmacsChar::from_char('n'))
             .expect("negative-face display-table vector")
             .lisp_face_runs
             .as_ref(),
@@ -2090,8 +2098,14 @@ fn buffer_display_table_glyphs_absent_when_no_display_table() {
         set_buffer_text(buf, "abc");
     }
     let buf = evaluator.buffer_manager().get(buf_id).unwrap();
-    assert_eq!(buffer_display_table_glyphs(buf, 'a'), None);
-    assert_eq!(buffer_display_table_glyphs(buf, '\t'), None);
+    assert_eq!(
+        buffer_display_table_glyphs(buf, EmacsChar::from_char('a')),
+        None
+    );
+    assert_eq!(
+        buffer_display_table_glyphs(buf, EmacsChar::from_char('\t')),
+        None
+    );
 }
 
 #[test]
