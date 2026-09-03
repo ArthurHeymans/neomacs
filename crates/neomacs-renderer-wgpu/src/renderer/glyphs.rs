@@ -1610,6 +1610,17 @@ impl WgpuRenderer {
         let mut seen_composed_keys: HashSet<ComposedGlyphKey> = HashSet::new();
         #[cfg(feature = "video")]
         let submitted_video_ids;
+        #[cfg(feature = "video")]
+        let gpu_timing = self.begin_video_frame_content_pass(
+            frame_glyphs
+                .glyphs
+                .iter()
+                .any(|glyph| matches!(glyph, FrameGlyph::Video { .. })),
+        );
+        #[cfg(feature = "video")]
+        let timestamp_writes = gpu_timing.as_ref().map(|timing| timing.timestamp_writes());
+        #[cfg(not(feature = "video"))]
+        let timestamp_writes = None;
 
         // Create command encoder
         let mut encoder = self
@@ -1647,7 +1658,7 @@ impl WgpuRenderer {
                     depth_slice: None,
                 })],
                 depth_stencil_attachment: None,
-                timestamp_writes: None,
+                timestamp_writes,
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -1733,11 +1744,10 @@ impl WgpuRenderer {
         self.glyph_stats = stats.clone();
         stats.log_if_enabled();
 
-        self.queue.submit(std::iter::once(encoder.finish()));
         #[cfg(feature = "video")]
-        self.caches
-            .video
-            .record_submitted_frames(submitted_video_ids);
+        self.submit_video_frame_content_pass(encoder, gpu_timing, submitted_video_ids);
+        #[cfg(not(feature = "video"))]
+        self.queue.submit([encoder.finish()]);
     }
 
     /// Draw only the cursor layer onto `view`, preserving existing content

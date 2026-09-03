@@ -12,6 +12,49 @@ use neomacs_display_protocol::{
 use neomacs_video::{PlaybackAction, VideoOpenRequest};
 
 impl WgpuRenderer {
+    /// Retire completed timestamp queries and reserve one bounded slot for a
+    /// frame-content pass that can actually draw video.
+    ///
+    /// Root and child frames use different renderers, so this shared seam is
+    /// the only place allowed to begin the opt-in GPU timing transaction.
+    #[cfg(feature = "video")]
+    pub(super) fn begin_video_frame_content_pass(
+        &mut self,
+        has_video_glyph: bool,
+    ) -> Option<crate::gpu_frame_timing::PendingGpuFrameTiming> {
+        for sample in self.gpu_frame_timer.drain() {
+            self.caches
+                .video
+                .record_gpu_frame_time(sample.video_ids, sample.duration_us);
+        }
+        has_video_glyph
+            .then(|| self.gpu_frame_timer.begin())
+            .flatten()
+    }
+
+    /// Resolve and submit one timed video-bearing frame-content pass.
+    ///
+    /// Keeping queue submission and presentation accounting together prevents
+    /// a render path from reporting submitted frames while silently omitting
+    /// the timestamp query that describes the same GPU work.
+    #[cfg(feature = "video")]
+    pub(super) fn submit_video_frame_content_pass(
+        &mut self,
+        mut encoder: wgpu::CommandEncoder,
+        timing: Option<crate::gpu_frame_timing::PendingGpuFrameTiming>,
+        video_ids: Vec<VideoId>,
+    ) {
+        if let Some(timing) = &timing {
+            timing.resolve(&mut encoder);
+        }
+        let submission = self.queue.submit([encoder.finish()]);
+        if let Some(timing) = timing {
+            self.gpu_frame_timer
+                .submit(timing, submission, video_ids.clone());
+        }
+        self.caches.video.record_submitted_frames(video_ids);
+    }
+
     /// Exact image texture and decoded animation-sequence bytes currently
     /// retained by the renderer.
     pub fn image_cache_usage(&self) -> neomacs_display_protocol::ImageCacheUsage {

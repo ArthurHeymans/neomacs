@@ -74,10 +74,17 @@ pub(crate) struct GpuFrameTimer {
 
 impl GpuFrameTimer {
     pub(crate) fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
+        Self::with_requested(
+            device,
+            queue,
+            std::env::var_os("NEOMACS_GPU_FRAME_TIMING").as_deref()
+                == Some(std::ffi::OsStr::new("1")),
+        )
+    }
+
+    fn with_requested(device: &wgpu::Device, queue: &wgpu::Queue, requested: bool) -> Self {
         let (completed_tx, completed_rx) = mpsc::channel();
-        if std::env::var_os("NEOMACS_GPU_FRAME_TIMING").as_deref()
-            != Some(std::ffi::OsStr::new("1"))
-        {
+        if !requested {
             return Self {
                 status: neomacs_video::VideoGpuTimingStatus::Disabled,
                 available: Vec::new(),

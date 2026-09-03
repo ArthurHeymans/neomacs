@@ -1235,6 +1235,20 @@ impl WgpuRenderer {
             }
         }
 
+        #[cfg(feature = "video")]
+        let mut submitted_video_ids = Vec::new();
+        #[cfg(feature = "video")]
+        let gpu_timing = self.begin_video_frame_content_pass(
+            frame
+                .glyphs
+                .iter()
+                .any(|glyph| matches!(glyph, FrameGlyph::Video { .. })),
+        );
+        #[cfg(feature = "video")]
+        let timestamp_writes = gpu_timing.as_ref().map(|timing| timing.timestamp_writes());
+        #[cfg(not(feature = "video"))]
+        let timestamp_writes = None;
+
         // === GPU submission: single encoder, single submit ===
         // Select pipelines: stencil-aware variants when clipping to rounded corners
         let use_stencil = clip_corner_radius > 0.0;
@@ -1288,20 +1302,6 @@ impl WgpuRenderer {
             None
         };
 
-        #[cfg(feature = "video")]
-        let mut submitted_video_ids = Vec::new();
-        #[cfg(feature = "video")]
-        for sample in self.gpu_frame_timer.drain() {
-            self.caches
-                .video
-                .record_gpu_frame_time(sample.video_ids, sample.duration_us);
-        }
-        #[cfg(feature = "video")]
-        let gpu_timing = self.gpu_frame_timer.begin();
-        #[cfg(feature = "video")]
-        let timestamp_writes = gpu_timing.as_ref().map(|timing| timing.timestamp_writes());
-        #[cfg(not(feature = "video"))]
-        let timestamp_writes = None;
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -1830,22 +1830,9 @@ impl WgpuRenderer {
         stats.log_if_enabled();
 
         #[cfg(feature = "video")]
-        if let Some(timing) = &gpu_timing {
-            timing.resolve(&mut encoder);
-        }
-        let submission = self.queue.submit(std::iter::once(encoder.finish()));
+        self.submit_video_frame_content_pass(encoder, gpu_timing, submitted_video_ids);
         #[cfg(not(feature = "video"))]
-        let _ = submission;
-        #[cfg(feature = "video")]
-        {
-            if let Some(timing) = gpu_timing {
-                self.gpu_frame_timer
-                    .submit(timing, submission, submitted_video_ids.clone());
-            }
-            self.caches
-                .video
-                .record_submitted_frames(submitted_video_ids);
-        }
+        self.queue.submit([encoder.finish()]);
         tracing::debug!("render_frame_content: submitted (1 encoder, 1 pass)");
     }
 
