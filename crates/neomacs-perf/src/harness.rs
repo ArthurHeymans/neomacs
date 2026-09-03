@@ -25,14 +25,18 @@ use crate::{
     artifact_store::{unix_time_ms, write_json_atomically},
     counters::PerfStatCapture,
     host::{collect_host_provenance, validate_machine_policy},
-    native_video::NativeVideoPresentationTarget,
+    native_video::{
+        NativeVideoBuildProfile, NativeVideoComparisonIdentity, NativeVideoDecoderKind,
+        NativeVideoExecutionIdentity, NativeVideoGraphicsBackend, NativeVideoPresentationTarget,
+        discover_media_metadata,
+    },
     profile_gate::ProfileGate,
     scenario,
 };
 
-pub(crate) const ARTIFACT_SCHEMA_VERSION: u32 = 3;
+pub(crate) const ARTIFACT_SCHEMA_VERSION: u32 = 4;
 const SCENARIO_RESULT_SCHEMA_VERSION: u32 = 1;
-const NATIVE_VIDEO_RESULT_SCHEMA_VERSION: u32 = 2;
+const NATIVE_VIDEO_RESULT_SCHEMA_VERSION: u32 = 3;
 const MX_TAB_COMPLETION_CANDIDATE_COUNT: u64 = 1024;
 const RUST_LSP_TYPING_OVERLAY_COUNT: u64 = 4;
 const RUST_LSP_TYPING_DIAGNOSTIC_COUNT: u64 = 4;
@@ -123,6 +127,20 @@ impl RunRequest {
     pub fn video_file(&self) -> Option<&Path> {
         self.video_file.as_deref()
     }
+
+    fn validate_scenario_input(&self) -> Result<(), String> {
+        match (self.scenario, self.video_file.as_ref()) {
+            (ScenarioId::SustainedNativeVideo, None) => Err(
+                "sustained-native-video requires --video-file pointing to a readable video"
+                    .to_owned(),
+            ),
+            (ScenarioId::SustainedNativeVideo, Some(_)) | (_, None) => Ok(()),
+            (scenario, Some(path)) => Err(format!(
+                "scenario {scenario} does not accept native-video input {}",
+                path.display()
+            )),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -168,6 +186,9 @@ impl PerfHarness {
 
     pub fn run(&self, request: &RunRequest) -> Result<RunReport, PerfError> {
         let context = RunContext::create(&self.workspace_root, request)?;
+        if let Err(message) = request.validate_scenario_input() {
+            return context.infrastructure_failure(message, Vec::new());
+        }
         if let Err(message) = validate_machine_policy(&request.machine, &context.host) {
             return context.infrastructure_failure(message, Vec::new());
         }
@@ -193,7 +214,9 @@ impl PerfHarness {
             ArtifactNamespace::Profiles,
         )?;
         let platform_rejection = request.profiler.platform_rejection();
-        let run = if let Some(reason) = &platform_rejection {
+        let run = if let Err(message) = run_request.validate_scenario_input() {
+            context.infrastructure_failure(message, Vec::new())?
+        } else if let Some(reason) = &platform_rejection {
             context.infrastructure_failure(
                 format!("native profiler is unavailable: {reason:?}"),
                 Vec::new(),
@@ -282,6 +305,7 @@ impl PerfHarness {
         let verdict = result_verdict(request, &result, u128::from(result.elapsed_us()));
         context.publish(
             u128::from(result.elapsed_us()),
+            result.native_video_execution_identity(),
             verdict,
             vec![ArtifactFile {
                 kind: ArtifactKind::ScenarioResult,
@@ -388,6 +412,9 @@ impl PerfHarness {
                 files,
             );
         }
+        if let Err(message) = prepared.verify_inputs_unchanged() {
+            return context.infrastructure_failure(message, files);
+        }
         if !prepared.sentinel.is_file() {
             return context.infrastructure_failure(
                 "scenario process exited without publishing its completion sentinel".to_string(),
@@ -419,13 +446,14 @@ impl PerfHarness {
                 );
             }
         };
+        let native_video_execution = result.native_video_execution_identity();
         let mut verdict = result_verdict(request, &result, process_wall_us);
         if let (RunVerdict::Valid { measurements }, Some(counter_measurements)) =
             (&mut verdict, counter_measurements)
         {
             measurements.extend(counter_measurements);
         }
-        context.publish(context.elapsed_us(), verdict, files)
+        context.publish(context.elapsed_us(), native_video_execution, verdict, files)
     }
 
     fn prepare_scenario(
@@ -602,6 +630,8 @@ impl PerfHarness {
                 video_file.display()
             )
         })?;
+        let media = discover_media_metadata(&video_file)?;
+        media.validate_4k60()?;
         let display_environment: BTreeMap<String, String> = [
             "DISPLAY",
             "WAYLAND_DISPLAY",
@@ -633,6 +663,13 @@ impl PerfHarness {
 
         let sandbox = MelpaSandbox::new("perf-sustained-native-video")?;
         let editor = collect_editor_provenance(request.editor(), &sandbox)?;
+        if editor.kind != EditorKind::Neomacs {
+            return Err("sustained native-video performance requires a Neomacs executable".into());
+        }
+        if !editor.capabilities.video_playback {
+            return Err("Neomacs was built without native video playback support".into());
+        }
+        let build_profile = NativeVideoBuildProfile::from_version(&editor.version)?;
         let fixture_source = self
             .workspace_root
             .join("crates/neomacs-perf/fixtures/sustained-native-video.el");
@@ -656,19 +693,32 @@ impl PerfHarness {
                 video_file.display()
             )
         })?;
-        let provenance = run_directory.join("input-provenance.json");
-        let provenance_manifest = NativeVideoInputProvenanceManifest {
-            editor,
-            host: collect_host_provenance(request.machine_policy()),
+        let video_file_sha256 = sha256_file(&video_file)?;
+        let harness = collect_harness_provenance(&self.workspace_root)?;
+        if harness.source_tree_dirty {
+            return Err(
+                "sustained native-video acceptance requires a clean tracked source tree".to_owned(),
+            );
+        }
+        let comparison_identity = NativeVideoComparisonIdentity {
             workload_fixture_sha256: sha256_file(&fixture_source)?,
-            video_file: video_file.to_string_lossy().into_owned(),
-            video_file_sha256: sha256_file(&video_file)?,
+            video_file_sha256: video_file_sha256.clone(),
             video_file_size_bytes: metadata.len(),
+            media,
             presentation_width_pixels: presentation_target.width(),
             presentation_height_pixels: presentation_target.height(),
             display_environment: display_environment.clone(),
             gstreamer_environment,
-            gpu_frame_timing: "requested",
+            gpu_frame_timing: "requested".to_owned(),
+        };
+        let provenance = run_directory.join("input-provenance.json");
+        let provenance_manifest = NativeVideoInputProvenanceManifest {
+            editor,
+            editor_build_profile: build_profile,
+            host: collect_host_provenance(request.machine_policy()),
+            harness,
+            video_file: video_file.to_string_lossy().into_owned(),
+            comparison_identity,
         };
         let provenance_json = serde_json::to_vec_pretty(&provenance_manifest)
             .map_err(|error| format!("failed to serialize input provenance: {error}"))?;
@@ -691,6 +741,8 @@ impl PerfHarness {
             sandbox,
             workload: PreparedWorkload::NativeVideo {
                 video_file,
+                video_file_sha256,
+                video_file_size_bytes: metadata.len(),
                 display_environment,
                 presentation_target,
             },
@@ -973,6 +1025,7 @@ impl RunContext {
     ) -> Result<RunReport, PerfError> {
         self.publish(
             self.elapsed_us(),
+            None,
             RunVerdict::InfrastructureFailure { message },
             files,
         )
@@ -981,6 +1034,7 @@ impl RunContext {
     fn publish(
         &self,
         total_elapsed_us: u128,
+        native_video_execution: Option<NativeVideoExecutionIdentity>,
         verdict: RunVerdict,
         files: Vec<ArtifactFile>,
     ) -> Result<RunReport, PerfError> {
@@ -994,6 +1048,7 @@ impl RunContext {
             iterations: self.request.iterations.get(),
             started_unix_ms: self.started_unix_ms,
             total_elapsed_us,
+            native_video_execution,
             verdict,
             files,
         };
@@ -1295,12 +1350,40 @@ enum PreparedWorkload {
     },
     NativeVideo {
         video_file: PathBuf,
+        video_file_sha256: String,
+        video_file_size_bytes: u64,
         display_environment: BTreeMap<String, String>,
         presentation_target: NativeVideoPresentationTarget,
     },
 }
 
 impl PreparedScenario {
+    fn verify_inputs_unchanged(&self) -> Result<(), String> {
+        let PreparedWorkload::NativeVideo {
+            video_file,
+            video_file_sha256,
+            video_file_size_bytes,
+            ..
+        } = &self.workload
+        else {
+            return Ok(());
+        };
+        let metadata = fs::metadata(video_file).map_err(|error| {
+            format!(
+                "failed to re-inspect native-video input {}: {error}",
+                video_file.display()
+            )
+        })?;
+        let observed_hash = sha256_file(video_file)?;
+        if metadata.len() != *video_file_size_bytes || observed_hash != *video_file_sha256 {
+            return Err(format!(
+                "native-video input changed while the benchmark was running: {}",
+                video_file.display()
+            ));
+        }
+        Ok(())
+    }
+
     fn input_artifacts(&self) -> Vec<ArtifactFile> {
         let mut artifacts = vec![
             ArtifactFile {
@@ -1413,6 +1496,7 @@ impl PreparedScenario {
             video_file,
             display_environment,
             presentation_target,
+            ..
         } = &self.workload
         {
             command
@@ -1902,6 +1986,13 @@ enum ScenarioResult {
 }
 
 impl ScenarioResult {
+    fn native_video_execution_identity(&self) -> Option<NativeVideoExecutionIdentity> {
+        match self {
+            Self::SustainedNativeVideo(result) => Some(result.execution_identity()),
+            _ => None,
+        }
+    }
+
     #[cfg(test)]
     const fn elapsed_us(&self) -> u64 {
         match self {
@@ -2013,6 +2104,26 @@ enum VideoBenchmarkGpuTimingStatus {
     Enabled,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+enum VideoBenchmarkDecodeResidency {
+    HardwareSameDevice,
+    HardwareUnverified,
+    Software,
+    Unknown,
+}
+
+impl std::fmt::Display for VideoBenchmarkDecodeResidency {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::HardwareSameDevice => "hardware-same-device",
+            Self::HardwareUnverified => "hardware-unverified",
+            Self::Software => "software",
+            Self::Unknown => "unknown",
+        })
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(try_from = "SustainedNativeVideoResultWire")]
 struct SustainedNativeVideoResult {
@@ -2026,6 +2137,19 @@ struct SustainedNativeVideoResult {
     viewport_width_pixels: u32,
     viewport_height_pixels: u32,
     backend: VideoBenchmarkBackend,
+    decode_residency: VideoBenchmarkDecodeResidency,
+    decoder_factory: String,
+    decoder_plugin: String,
+    decoder_kind: NativeVideoDecoderKind,
+    gpu_adapter_name: String,
+    gpu_vendor: u32,
+    gpu_device: u32,
+    gpu_device_type: String,
+    graphics_backend: NativeVideoGraphicsBackend,
+    gpu_driver: String,
+    gpu_driver_info: String,
+    drm_render_node: Option<String>,
+    display_refresh_hz: Option<u16>,
     frame_format: VideoBenchmarkFrameFormat,
     compositor_import: VideoBenchmarkImport,
     presentation: VideoBenchmarkPresentation,
@@ -2071,6 +2195,19 @@ struct SustainedNativeVideoResultWire {
     viewport_width_pixels: u32,
     viewport_height_pixels: u32,
     backend: VideoBenchmarkBackend,
+    decode_residency: VideoBenchmarkDecodeResidency,
+    decoder_factory: String,
+    decoder_plugin: String,
+    decoder_kind: NativeVideoDecoderKind,
+    gpu_adapter_name: String,
+    gpu_vendor: u32,
+    gpu_device: u32,
+    gpu_device_type: String,
+    graphics_backend: NativeVideoGraphicsBackend,
+    gpu_driver: String,
+    gpu_driver_info: String,
+    drm_render_node: Option<String>,
+    display_refresh_hz: Option<u16>,
     frame_format: VideoBenchmarkFrameFormat,
     compositor_import: VideoBenchmarkImport,
     presentation: VideoBenchmarkPresentation,
@@ -2124,6 +2261,19 @@ impl TryFrom<SustainedNativeVideoResultWire> for SustainedNativeVideoResult {
             viewport_width_pixels: wire.viewport_width_pixels,
             viewport_height_pixels: wire.viewport_height_pixels,
             backend: wire.backend,
+            decode_residency: wire.decode_residency,
+            decoder_factory: wire.decoder_factory,
+            decoder_plugin: wire.decoder_plugin,
+            decoder_kind: wire.decoder_kind,
+            gpu_adapter_name: wire.gpu_adapter_name,
+            gpu_vendor: wire.gpu_vendor,
+            gpu_device: wire.gpu_device,
+            gpu_device_type: wire.gpu_device_type,
+            graphics_backend: wire.graphics_backend,
+            gpu_driver: wire.gpu_driver,
+            gpu_driver_info: wire.gpu_driver_info,
+            drm_render_node: wire.drm_render_node,
+            display_refresh_hz: wire.display_refresh_hz,
             frame_format: wire.frame_format,
             compositor_import: wire.compositor_import,
             presentation: wire.presentation,
@@ -2154,6 +2304,25 @@ impl TryFrom<SustainedNativeVideoResultWire> for SustainedNativeVideoResult {
             pool_backpressured_acquires: wire.pool_backpressured_acquires,
             pool_in_flight_high_water: wire.pool_in_flight_high_water,
         })
+    }
+}
+
+impl SustainedNativeVideoResult {
+    fn execution_identity(&self) -> NativeVideoExecutionIdentity {
+        NativeVideoExecutionIdentity {
+            decoder_factory: self.decoder_factory.clone(),
+            decoder_plugin: self.decoder_plugin.clone(),
+            decoder_kind: self.decoder_kind,
+            gpu_adapter_name: self.gpu_adapter_name.clone(),
+            gpu_vendor: self.gpu_vendor,
+            gpu_device: self.gpu_device,
+            gpu_device_type: self.gpu_device_type.clone(),
+            graphics_backend: self.graphics_backend,
+            gpu_driver: self.gpu_driver.clone(),
+            gpu_driver_info: self.gpu_driver_info.clone(),
+            drm_render_node: self.drm_render_node.clone(),
+            display_refresh_hz: self.display_refresh_hz,
+        }
     }
 }
 
@@ -2500,18 +2669,86 @@ struct EditorWorkloadInputProvenanceManifest<'a> {
 }
 
 #[derive(Serialize)]
-struct NativeVideoInputProvenanceManifest<'a> {
+struct NativeVideoInputProvenanceManifest {
     editor: EditorProvenance,
+    editor_build_profile: NativeVideoBuildProfile,
     host: HostProvenance,
-    workload_fixture_sha256: String,
+    harness: HarnessProvenance,
     video_file: String,
-    video_file_sha256: String,
-    video_file_size_bytes: u64,
-    presentation_width_pixels: u32,
-    presentation_height_pixels: u32,
-    display_environment: BTreeMap<String, String>,
-    gstreamer_environment: BTreeMap<String, String>,
-    gpu_frame_timing: &'a str,
+    comparison_identity: NativeVideoComparisonIdentity,
+}
+
+#[derive(Serialize)]
+struct HarnessProvenance {
+    /// Revision embedded when this harness executable was compiled.
+    revision: String,
+    checkout_revision: String,
+    source_tree_dirty: bool,
+    executable_sha256: String,
+    executable_size_bytes: u64,
+    invocation: Vec<String>,
+}
+
+fn collect_harness_provenance(workspace_root: &Path) -> Result<HarnessProvenance, String> {
+    fn git_stdout(workspace_root: &Path, arguments: &[&str]) -> Result<String, String> {
+        let output = Command::new("git")
+            .args(arguments)
+            .current_dir(workspace_root)
+            .output()
+            .map_err(|error| format!("failed to run git for benchmark provenance: {error}"))?;
+        if !output.status.success() {
+            return Err(format!(
+                "git {:?} failed while collecting benchmark provenance: {}",
+                arguments,
+                String::from_utf8_lossy(&output.stderr).trim()
+            ));
+        }
+        String::from_utf8(output.stdout)
+            .map(|value| value.trim().to_owned())
+            .map_err(|error| format!("git benchmark provenance was not UTF-8: {error}"))
+    }
+
+    let executable = std::env::current_exe()
+        .map_err(|error| format!("failed to identify benchmark harness executable: {error}"))?;
+    let executable_metadata = fs::metadata(&executable).map_err(|error| {
+        format!(
+            "failed to inspect benchmark harness executable {}: {error}",
+            executable.display()
+        )
+    })?;
+
+    let checkout_revision = git_stdout(workspace_root, &["rev-parse", "HEAD"])?;
+    let embedded_revision = option_env!("NEOMACS_PERF_GIT_SHA")
+        .filter(|revision| !revision.is_empty() && *revision != "unknown")
+        .ok_or_else(|| {
+            "sustained native-video acceptance requires a harness with embedded Git provenance"
+                .to_owned()
+        })?;
+    validate_harness_revision(embedded_revision, &checkout_revision)?;
+
+    Ok(HarnessProvenance {
+        revision: embedded_revision.to_owned(),
+        checkout_revision,
+        source_tree_dirty: !git_stdout(
+            workspace_root,
+            &["status", "--porcelain", "--untracked-files=no"],
+        )?
+        .is_empty(),
+        executable_sha256: sha256_file(&executable)?,
+        executable_size_bytes: executable_metadata.len(),
+        invocation: std::env::args_os()
+            .map(|argument| argument.to_string_lossy().into_owned())
+            .collect(),
+    })
+}
+
+pub(crate) fn validate_harness_revision(embedded: &str, checkout: &str) -> Result<(), String> {
+    if embedded == checkout {
+        return Ok(());
+    }
+    Err(format!(
+        "benchmark harness was built from {embedded}, but the checkout is {checkout}; rebuild the harness before collecting acceptance evidence"
+    ))
 }
 
 #[derive(Serialize)]
@@ -2959,6 +3196,65 @@ fn validate_sustained_native_video_result(
         VideoBenchmarkBackend::Gstreamer,
         result.backend,
     );
+    mismatch(
+        &mut mismatches,
+        "decode-residency",
+        VideoBenchmarkDecodeResidency::HardwareSameDevice,
+        result.decode_residency,
+    );
+    mismatch(
+        &mut mismatches,
+        "decoder-kind",
+        NativeVideoDecoderKind::Hardware,
+        result.decoder_kind,
+    );
+    for (name, value) in [
+        ("decoder-factory", result.decoder_factory.as_str()),
+        ("decoder-plugin", result.decoder_plugin.as_str()),
+        ("gpu-adapter-name", result.gpu_adapter_name.as_str()),
+        ("gpu-device-type", result.gpu_device_type.as_str()),
+        ("gpu-driver", result.gpu_driver.as_str()),
+    ] {
+        if value.is_empty() {
+            mismatches.push(CorrectnessMismatch {
+                invariant: name.to_owned(),
+                expected: "non-empty".to_owned(),
+                actual: "empty".to_owned(),
+            });
+        }
+    }
+    if result.decoder_plugin == "unknown" {
+        mismatches.push(CorrectnessMismatch {
+            invariant: "decoder-plugin".to_owned(),
+            expected: "identified GStreamer plugin".to_owned(),
+            actual: "unknown".to_owned(),
+        });
+    }
+    mismatch(
+        &mut mismatches,
+        "graphics-backend",
+        NativeVideoGraphicsBackend::Vulkan,
+        result.graphics_backend,
+    );
+    require_positive_phase(&mut mismatches, "gpu-vendor", u64::from(result.gpu_vendor));
+    require_positive_phase(&mut mismatches, "gpu-device", u64::from(result.gpu_device));
+    if result.drm_render_node.is_none() {
+        mismatches.push(CorrectnessMismatch {
+            invariant: "drm-render-node".to_owned(),
+            expected: "identified Linux render node".to_owned(),
+            actual: "unknown".to_owned(),
+        });
+    }
+    if result.display_refresh_hz.is_none_or(|rate| rate == 0) {
+        mismatches.push(CorrectnessMismatch {
+            invariant: "display-refresh-rate".to_owned(),
+            expected: "positive reported or bounded fallback rate".to_owned(),
+            actual: format!("{:?}", result.display_refresh_hz),
+        });
+    }
+    // Some wgpu backends expose no supplementary driver-info string; the
+    // field remains recorded for adapters that do.
+    let _gpu_driver_info = &result.gpu_driver_info;
     if !matches!(
         result.frame_format,
         VideoBenchmarkFrameFormat::Nv12 | VideoBenchmarkFrameFormat::P010

@@ -28,6 +28,7 @@ fn artifact_json_preserves_a_correctness_failure_as_a_failed_verdict() {
         iterations: 10,
         started_unix_ms: 42,
         total_elapsed_us: 900,
+        native_video_execution: None,
         verdict: RunVerdict::CorrectnessMismatch {
             mismatches: vec![CorrectnessMismatch {
                 invariant: "final-buffer-text".to_string(),

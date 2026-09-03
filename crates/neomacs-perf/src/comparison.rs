@@ -10,13 +10,13 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    EditorProvenance, Frontend, MetricName, MetricUnit, PerfError, PerfHarness, RunRequest,
-    RunVerdict, ScenarioId,
+    EditorProvenance, Frontend, MetricName, MetricUnit, NativeVideoComparisonIdentity,
+    NativeVideoExecutionIdentity, PerfError, PerfHarness, RunRequest, RunVerdict, ScenarioId,
     artifact_store::{unix_time_ms, write_json_atomically},
     scenario,
 };
 
-pub(crate) const COMPARISON_ARTIFACT_SCHEMA_VERSION: u32 = 3;
+pub(crate) const COMPARISON_ARTIFACT_SCHEMA_VERSION: u32 = 4;
 static COMPARISON_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// Immutable parameters shared by every run in one comparison.
@@ -55,6 +55,8 @@ pub struct ComparisonRun {
     pub editor: PathBuf,
     pub iterations: u32,
     pub editor_provenance: Option<EditorProvenance>,
+    pub native_video_input: Option<NativeVideoComparisonIdentity>,
+    pub native_video_execution: Option<NativeVideoExecutionIdentity>,
     pub outcome: ComparisonRunOutcome,
 }
 
@@ -299,6 +301,30 @@ pub enum ComparisonRejection {
         expected: EditorProvenance,
         actual: EditorProvenance,
     },
+    MissingNativeVideoInput {
+        role: ComparisonRunRole,
+        sample_index: u32,
+        run_id: String,
+    },
+    NativeVideoInputMismatch {
+        role: ComparisonRunRole,
+        sample_index: u32,
+        run_id: String,
+        expected: NativeVideoComparisonIdentity,
+        actual: NativeVideoComparisonIdentity,
+    },
+    MissingNativeVideoExecution {
+        role: ComparisonRunRole,
+        sample_index: u32,
+        run_id: String,
+    },
+    NativeVideoExecutionMismatch {
+        role: ComparisonRunRole,
+        sample_index: u32,
+        run_id: String,
+        expected: NativeVideoExecutionIdentity,
+        actual: NativeVideoExecutionIdentity,
+    },
     InvalidRun {
         role: ComparisonRunRole,
         sample_index: u32,
@@ -402,6 +428,8 @@ pub(crate) fn evaluate_comparison(
     let mut artifact_paths = BTreeSet::new();
     let mut baseline_provenance: Option<EditorProvenance> = None;
     let mut candidate_provenance: Option<EditorProvenance> = None;
+    let mut native_video_input: Option<NativeVideoComparisonIdentity> = None;
+    let mut native_video_execution: Option<NativeVideoExecutionIdentity> = None;
     let mut samples = Vec::with_capacity(observations.len());
     let expected_unit = input.primary_metric.canonical_unit();
     for observation in observations {
@@ -480,6 +508,48 @@ pub(crate) fn evaluate_comparison(
                     Some(_) => {}
                     None => *expected = Some(actual.clone()),
                 }
+            }
+        }
+        if input.scenario == ScenarioId::SustainedNativeVideo {
+            match &run.native_video_input {
+                None => reasons.push(ComparisonRejection::MissingNativeVideoInput {
+                    role: run.role,
+                    sample_index: run.sample_index,
+                    run_id: run.run_id.clone(),
+                }),
+                Some(actual) => match &native_video_input {
+                    Some(expected) if expected != actual => {
+                        reasons.push(ComparisonRejection::NativeVideoInputMismatch {
+                            role: run.role,
+                            sample_index: run.sample_index,
+                            run_id: run.run_id.clone(),
+                            expected: expected.clone(),
+                            actual: actual.clone(),
+                        });
+                    }
+                    Some(_) => {}
+                    None => native_video_input = Some(actual.clone()),
+                },
+            }
+            match &run.native_video_execution {
+                None => reasons.push(ComparisonRejection::MissingNativeVideoExecution {
+                    role: run.role,
+                    sample_index: run.sample_index,
+                    run_id: run.run_id.clone(),
+                }),
+                Some(actual) => match &native_video_execution {
+                    Some(expected) if expected != actual => {
+                        reasons.push(ComparisonRejection::NativeVideoExecutionMismatch {
+                            role: run.role,
+                            sample_index: run.sample_index,
+                            run_id: run.run_id.clone(),
+                            expected: expected.clone(),
+                            actual: actual.clone(),
+                        });
+                    }
+                    Some(_) => {}
+                    None => native_video_execution = Some(actual.clone()),
+                },
             }
         }
 
@@ -673,7 +743,7 @@ impl PerfHarness {
                 .with_counters(request.counters)
                 .with_video_file(request.video_file.clone());
             let report = self.run(&run_request)?;
-            let editor_provenance = read_child_editor_provenance(&report.artifact_path);
+            let child_provenance = read_child_provenance(&report.artifact_path);
             let child = report.artifact;
             let outcome = ComparisonRunOutcome::from(&child.verdict);
             observations.push(ComparisonObservation {
@@ -686,7 +756,12 @@ impl PerfHarness {
                     frontend: child.frontend,
                     editor: child.editor,
                     iterations: child.iterations,
-                    editor_provenance,
+                    editor_provenance: child_provenance
+                        .as_ref()
+                        .map(|provenance| provenance.editor.clone()),
+                    native_video_input: child_provenance
+                        .and_then(|provenance| provenance.comparison_identity),
+                    native_video_execution: child.native_video_execution,
                     outcome,
                 },
                 verdict: child.verdict,
@@ -718,14 +793,14 @@ impl PerfHarness {
 #[derive(Deserialize)]
 struct ComparisonInputProvenance {
     editor: EditorProvenance,
+    #[serde(default)]
+    comparison_identity: Option<NativeVideoComparisonIdentity>,
 }
 
-fn read_child_editor_provenance(artifact_path: &Path) -> Option<EditorProvenance> {
+fn read_child_provenance(artifact_path: &Path) -> Option<ComparisonInputProvenance> {
     let path = artifact_path.parent()?.join("input-provenance.json");
     let bytes = fs::read(path).ok()?;
-    serde_json::from_slice::<ComparisonInputProvenance>(&bytes)
-        .ok()
-        .map(|provenance| provenance.editor)
+    serde_json::from_slice(&bytes).ok()
 }
 
 fn median(values: impl Iterator<Item = f64>) -> f64 {

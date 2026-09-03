@@ -17,6 +17,10 @@ serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 
+[target.'cfg(target_os = "linux")'.dependencies]
+gstreamer = { workspace = true, features = ["v1_20"] }
+gstreamer-pbutils = { workspace = true, features = ["v1_20"] }
+
 [dev-dependencies]
 tempfile.workspace = true
 

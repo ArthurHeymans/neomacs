@@ -92,17 +92,25 @@ The Linux-only `sustained-native-video` scenario is different from the
 portable GUI workloads: it uses the caller's real Wayland or X11 session so
 the selected physical GPU, native decoder, compositor import, and display
 cadence remain part of the measurement. Supply a locally retained 3840x2160,
-60 fps input with `--video-file`; the harness hashes that file and records its
-absolute path, size, display environment, editor identity, and fixture hash in
-the run provenance. It also records the explicit GStreamer plugin catalog used
-with the fresh benchmark HOME, so decoding cannot depend on a cached per-user
-registry. The GUI frontend dimensions define the requested video
+60/1 or 60000/1001 fps input with `--video-file`; the harness discovers and
+validates that media contract, hashes the file before and after the run, and
+records its absolute path, size, display environment, editor identity, fixture
+hash, embedded harness revision, checkout revision, invocation, and
+harness-executable hash in the run provenance. The embedded and checkout
+revisions must match. Acceptance runs require an optimized Neomacs profile and
+a clean tracked harness source tree. The artifact also records the explicit GStreamer
+plugin catalog used with the fresh benchmark HOME, so decoding cannot depend on
+a cached per-user registry. The GUI frontend dimensions define the requested video
 presentation size (1920x1080 by default), not a synthetic display size. The
 harness maximizes the real window and refuses to start decoding unless the
 actual window body can contain that presentation. Its default 300 observation
 ticks give a 30-second sample after warmup.
 
-A valid native-video run must observe GStreamer hardware-shared decoding,
+A valid native-video run must identify the instantiated hardware GStreamer
+decoder and plugin, the exact Vulkan adapter/driver and DRM render node, and
+hardware decoding whose output is on that same DRM device. This deliberately
+does not claim GStreamer's DMA-BUF came directly from the decoder's own pool,
+because a same-device converter may own that allocation. It must also observe
 NV12 or P010 frames, borrowed native-surface import, wgpu composition, positive
 decode/import/submission/presentation activity, bounded pool occupancy, and no
 GPU-blit or CPU-upload fallback. The artifact reports decode and presentation
@@ -132,7 +140,11 @@ noisy or release-critical decisions.
 Comparison artifacts live below
 `./tmp/perf-comparisons/<comparison-id>/comparison.json` and link every
 underlying run artifact. Child measurements remain only in those linked files;
-the comparison keeps their immutable editor identity and outcome. If any run
+the comparison keeps their immutable editor identity and outcome. Native-video
+comparisons additionally require identical content hashes, discovered media,
+fixture, presentation target, display environment, GStreamer catalog, GPU
+timing mode, decoder/plugin, Vulkan adapter/driver, exact DRM node, and display
+rate for every child; file paths are not used as content identity. If any run
 has a correctness mismatch, infrastructure failure, missing metric, invalid
 value, duplicate metric, wrong unit, or wrong sample identity, the comparison
 contains no statistics and the command exits nonzero. A faster incomplete or

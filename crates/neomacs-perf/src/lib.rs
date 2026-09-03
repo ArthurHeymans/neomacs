@@ -34,7 +34,7 @@ pub use counters::{CounterScope, parse_perf_stat_csv};
 #[cfg(test)]
 pub(crate) use harness::{
     ARTIFACT_SCHEMA_VERSION, PerfCapture, collect_editor_provenance,
-    configure_benchmark_environment,
+    configure_benchmark_environment, validate_harness_revision,
 };
 pub use harness::{PerfError, PerfHarness, RunReport, RunRequest};
 #[cfg(test)]
@@ -42,6 +42,10 @@ pub(crate) use harness::{perf_data_sample_count, profile_verdict};
 pub use host::{HostProvenance, MachinePolicy};
 #[cfg(test)]
 pub(crate) use host::{cpu_list_contains, validate_machine_policy};
+pub use native_video::{
+    NativeVideoComparisonIdentity, NativeVideoDecoderKind, NativeVideoExecutionIdentity,
+    NativeVideoFrameRate, NativeVideoGraphicsBackend, NativeVideoMediaMetadata,
+};
 pub use profile::{
     NativeProfiler, PerfCallGraph, PerfCaptureConfiguration, PerfSamplingEvent, ProfileArtifact,
     ProfileRejection, ProfileReport, ProfileRequest, ProfileScope, ProfileVerdict,

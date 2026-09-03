@@ -270,6 +270,9 @@ pub struct RunArtifact {
     pub iterations: u32,
     pub started_unix_ms: u128,
     pub total_elapsed_us: u128,
+    /// Runtime pipeline identity for a native-video run. `None` for every
+    /// other scenario and for failures before the pipeline reported itself.
+    pub native_video_execution: Option<crate::NativeVideoExecutionIdentity>,
     pub verdict: RunVerdict,
     pub files: Vec<ArtifactFile>,
 }

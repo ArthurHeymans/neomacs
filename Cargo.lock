@@ -3925,6 +3925,8 @@ name = "neomacs-perf"
 version = "0.0.16"
 dependencies = [
  "clap",
+ "gstreamer",
+ "gstreamer-pbutils",
  "linux-perf-data",
  "neomacs-melpa-test-support",
  "rustix 1.1.4",

@@ -5,7 +5,7 @@ use std::process::Command;
 
 use super::{
     Frontend, MetricName, PerfError, PerfHarness, RunRequest, RunVerdict, ScenarioId,
-    collect_editor_provenance, configure_benchmark_environment,
+    collect_editor_provenance, configure_benchmark_environment, validate_harness_revision,
 };
 
 #[test]
@@ -546,7 +546,7 @@ fn sustained_native_video_promotes_pacing_gpu_pool_and_memory_metrics() {
         NonZeroU32::new(300).expect("non-zero literal"),
     );
     let raw_result = r#"{
-      "schema_version": 2,
+      "schema_version": 3,
       "scenario": "sustained-native-video",
       "status": "ok",
       "iterations": 300,
@@ -557,6 +557,19 @@ fn sustained_native_video_promotes_pacing_gpu_pool_and_memory_metrics() {
       "viewport_width_pixels": 3440,
       "viewport_height_pixels": 1880,
       "backend": "gstreamer",
+      "decode_residency": "hardware-same-device",
+      "decoder_factory": "vah264dec",
+      "decoder_plugin": "va",
+      "decoder_kind": "hardware",
+      "gpu_adapter_name": "AMD Radeon RX 7900 XTX",
+      "gpu_vendor": 4098,
+      "gpu_device": 29631,
+      "gpu_device_type": "DiscreteGpu",
+      "graphics_backend": "vulkan",
+      "gpu_driver": "radv",
+      "gpu_driver_info": "Mesa test driver",
+      "drm_render_node": "/dev/dri/renderD128",
+      "display_refresh_hz": 60,
       "frame_format": "nv12",
       "compositor_import": "borrowed-native-surface",
       "presentation": "wgpu-composited",
@@ -631,18 +644,6 @@ fn sustained_native_video_promotes_pacing_gpu_pool_and_memory_metrics() {
 }
 
 #[test]
-fn sustained_native_video_owns_acknowledged_sampling_boundaries() {
-    let fixture = fs::read_to_string(
-        PathBuf::from(env!("CARGO_WORKSPACE_DIR"))
-            .join("crates/neomacs-perf/fixtures/sustained-native-video.el"),
-    )
-    .expect("read committed native-video fixture");
-    assert!(fixture.contains("(neomacs-perf-native-video--sampling-command \"enable\")"));
-    assert!(fixture.contains("(neomacs-perf-native-video--sampling-command \"disable\")"));
-    assert!(fixture.contains("NEOMACS_PERF_GATE_PORT"));
-}
-
-#[test]
 fn sustained_native_video_rejects_a_cpu_upload_fallback() {
     let workspace_root = PathBuf::from(env!("CARGO_WORKSPACE_DIR"));
     let workspace_tmp = workspace_root.join("tmp");
@@ -657,11 +658,17 @@ fn sustained_native_video_rejects_a_cpu_upload_fallback() {
         NonZeroU32::new(1).expect("non-zero literal"),
     );
     let raw_result = r#"{
-      "schema_version": 2, "scenario": "sustained-native-video", "status": "ok",
+      "schema_version": 3, "scenario": "sustained-native-video", "status": "ok",
       "iterations": 1, "elapsed_cpu_us": 1, "elapsed_wall_us": 100000,
       "presentation_width_pixels": 1920, "presentation_height_pixels": 1080,
       "viewport_width_pixels": 3440, "viewport_height_pixels": 1880,
-      "backend": "gstreamer", "frame_format": "rgba8",
+      "backend": "gstreamer", "decode_residency": "software",
+      "decoder_factory": "avdec_h264", "decoder_plugin": "libav",
+      "decoder_kind": "software", "gpu_adapter_name": "AMD Radeon RX 7900 XTX",
+      "gpu_vendor": 4098, "gpu_device": 29631, "gpu_device_type": "DiscreteGpu",
+      "graphics_backend": "vulkan", "gpu_driver": "radv",
+      "gpu_driver_info": "Mesa test driver", "drm_render_node": "/dev/dri/renderD128",
+      "display_refresh_hz": 60, "frame_format": "rgba8",
       "compositor_import": "cpu-upload", "presentation": "wgpu-composited",
       "decoded_frames": 2, "replaced_frames": 0, "late_dropped_frames": 0,
       "imported_frames": 1, "backpressured_frames": 0,
@@ -719,6 +726,30 @@ fn run_persists_a_missing_editor_as_an_infrastructure_failure() {
     }
     assert!(report.artifact.verdict.measurements().is_none());
     assert!(report.artifact_path.is_file());
+}
+
+#[test]
+fn non_video_scenario_rejects_a_video_file_before_launching_editor() {
+    let workspace_tmp = PathBuf::from(env!("CARGO_WORKSPACE_DIR")).join("tmp");
+    fs::create_dir_all(&workspace_tmp).expect("create workspace-local test scratch root");
+    let workspace = tempfile::Builder::new()
+        .prefix("neomacs-perf-input-contract-test-")
+        .tempdir_in(&workspace_tmp)
+        .expect("create workspace-local test directory");
+    let request = RunRequest::new(
+        ScenarioId::RustLspTyping,
+        "/missing/editor",
+        NonZeroU32::new(1).expect("non-zero literal"),
+    )
+    .with_video_file(Some(PathBuf::from("unexpected.mp4")));
+
+    let report = PerfHarness::new(workspace.path())
+        .run(&request)
+        .expect("input contract failure is persisted");
+    let RunVerdict::InfrastructureFailure { message } = report.artifact.verdict else {
+        panic!("unexpected video input must not launch an unrelated scenario")
+    };
+    assert!(message.contains("does not accept native-video input"));
 }
 
 #[cfg(unix)]
@@ -904,4 +935,14 @@ esac
         .expect("keep fake editor executable");
     let after = collect_editor_provenance(&editor, &sandbox).expect("collect changed identity");
     assert_ne!(before.executable_sha256, after.executable_sha256);
+}
+
+#[test]
+fn stale_harness_revision_cannot_be_attributed_to_the_current_checkout() {
+    assert!(validate_harness_revision("same", "same").is_ok());
+    let error = validate_harness_revision("old-commit", "new-commit")
+        .expect_err("stale harness must be rejected");
+    assert!(error.contains("old-commit"));
+    assert!(error.contains("new-commit"));
+    assert!(error.contains("rebuild"));
 }

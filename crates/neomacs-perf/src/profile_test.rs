@@ -381,6 +381,7 @@ fn every_gate_protocol_failure_maps_to_a_rejected_profile() {
                 iterations: 1,
                 started_unix_ms: 1,
                 total_elapsed_us: 1,
+                native_video_execution: None,
                 verdict: RunVerdict::InfrastructureFailure {
                     message: message.to_string(),
                 },

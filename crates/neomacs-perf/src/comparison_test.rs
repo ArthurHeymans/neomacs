@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 
@@ -5,8 +6,12 @@ use super::{
     COMPARISON_ARTIFACT_SCHEMA_VERSION, ComparisonArtifact, ComparisonInput, ComparisonObservation,
     ComparisonRejection, ComparisonRun, ComparisonRunOutcome, ComparisonRunRole,
     ComparisonSampleCount, ComparisonVerdict, CorrectnessMismatch, EditorProvenance, Frontend,
-    Measurement, MetricName, MetricUnit, RunVerdict, ScenarioId, comparison_schedule,
-    evaluate_comparison,
+    Measurement, MetricName, MetricUnit, NativeVideoComparisonIdentity, RunVerdict, ScenarioId,
+    comparison_schedule, evaluate_comparison,
+};
+use crate::native_video::{
+    NativeVideoDecoderKind, NativeVideoExecutionIdentity, NativeVideoFrameRate,
+    NativeVideoGraphicsBackend, NativeVideoMediaMetadata,
 };
 
 fn editor(role: ComparisonRunRole) -> PathBuf {
@@ -51,6 +56,8 @@ fn valid_observation(
             editor: editor(role),
             iterations: 10,
             editor_provenance: Some(provenance(role)),
+            native_video_input: None,
+            native_video_execution: None,
             outcome: ComparisonRunOutcome::Valid,
         },
         verdict: RunVerdict::Valid {
@@ -60,6 +67,103 @@ fn valid_observation(
                 unit: MetricUnit::MicrosecondsPerEdit,
             }],
         },
+    }
+}
+
+fn native_video_identity(digest: &str) -> NativeVideoComparisonIdentity {
+    NativeVideoComparisonIdentity {
+        workload_fixture_sha256: "fixture-sha256".to_owned(),
+        video_file_sha256: digest.to_owned(),
+        video_file_size_bytes: 4096,
+        media: NativeVideoMediaMetadata {
+            width_pixels: 3840,
+            height_pixels: 2160,
+            frame_rate: NativeVideoFrameRate {
+                numerator: 60,
+                denominator: 1,
+            },
+            codec_caps: "video/x-h264".to_owned(),
+        },
+        presentation_width_pixels: 1920,
+        presentation_height_pixels: 1080,
+        display_environment: BTreeMap::from([("DISPLAY".to_owned(), ":0".to_owned())]),
+        gstreamer_environment: BTreeMap::from([(
+            "GST_PLUGIN_SYSTEM_PATH_1_0".to_owned(),
+            "/nix/store/plugins".to_owned(),
+        )]),
+        gpu_frame_timing: "requested".to_owned(),
+    }
+}
+
+fn native_video_execution() -> NativeVideoExecutionIdentity {
+    NativeVideoExecutionIdentity {
+        decoder_factory: "vah264dec".to_owned(),
+        decoder_plugin: "va".to_owned(),
+        decoder_kind: NativeVideoDecoderKind::Hardware,
+        gpu_adapter_name: "AMD Radeon".to_owned(),
+        gpu_vendor: 0x1002,
+        gpu_device: 0x1234,
+        gpu_device_type: "discrete-gpu".to_owned(),
+        graphics_backend: NativeVideoGraphicsBackend::Vulkan,
+        gpu_driver: "radv".to_owned(),
+        gpu_driver_info: "Mesa".to_owned(),
+        drm_render_node: Some("/dev/dri/renderD128".to_owned()),
+        display_refresh_hz: Some(60),
+    }
+}
+
+fn native_video_comparison() -> (ComparisonInput, Vec<ComparisonObservation>) {
+    let mut input = input();
+    input.scenario = ScenarioId::SustainedNativeVideo;
+    input.frontend = Frontend::Gui {
+        width: 1920,
+        height: 1080,
+    };
+    input.primary_metric = MetricName::VideoPresentationFramesPerSecond;
+    input.video_file = Some(PathBuf::from("video.mp4"));
+    let mut observations = valid_observations();
+    for observation in &mut observations {
+        observation.run.scenario = input.scenario;
+        observation.run.frontend = input.frontend;
+        observation.run.native_video_input = Some(native_video_identity("video-sha256"));
+        observation.run.native_video_execution = Some(native_video_execution());
+        let RunVerdict::Valid { measurements } = &mut observation.verdict else {
+            unreachable!("fixture uses valid runs")
+        };
+        measurements[0] = Measurement {
+            name: input.primary_metric,
+            value: 60.0,
+            unit: MetricUnit::FramesPerSecond,
+        };
+    }
+    (input, observations)
+}
+
+#[test]
+fn native_video_comparison_rejects_changed_decoder_or_render_node() {
+    for change in ["decoder", "render-node"] {
+        let (input, mut observations) = native_video_comparison();
+        let identity = observations[2]
+            .run
+            .native_video_execution
+            .as_mut()
+            .expect("fixture execution identity");
+        match change {
+            "decoder" => identity.decoder_factory = "nvh264dec".to_owned(),
+            "render-node" => {
+                identity.drm_render_node = Some("/dev/dri/renderD129".to_owned());
+            }
+            _ => unreachable!(),
+        }
+
+        let ComparisonVerdict::Rejected { reasons } = evaluate_comparison(&input, &observations)
+        else {
+            panic!("native-video comparison accepted a changed {change}")
+        };
+        assert!(reasons.iter().any(|reason| matches!(
+            reason,
+            ComparisonRejection::NativeVideoExecutionMismatch { .. }
+        )));
     }
 }
 
@@ -392,5 +496,59 @@ fn one_child_run_cannot_be_reused_as_two_samples() {
         reasons.contains(&ComparisonRejection::DuplicateArtifactPath {
             artifact_path: PathBuf::from("Baseline-0/artifact.json"),
         })
+    );
+}
+
+#[test]
+fn native_video_comparison_requires_input_identity_for_every_child() {
+    let (input, mut observations) = native_video_comparison();
+    observations[2].run.native_video_input = None;
+
+    let ComparisonVerdict::Rejected { reasons } = evaluate_comparison(&input, &observations) else {
+        panic!("native-video comparison accepted a child with no input identity")
+    };
+
+    assert!(
+        reasons.contains(&ComparisonRejection::MissingNativeVideoInput {
+            role: ComparisonRunRole::Candidate,
+            sample_index: 1,
+            run_id: "Candidate-1".to_owned(),
+        })
+    );
+}
+
+#[test]
+fn native_video_comparison_rejects_changed_input_digest_between_samples() {
+    let (input, mut observations) = native_video_comparison();
+    observations[3]
+        .run
+        .native_video_input
+        .as_mut()
+        .expect("fixture input identity")
+        .video_file_sha256 = "changed-video-sha256".to_owned();
+
+    let ComparisonVerdict::Rejected { reasons } = evaluate_comparison(&input, &observations) else {
+        panic!("native-video comparison accepted different compressed input bytes")
+    };
+
+    assert!(reasons.iter().any(|reason| matches!(
+        reason,
+        ComparisonRejection::NativeVideoInputMismatch {
+            role: ComparisonRunRole::Baseline,
+            sample_index: 1,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn native_video_identity_is_content_based_not_path_based() {
+    let first_path = PathBuf::from("fixtures/original.mp4");
+    let second_path = PathBuf::from("target/staged-copy.mp4");
+
+    assert_ne!(first_path, second_path);
+    assert_eq!(
+        native_video_identity("same-content"),
+        native_video_identity("same-content")
     );
 }

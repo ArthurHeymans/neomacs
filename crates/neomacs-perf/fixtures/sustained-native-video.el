@@ -105,6 +105,8 @@
           (neomacs-perf-native-video--session
            neomacs-perf-native-video--baseline))
          (path (plist-get session :frame-path))
+         (decoder (plist-get session :decoder))
+         (renderer (plist-get snapshot :renderer))
          (counts (plist-get session :import-counts))
          (presentation (plist-get session :presentation-counts))
          (timing (plist-get session :presentation-timing))
@@ -123,7 +125,7 @@
         (neomacs-perf-native-video--required-environment "NEOMACS_PERF_RESULT")
       (insert
        (json-serialize
-        `((schema_version . 2)
+        `((schema_version . 3)
           (scenario . "sustained-native-video")
           (status . ,status)
           (iterations . ,iterations)
@@ -136,6 +138,21 @@
           (viewport_width_pixels . ,(window-body-width nil t))
           (viewport_height_pixels . ,(window-body-height nil t))
           (backend . ,(symbol-name (plist-get session :backend)))
+          (decode_residency
+           . ,(symbol-name (plist-get path :decode-residency)))
+          (decoder_factory . ,(plist-get decoder :factory))
+          (decoder_plugin . ,(plist-get decoder :plugin))
+          (decoder_kind . ,(symbol-name (plist-get decoder :kind)))
+          (gpu_adapter_name . ,(plist-get renderer :adapter-name))
+          (gpu_vendor . ,(plist-get renderer :vendor))
+          (gpu_device . ,(plist-get renderer :device))
+          (gpu_device_type . ,(plist-get renderer :device-type))
+          (graphics_backend
+           . ,(symbol-name (plist-get renderer :graphics-backend)))
+          (gpu_driver . ,(plist-get renderer :driver))
+          (gpu_driver_info . ,(plist-get renderer :driver-info))
+          (drm_render_node . ,(plist-get renderer :drm-render-node))
+          (display_refresh_hz . ,(plist-get renderer :display-refresh-hz))
           (frame_format . ,(symbol-name (plist-get session :frame-format)))
           (compositor_import
            . ,(symbol-name (plist-get path :compositor-import)))
@@ -305,12 +322,17 @@
           (when (timerp neomacs-perf-native-video--warmup-timer)
             (cancel-timer neomacs-perf-native-video--warmup-timer))
           (setq neomacs-perf-native-video--warmup-timer nil)
+          ;; Enable external sampling and start clocks before crossing the
+          ;; acknowledged renderer/native boundary. The boundary returns its
+          ;; zero-point snapshot atomically; consequently every post-reset
+          ;; frame is inside the elapsed-time and external-sampling windows.
           (neomacs-perf-native-video--sampling-command "enable")
           (setq neomacs-perf-native-video--sampling-enabled t
-                neomacs-perf-native-video--baseline snapshot
                 neomacs-perf-native-video--cpu-started-at
                 (car (current-cpu-time))
                 neomacs-perf-native-video--started-at (float-time))
+          (setq neomacs-perf-native-video--baseline
+                (neomacs-video-begin-measurement-epoch))
           (setq neomacs-perf-native-video--sample-timer
                 (run-at-time
                  0.1 0.1 #'neomacs-perf-native-video--sample)))))
