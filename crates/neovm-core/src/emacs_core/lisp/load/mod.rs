@@ -5409,6 +5409,12 @@ fn finalize_cached_bootstrap_eval(
     super::post_image_init::apply_post_image_init(eval);
 
     restore_gnu_stale_preloaded_face_doc_refs(eval);
+    // Some GNU C-level variables, notably `data-directory`, become bound only
+    // after the initial `Context` bootstrap pass. Re-run the generated DEFVAR
+    // adoption at the runtime boundary so late-bound variables receive both
+    // their forwarding storage and their declared-special flag. The pass is
+    // idempotent for symbols restored intact from a pdump.
+    super::defvar_object::adopt(eval.obarray_mut());
     eval.clear_top_level_eval_state();
 
     Ok(())
@@ -6159,20 +6165,53 @@ pub(crate) fn load_runtime_image_with_features_for_executable(
         }
     }
 
-    finalize_cached_bootstrap_eval(&mut eval, &project_root).map_err(|e| {
-        tracing::error!("finalize_cached_bootstrap_eval failed: {e:?}");
-        e
-    })?;
-
-    // Only the FINAL runtime image presents GNU's shipped-emacs surface;
-    // the Bootstrap image mirrors GNU bootstrap-emacs, whose loadup guard
-    // deliberately leaves the closure-env filter nil so build tooling
-    // (loaddefs scrape, unidata generation) never runs interpreted cconv.
-    if role == RuntimeImageRole::Final {
-        restore_final_image_interpreted_closure_filter(&mut eval);
-    }
+    activate_runtime_evaluator_at_root(&mut eval, &project_root, role)?;
 
     Ok(eval)
+}
+
+/// Cross the post-preload boundary for an evaluator that will be used as a
+/// runtime image of `role`.
+///
+/// This is deliberately shared by pdump loading and the source fallback: the
+/// origin of an evaluator must not decide its Lisp-visible runtime contract.
+/// [`RuntimeImageRole`] makes the Bootstrap/Final distinction exhaustive, so
+/// adding another image role cannot silently inherit the wrong surface.
+pub fn activate_runtime_evaluator(
+    eval: &mut super::eval::Context,
+    role: RuntimeImageRole,
+) -> Result<(), EvalError> {
+    let project_root = runtime_project_root();
+    activate_runtime_evaluator_at_root(eval, &project_root, role)
+}
+
+fn activate_runtime_evaluator_at_root(
+    eval: &mut super::eval::Context,
+    project_root: &Path,
+    role: RuntimeImageRole,
+) -> Result<(), EvalError> {
+    finalize_cached_bootstrap_eval(eval, project_root).map_err(|error| {
+        tracing::error!("runtime evaluator activation failed: {error:?}");
+        error
+    })?;
+
+    match role {
+        // GNU bootstrap-emacs keeps the preload construction surface: build
+        // tooling still needs the larger interpreted evaluator allowance and
+        // the unfiltered interpreted-closure environment.
+        RuntimeImageRole::Bootstrap => {}
+        // GNU's shipped Emacs starts from `syms_of_eval`'s 1600 limit
+        // (`src/eval.c:4405-4413`).  Source loadup raises it to 4200 only while
+        // bootstrapping (`lisp/loadup.el:102-106`).  Use `set_variable`, not a
+        // host-only cache setter, so the DEFVAR_INT cell and evaluator cache
+        // remain one fact.
+        RuntimeImageRole::Final => {
+            eval.set_variable("max-lisp-eval-depth", Value::fixnum(1600));
+            restore_final_image_interpreted_closure_filter(eval);
+        }
+    }
+
+    Ok(())
 }
 
 fn runtime_image_load_error(

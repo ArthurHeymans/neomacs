@@ -15267,3 +15267,34 @@ fn runtime_image_loads_from_path_exec_when_nothing_sits_beside_the_executable() 
         Some(&Value::fixnum(218))
     );
 }
+
+/// GNU `syms_of_eval` seeds 1600 (`src/eval.c:4405-4413`).  A source preload
+/// may temporarily raise it to 4200 (`lisp/loadup.el:102-106`), but activating
+/// that state as a FINAL runtime must expose the shipped-Emacs value.
+#[test]
+fn final_runtime_image_activation_restores_the_gnu_eval_depth() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempdir().expect("runtime image tempdir");
+    let executable = dir.path().join("neomacs");
+    let image = dir.path().join(RuntimeImageRole::Final.image_file_name());
+
+    let mut eval = Context::new();
+    eval.set_variable("max-lisp-eval-depth", Value::fixnum(4200));
+    crate::emacs_core::pdump::dump_to_file(&eval, &image).expect("write final runtime image");
+
+    let loaded = load_runtime_image_with_features_for_executable(
+        RuntimeImageRole::Final,
+        &[],
+        None,
+        &executable,
+    )
+    .expect("load final runtime image");
+
+    assert_eq!(
+        loaded
+            .obarray()
+            .symbol_value("max-lisp-eval-depth")
+            .copied(),
+        Some(Value::fixnum(1600))
+    );
+}

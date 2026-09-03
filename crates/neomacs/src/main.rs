@@ -3112,7 +3112,18 @@ fn create_startup_evaluator_for_mode(mode: RuntimeMode, startup: &StartupOptions
                      (slow startup). Run cargo xtask fresh-build --release to \
                      build runtime images."
                 );
-                raw_source_bootstrap_evaluator()
+                let mut evaluator = raw_source_bootstrap_evaluator();
+                neovm_core::emacs_core::load::activate_runtime_evaluator(
+                    &mut evaluator,
+                    RuntimeImageRole::Final,
+                )
+                .unwrap_or_else(|err| {
+                    panic!(
+                        "source fallback should activate as a final runtime: {}",
+                        render_startup_image_error(&err)
+                    )
+                });
+                evaluator
             }
         }
     };
@@ -3430,7 +3441,6 @@ fn run_gui_evaluator_worker(
 ) -> EvaluatorExit {
     let mut evaluator = create_startup_evaluator_for_mode(mode, &startup);
     evaluator.setup_thread_locals();
-    evaluator.set_max_depth(1600);
     reset_terminal_host();
     reset_terminal_runtime();
     // GNU's `x_term_init'/`pgtk_term_init' create an output_x_window/output_pgtk
@@ -4013,7 +4023,6 @@ pub fn run(mode: RuntimeMode) {
     //    command loop evaluate `top-level`/`normal-top-level`.
     let mut evaluator = create_startup_evaluator_for_mode(mode, &startup);
     evaluator.setup_thread_locals();
-    evaluator.set_max_depth(1600);
     if tty_init::should_enable_live_tty_io(&startup) {
         reset_terminal_host();
         configure_terminal_runtime(tty_init::detect_tty_runtime(&startup));

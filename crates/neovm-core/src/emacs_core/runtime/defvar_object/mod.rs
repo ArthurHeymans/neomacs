@@ -219,29 +219,30 @@ impl AdoptionCounts {
 pub fn adopt(obarray: &mut Obarray) -> AdoptionCounts {
     let mut counts = AdoptionCounts::default();
     for var in gnu_table::GNU_OBJECT_VARIABLES {
-        counts.record(adopt_one(obarray, var));
-    }
-    // GNU's own order: declare every name, then take `declared_special` back
-    // off the ones that ask for it (`src/fns.c:6817` then `:6823`).  Driven by
-    // the same generated table as the declarations, so the two halves are
-    // refreshed from the mirror together and cannot drift -- see
-    // [`GnuSpecialness`].
-    //
-    // Presence is tested exactly as [`adopt_one`] tests it, and for the same
-    // reason: a name this build does not have is left alone.  Clearing the flag
-    // through the name rather than the id would `intern` it and give the
-    // obarray a member for a variable that does not exist here.
-    for var in gnu_table::GNU_OBJECT_VARIABLES {
-        if var.special != GnuSpecialness::NonSpecial {
-            continue;
-        }
-        let Some(id) = super::intern::lookup_interned(var.name) else {
-            continue;
+        let outcome = adopt_one(obarray, var);
+        counts.record(outcome);
+
+        // GNU's `defvar_lisp_nopro` writes both the forwarding descriptor and
+        // `declared_special` (`src/lread.c:5266-5277`).  Treat the generated
+        // row as one declaration here as well: a pdump can preserve the first
+        // half while losing the second, and an AlreadyForwarded early return
+        // must not make that invalid state permanent.  Only variables whose
+        // GNU storage exists in this port receive the flag; absent/unbound
+        // names remain absent, and aliases stay visible in the adoption
+        // report as unsupported divergences.
+        let has_gnu_storage = match outcome {
+            Adoption::Forwarded | Adoption::AlreadyForwarded | Adoption::Localized => true,
+            Adoption::Absent | Adoption::Unbound | Adoption::Alias => false,
         };
-        if obarray.get_by_id(id).is_none() {
+        if !has_gnu_storage {
             continue;
         }
-        obarray.make_non_special_id(id);
+        let id = super::intern::lookup_interned(var.name)
+            .expect("adopted GNU DEFVAR name must remain interned");
+        match var.special {
+            GnuSpecialness::Special => obarray.make_special_id(id),
+            GnuSpecialness::NonSpecial => obarray.make_non_special_id(id),
+        }
     }
     counts
 }
@@ -350,6 +351,36 @@ mod tests {
 #[cfg(test)]
 mod adoption_tests {
     use super::*;
+
+    /// GNU's `defvar_lisp_nopro` sets `declared_special` even when the symbol
+    /// already has forwarded storage (`src/lread.c:5266-5277`).  Runtime-image
+    /// rehydration must therefore repair both halves of a generated DEFVAR
+    /// declaration, not merely recognize that its redirect is already live.
+    #[test]
+    fn adoption_reasserts_generated_specialness_on_an_existing_forwarder() {
+        crate::test_utils::init_test_tracing();
+        let mut eval = crate::emacs_core::eval::Context::new();
+        eval.set_variable("data-directory", Value::string("/tmp/neomacs-data/"));
+        eval.obarray_mut().make_non_special("data-directory");
+
+        assert!(!eval.obarray().is_special("data-directory"));
+
+        let counts = adopt(eval.obarray_mut());
+        let id = crate::emacs_core::intern::lookup_interned("data-directory")
+            .expect("data-directory should be interned");
+
+        assert!(
+            eval.obarray().is_special("data-directory"),
+            "GNU's DEFVAR_LISP declaration must remain authoritative after rehydration; \
+             redirect={:?}, counts={counts:?}",
+            eval.obarray().get_by_id(id).map(|symbol| symbol.redirect())
+        );
+        assert_eq!(
+            eval.obarray().get_by_id(id).map(|symbol| symbol.redirect()),
+            Some(SymbolRedirect::Forwarded),
+            "late-bound GNU DEFVAR storage must also be adopted"
+        );
+    }
 
     /// Re-running the pass on a live `Context` must find every row already
     /// settled.
