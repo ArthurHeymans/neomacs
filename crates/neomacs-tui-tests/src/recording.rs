@@ -320,13 +320,16 @@ impl ActiveRecording {
         })
     }
 
-    fn write(&mut self, event: CastEvent) -> io::Result<()> {
-        let now = Instant::now();
-        let interval = now.saturating_duration_since(self.last_event);
+    fn write_at(&mut self, observed_at: Instant, event: CastEvent) -> io::Result<()> {
+        let interval = observed_at.saturating_duration_since(self.last_event);
         self.writer.write_event(interval, event)?;
-        self.last_event = now;
+        self.last_event = self.last_event.max(observed_at);
         self.dirty = true;
         Ok(())
+    }
+
+    fn write(&mut self, event: CastEvent) -> io::Result<()> {
+        self.write_at(Instant::now(), event)
     }
 
     fn flush_if_due(&mut self) -> io::Result<()> {
@@ -343,10 +346,10 @@ impl ActiveRecording {
         Ok(())
     }
 
-    fn output(&mut self, bytes: &[u8]) -> io::Result<()> {
+    fn output_at(&mut self, observed_at: Instant, bytes: &[u8]) -> io::Result<()> {
         let decoded = self.output.decode(bytes);
         if !decoded.is_empty() {
-            self.write(CastEvent::Output(decoded))?;
+            self.write_at(observed_at, CastEvent::Output(decoded))?;
         }
         Ok(())
     }
@@ -442,8 +445,15 @@ impl SessionRecording {
         }
     }
 
+    pub(crate) fn output_at(&mut self, observed_at: Instant, bytes: &[u8]) {
+        self.apply("write PTY output to", |recording| {
+            recording.output_at(observed_at, bytes)
+        });
+    }
+
+    #[cfg(test)]
     pub(crate) fn output(&mut self, bytes: &[u8]) {
-        self.apply("write PTY output to", |recording| recording.output(bytes));
+        self.output_at(Instant::now(), bytes);
     }
 
     pub(crate) fn input(&mut self, bytes: &[u8]) {

@@ -25,16 +25,18 @@
 //!   raw terminal cells or exact palette values.
 
 use std::ffi::OsString;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
 use std::time::{Duration, Instant};
 
 mod launch;
+mod pty_output;
 mod recording;
 
 pub use launch::TuiLaunch;
+use pty_output::{PtyOutputEvent, PtyOutputPump};
 pub use recording::TuiRecordingScope;
 use recording::{RecordingIdentity, RecordingPolicy, SessionRecording, TerminalSize};
 
@@ -281,6 +283,7 @@ impl SessionDirectory {
 /// A TUI editor session running inside an isolated PTY.
 pub struct TuiSession {
     pty: pty_process::blocking::Pty,
+    output_pump: PtyOutputPump,
     _child: std::process::Child,
     parser: vt100::Parser,
     recent_output: Vec<u8>,
@@ -449,12 +452,17 @@ impl TuiSession {
             command = command.current_dir(current_dir);
         }
 
+        // Start draining before the child can emit its first byte. GNU makes
+        // the shared slave description nonblocking while checking input, so
+        // even startup output can otherwise overrun the PTY queue.
+        let output_pump = PtyOutputPump::start(&pty, name).expect("start PTY output pump");
         let child = command.spawn(pts).expect("spawn");
 
         let parser = vt100::Parser::new(terminal.rows, terminal.columns, 0);
 
         TuiSession {
             pty,
+            output_pump,
             _child: child,
             parser,
             recent_output: Vec::new(),
@@ -593,14 +601,31 @@ impl TuiSession {
         /// count as settled. Tune up if editors start pausing
         /// mid-render longer than this.
         const IDLE_CUTOFF: Duration = Duration::from_millis(300);
-        /// Each `poll()` call waits at most this long before we
-        /// re-check idle / max-deadline conditions.
-        const POLL_SLICE_MS: i32 = 50;
+        /// Each channel wait lasts at most this long before we re-check idle /
+        /// max-deadline conditions.
+        const RECEIVE_SLICE: Duration = Duration::from_millis(50);
         let max_deadline = Instant::now() + max_timeout;
         let mut last_activity: Option<Instant> = None;
-        let mut buf = [0u8; 65536];
         loop {
             self.recording.flush_if_due();
+
+            // Drain everything the independent reader has already observed
+            // before deciding that the child is idle.
+            loop {
+                match self.output_pump.try_recv() {
+                    Ok(event) => match self.apply_output_event(event) {
+                        PtyReadProgress::Activity(observed_at) => {
+                            last_activity = Some(
+                                last_activity.map_or(observed_at, |last| last.max(observed_at)),
+                            );
+                        }
+                        PtyReadProgress::Finished => return,
+                    },
+                    Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => return,
+                }
+            }
+
             let now = Instant::now();
             if now >= max_deadline {
                 break;
@@ -610,31 +635,53 @@ impl TuiSession {
             {
                 break;
             }
-            let fd = std::os::fd::AsRawFd::as_raw_fd(&self.pty);
-            let ready = unsafe {
-                let mut pfd = libc::pollfd {
-                    fd,
-                    events: libc::POLLIN,
-                    revents: 0,
-                };
-                libc::poll(&mut pfd, 1, POLL_SLICE_MS) > 0 && (pfd.revents & libc::POLLIN) != 0
-            };
-            if ready {
-                match self.pty.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        self.recording.output(&buf[..n]);
-                        self.recent_output.extend_from_slice(&buf[..n]);
-                        if self.recent_output.len() > 262_144 {
-                            let drain = self.recent_output.len() - 262_144;
-                            self.recent_output.drain(..drain);
-                        }
-                        self.parser.process(&buf[..n]);
-                        last_activity = Some(Instant::now());
+            let wait = max_deadline
+                .saturating_duration_since(now)
+                .min(RECEIVE_SLICE);
+            match self.output_pump.recv_timeout(wait) {
+                Ok(event) => match self.apply_output_event(event) {
+                    PtyReadProgress::Activity(observed_at) => {
+                        last_activity =
+                            Some(last_activity.map_or(observed_at, |last| last.max(observed_at)));
                     }
-                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
-                    Err(_) => break,
+                    PtyReadProgress::Finished => return,
+                },
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
+            }
+        }
+    }
+
+    fn apply_output_event(&mut self, event: PtyOutputEvent) -> PtyReadProgress {
+        match event {
+            PtyOutputEvent::Data { observed_at, bytes } => {
+                self.recording.output_at(observed_at, &bytes);
+                self.recent_output.extend_from_slice(&bytes);
+                if self.recent_output.len() > 262_144 {
+                    let drain = self.recent_output.len() - 262_144;
+                    self.recent_output.drain(..drain);
                 }
+                self.parser.process(&bytes);
+                PtyReadProgress::Activity(observed_at)
+            }
+            PtyOutputEvent::Closed => PtyReadProgress::Finished,
+            PtyOutputEvent::Failed(error) => {
+                eprintln!("{} PTY output reader stopped: {error}", self.name);
+                PtyReadProgress::Finished
+            }
+        }
+    }
+
+    fn drain_pending_output(&mut self) {
+        loop {
+            match self.output_pump.try_recv() {
+                Ok(event) => {
+                    if matches!(self.apply_output_event(event), PtyReadProgress::Finished) {
+                        return;
+                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty)
+                | Err(std::sync::mpsc::TryRecvError::Disconnected) => return,
             }
         }
     }
@@ -888,9 +935,16 @@ impl Drop for TuiSession {
                 self._child.wait().ok()
             }
         };
+        self.output_pump.shutdown();
+        self.drain_pending_output();
         self.recording
             .finish(status.map(exit_status_code).unwrap_or(1));
     }
+}
+
+enum PtyReadProgress {
+    Activity(Instant),
+    Finished,
 }
 
 // ── Key translation ──────────────────────────────────────────────────
@@ -1050,6 +1104,7 @@ mod tests {
         recording::{RecordingIdentity, RecordingPolicy},
     };
     use std::ffi::OsString;
+    use std::io::{Read as _, Write as _};
 
     #[test]
     fn private_parent_temp_directory_exposes_a_nested_owned_directory() {
@@ -1091,6 +1146,84 @@ mod tests {
                 .text_grid()
                 .iter()
                 .any(|row| row.contains("alpha beta"))
+        );
+    }
+
+    const NONBLOCKING_PTY_FIXTURE: &str = "NEOMACS_TUI_NONBLOCKING_PTY_FIXTURE";
+
+    /// Model GNU's TTY descriptor setup: stdin/stdout are dup'd from one PTY
+    /// slave open-file description, so setting O_NONBLOCK while polling stdin
+    /// also makes terminal output nonblocking (`src/keyboard.c:8256`).
+    #[test]
+    fn nonblocking_pty_output_fixture() {
+        if std::env::var_os(NONBLOCKING_PTY_FIXTURE).is_none() {
+            return;
+        }
+
+        print!("fixture-ready\n");
+        std::io::stdout().flush().expect("flush fixture readiness");
+        let mut input = [0_u8; 1];
+        std::io::stdin()
+            .read_exact(&mut input)
+            .expect("read fixture trigger");
+
+        let flags = unsafe { libc::fcntl(libc::STDIN_FILENO, libc::F_GETFL) };
+        assert!(flags >= 0, "read fixture descriptor flags");
+        assert_eq!(
+            unsafe { libc::fcntl(libc::STDIN_FILENO, libc::F_SETFL, flags | libc::O_NONBLOCK,) },
+            0,
+            "make the shared slave description nonblocking",
+        );
+
+        let block = [b'x'; 512];
+        for _ in 0..128 {
+            // Deliberately mirror GNU `tty_write_glyphs_1`: output is attempted
+            // once and a short/EAGAIN write is not retried.
+            unsafe {
+                libc::write(libc::STDOUT_FILENO, block.as_ptr().cast(), block.len());
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        unsafe {
+            libc::write(
+                libc::STDOUT_FILENO,
+                b"fixture-complete\n".as_ptr().cast(),
+                b"fixture-complete\n".len(),
+            );
+        }
+    }
+
+    #[test]
+    fn tui_session_drains_nonblocking_output_between_client_observations() {
+        let launch = TuiLaunch::new(std::env::current_exe().expect("current test executable"))
+            .args([
+                "--exact",
+                "tests::nonblocking_pty_output_fixture",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(NONBLOCKING_PTY_FIXTURE, "1");
+        let mut session = TuiSession::spawn_launch(launch, "NONBLOCKING-OUTPUT");
+        session.read_until(Duration::from_secs(2), |grid| {
+            grid.iter().any(|row| row.contains("fixture-ready"))
+        });
+        session.clear_recent_output();
+
+        session.send(b"x\n");
+        // Test clients do real work between observations. The transport must
+        // keep draining independently during that interval, like a terminal.
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(
+            session.run_to_completion(Duration::from_secs(2)),
+            TuiProcessOutcome::Exited,
+        );
+
+        assert!(
+            session
+                .recent_output()
+                .windows(b"fixture-complete".len())
+                .any(|window| window == b"fixture-complete"),
+            "the PTY queue filled while the client was not calling read; the nonblocking child lost its output tail",
         );
     }
 
