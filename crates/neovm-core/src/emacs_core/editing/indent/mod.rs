@@ -1017,9 +1017,7 @@ fn vertical_motion_from_live_snapshot(
     // Only a goal column reads this, and resolving it costs several window and
     // buffer lookups, so a plain `(vertical-motion N)` does not pay for it.
     let wrap = match cols {
-        Some(_) => {
-            super::window_cmds::window_line_wrap_for_motion(eval, window, current_buffer, engine)
-        }
+        Some(_) => super::window_cmds::window_line_wrap(eval, window, current_buffer, engine),
         None => LineWrap::Truncate,
     };
     let snapshot = live_vertical_motion_snapshot(eval, window, current_buffer)?;
@@ -1126,12 +1124,7 @@ pub(crate) fn vertical_motion(eval: &mut super::eval::Context, args: Vec<Value>)
     let extent = vertical_motion_screen_extent(eval, args.get(1).copied());
     let screen_width = extent.last_visible_col;
     let engine = MotionEngine::for_context(eval);
-    let wrap = super::window_cmds::window_line_wrap_for_motion(
-        eval,
-        args.get(1).copied(),
-        current_id,
-        engine,
-    );
+    let wrap = super::window_cmds::window_line_wrap(eval, args.get(1).copied(), current_id, engine);
 
     if lines == 0 && cols.is_none() {
         // Move to beginning of current screen line.
@@ -1379,8 +1372,7 @@ pub(crate) fn scan_screen_line_motion_target(
 
     let screen_width = vertical_motion_screen_extent(eval, window).last_visible_col;
     let engine = MotionEngine::for_context(eval);
-    let wrap =
-        super::window_cmds::window_line_wrap_for_motion(eval, window, current_buffer, engine);
+    let wrap = super::window_cmds::window_line_wrap(eval, window, current_buffer, engine);
     let mut target =
         current_screen_line_start_with_truncation(eval, current_buffer, point, screen_width, wrap)?
             .unwrap_or(point);

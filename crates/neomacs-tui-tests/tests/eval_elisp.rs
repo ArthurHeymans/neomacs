@@ -1,6 +1,7 @@
 //! TUI comparison tests: eval elisp.
 
 mod support;
+use neomacs_tui_tests::TuiSession;
 use std::time::Duration;
 use support::*;
 
@@ -12,6 +13,24 @@ fn backtrace_ready(grid: &[String]) -> bool {
         && grid
             .iter()
             .any(|row| row.contains("void-variable") || row.contains("value as variable is void"))
+}
+
+/// Ask GNU's own `cl-print-object' method to expose byte-code structure in
+/// backtraces instead of its abbreviated `sxhash' token.
+///
+/// GNU documents that `sxhash' values are not stable across Emacs sessions,
+/// and `sxhash_obj' hashes symbol/object identity through `XHASH'
+/// (`src/fns.c`).  A GNU/Neomacs pair is necessarily two sessions, so the
+/// default `#<bytecode HEX>' spelling cannot be an exact cross-process
+/// contract.  `raw' is the stronger contract: it compares the actual byte-code
+/// slots, constants, and visible styling rather than an opaque identity hash.
+fn expose_structural_bytecode_in_backtraces(gnu: &mut TuiSession, neo: &mut TuiSession) {
+    support::eval_expression(
+        gnu,
+        neo,
+        "(progn (require 'cl-print) (setq cl-print-compiled 'raw))",
+    );
+    read_both(gnu, neo, Duration::from_secs(1));
 }
 
 // ── Tests ──────────────────────────────────────────────────
@@ -49,6 +68,7 @@ fn eval_last_sexp_via_cx_ce_prints_echo_area_value() {
 #[test]
 fn eval_last_sexp_error_via_cx_ce_opens_backtrace() {
     let (mut gnu, mut neo) = boot_pair("");
+    expose_structural_bytecode_in_backtraces(&mut gnu, &mut neo);
 
     send_both_raw(&mut gnu, &mut neo, b"hello");
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
@@ -737,6 +757,7 @@ fn eval_expression_history_via_mcolon_mp_recalls_previous_expression() {
 #[test]
 fn eval_expression_error_via_mcolon_opens_backtrace() {
     let (mut gnu, mut neo) = boot_pair("");
+    expose_structural_bytecode_in_backtraces(&mut gnu, &mut neo);
 
     send_both(&mut gnu, &mut neo, "M-:");
     let prompt_ready = |grid: &[String]| grid.iter().any(|row| row.contains("Eval:"));

@@ -29,9 +29,11 @@ use crate::buffer::{
 };
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_args_range};
+use crate::emacs_core::indent::MotionEngine;
 use crate::window::{
     DisplayRowSnapshot, FrameId, FrameManager, Window, WindowDisplaySnapshot, WindowId,
 };
+use std::num::NonZeroUsize;
 use std::ops::ControlFlow;
 use strum::{EnumString, IntoStaticStr};
 
@@ -462,6 +464,45 @@ pub(crate) enum LineWrap {
     /// src/xdisp.c:577-617), falling back to `WindowWrap` when the row offers
     /// no such position.
     WordWrap,
+}
+
+/// Horizontal scanner policy for a terminal `window-text-pixel-size` call.
+///
+/// GNU does not have a second, approximate wrapping decision for this
+/// builtin: `window_text_pixel_size` starts the ordinary display iterator, so
+/// the iterator's [`LineWrap`] value decides both whether long lines add rows
+/// and which terminal columns can contribute to the measured width.  Keeping
+/// those two effects in one enum prevents a caller from accidentally capping a
+/// truncated line while also counting it as wrapped (the bug this type was
+/// introduced to fix).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TtyWindowTextLineMeasurement {
+    TruncateAt(NonZeroUsize),
+    WrapAt(NonZeroUsize),
+}
+
+impl TtyWindowTextLineMeasurement {
+    fn from_display_policy(line_wrap: LineWrap, body_columns: usize) -> Self {
+        let body_columns = NonZeroUsize::new(body_columns.max(1)).expect("positive body width");
+        match line_wrap {
+            LineWrap::Truncate => Self::TruncateAt(body_columns),
+            // GNU reserves the final TTY column for the continuation glyph,
+            // so wrapped text has one fewer usable column than the window
+            // body.  Both continuation methods share that hard edge; word
+            // boundary selection remains the display scanner's concern.
+            LineWrap::WindowWrap | LineWrap::WordWrap => Self::WrapAt(
+                NonZeroUsize::new(body_columns.get().saturating_sub(1).max(1))
+                    .expect("positive continuation width"),
+            ),
+        }
+    }
+
+    fn scanner_limits(self) -> (Option<usize>, Option<usize>) {
+        match self {
+            Self::TruncateAt(columns) => (Some(columns.get()), None),
+            Self::WrapAt(columns) => (None, Some(columns.get())),
+        }
+    }
 }
 
 impl LineWrap {
@@ -4223,28 +4264,35 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
     expect_args_range("window-text-pixel-size", &args, 0, 7)?;
     let (fid, wid) = resolve_live_window_for_text_pixel_size(&eval.frames, args.first())?;
 
-    let Some(frame) = eval.frames.get(fid) else {
-        return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
-    };
-    let char_w = frame.char_width;
-    let char_h = frame.char_height;
-    let window = frame.find_window(wid);
-    let buf_id = window.and_then(|window| window.buffer_id());
-    let wrap_columns = window
-        .filter(|_| frame.effective_window_system().is_none())
-        .map(|window| {
+    let Some((buf_id, char_w, char_h, tty_body_columns)) = eval.frames.get(fid).and_then(|frame| {
+        let window = frame.find_window(wid)?;
+        let buf_id = window.buffer_id()?;
+        let tty_body_columns = frame.effective_window_system().is_none().then(|| {
             let body_pixels =
                 super::window_cmds::window_body_width_pixels(&eval.frames, fid, window).max(0);
-            let body_columns = (body_pixels as f32 / char_w.max(1.0)).floor() as usize;
-            // GNU reserves the final TTY column for the continuation glyph,
-            // so wrapped text has one fewer usable column than
-            // `window-body-width` reports.
-            body_columns.saturating_sub(1).max(1)
+            (body_pixels as f32 / frame.char_width.max(1.0)).floor() as usize
         });
-
-    let Some(buf_id) = buf_id else {
+        Some((
+            buf_id,
+            frame.char_width,
+            frame.char_height,
+            tty_body_columns,
+        ))
+    }) else {
         return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
     };
+    let (default_x_limit, wrap_columns) = tty_body_columns
+        .map(|body_columns| {
+            let line_wrap = super::window_cmds::window_line_wrap(
+                eval,
+                Some(Value::make_window(wid.0)),
+                buf_id,
+                MotionEngine::DisplayIterator,
+            );
+            TtyWindowTextLineMeasurement::from_display_policy(line_wrap, body_columns)
+                .scanner_limits()
+        })
+        .unwrap_or((None, None));
 
     let (initial_from_pos, to_pos, y_offset, max_offset_rows) = {
         let Some(buf) = eval.buffers.get(buf_id) else {
@@ -4310,7 +4358,7 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
         to_pos,
         apply_trim,
         CharColumnWidth::One,
-        None,
+        default_x_limit,
         None,
         wrap_columns,
     );

@@ -1962,6 +1962,51 @@ fn window_text_pixel_size_counts_tty_wrapped_screen_rows() {
     assert_eq!(result.cons_cdr(), Value::fixnum(4));
 }
 
+/// GNU `window_text_pixel_size` starts the ordinary display iterator
+/// (`src/xdisp.c:11712-12042`), so its height uses the iterator's typed
+/// `line_wrap` policy.  With `truncate-lines` non-nil a long logical line is
+/// one screen row; it must not be divided by the TTY body width.
+#[test]
+fn window_text_pixel_size_honors_tty_truncate_lines() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("xdisp-truncate-test", 10, 24, buf_id);
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        frame.font_pixel_size = 1.0;
+        frame.set_window_system(None);
+    }
+    eval.buffers
+        .set_buffer_local_property(buf_id, "truncate-lines", Value::T)
+        .expect("enable truncation in measured buffer");
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("123456789012345678901234567890\nnext");
+    let selected_window = eval.frames.get(frame_id).expect("frame").selected_window.0 as u64;
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::make_window(selected_window),
+            Value::NIL,
+            Value::T,
+            Value::NIL,
+            Value::fixnum(24),
+            Value::T,
+        ],
+    )
+    .expect("measure truncated TTY buffer text");
+
+    // Two logical text lines plus the requested mode line.
+    assert_eq!(result.cons_cdr(), Value::fixnum(3));
+}
+
 #[test]
 fn test_window_text_pixel_size_ctx_coerces_bignum_positions_like_gnu() {
     crate::test_utils::init_test_tracing();

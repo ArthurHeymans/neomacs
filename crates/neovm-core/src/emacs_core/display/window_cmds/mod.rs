@@ -791,7 +791,7 @@ fn window_width_cols(w: &Window, char_width: f32) -> i64 {
 ///   this window's: `init_iterator` -- and therefore `word-wrap` -- is reached
 ///   only from the interactive arm of `Fvertical_motion`
 ///   (src/indent.c:2280-2287).  See [`MotionEngine`].
-pub(crate) fn window_line_wrap_for_motion(
+pub(crate) fn window_line_wrap(
     eval: &mut super::eval::Context,
     window: Option<Value>,
     current_buffer_id: BufferId,
