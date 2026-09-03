@@ -15276,6 +15276,15 @@ impl Context {
             return result;
         }
 
+        // GNU `unbind_to` over a suffix of plain, untrapped `let` bindings:
+        // pop each entry and store its old value back.  No Lisp runs, so
+        // `result` needs no root protection and only GNU's own quit-flag
+        // bracket applies.
+        if self.specpdl_suffix_is_plain_lets(count) {
+            self.unbind_plain_lets(count);
+            return result;
+        }
+
         if self.specpdl[count..]
             .iter()
             .all(spec_binding_has_trivial_unbind)
@@ -15297,6 +15306,39 @@ impl Context {
     /// Each failed cleanup has already popped its own entry. Keep unwinding so
     /// lower bindings cannot leak; if another cleanup exits nonlocally, that
     /// later/lower flow supersedes the earlier one just as it does in GNU.
+    /// Every specpdl entry above `count` is a `let` of a plain value cell with
+    /// no variable watcher — the bindings GNU's `unbind_to` restores with a
+    /// bare `SET_SYMBOL_VAL`.
+    fn specpdl_suffix_is_plain_lets(&self, count: usize) -> bool {
+        self.specpdl[count..].iter().all(|binding| match binding {
+            SpecBinding::Let { sym_id, .. } => {
+                self.obarray.get_by_id(*sym_id).is_some_and(|sym| {
+                    sym.redirect() == crate::emacs_core::symbol::SymbolRedirect::Plainval
+                }) && !self.watchers.has_watchers(*sym_id)
+            }
+            _ => false,
+        })
+    }
+
+    /// Restore a suffix that [`Self::specpdl_suffix_is_plain_lets`] accepted.
+    fn unbind_plain_lets(&mut self, count: usize) {
+        let quitf = self.quit_flag_value();
+        if !quitf.is_nil() {
+            self.set_quit_flag_value(Value::NIL);
+        }
+        while self.specpdl.len() > count {
+            let Some(SpecBinding::Let { sym_id, old_value }) = self.specpdl.pop() else {
+                unreachable!("the suffix was checked to hold only plain let bindings");
+            };
+            self.obarray
+                .store_plain_value_id(sym_id, old_value.as_plain());
+            self.sync_cached_runtime_binding_by_id(sym_id, old_value.get().unwrap_or(Value::NIL));
+        }
+        if !quitf.is_nil() && self.quit_flag_value().is_nil() {
+            self.set_quit_flag_value(quitf);
+        }
+    }
+
     fn drain_unwind_to(&mut self, count: usize, result: EvalResult) -> EvalResult {
         // GNU eval.c `unbind_to(count, value)` carries VALUE through cleanup.
         // In Rust the value is not on the C stack/register root set, so keep
