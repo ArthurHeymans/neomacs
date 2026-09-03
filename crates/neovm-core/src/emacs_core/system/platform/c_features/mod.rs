@@ -158,7 +158,7 @@ pub(crate) fn gnu_c_features() -> [GnuCFeature; 30] {
             here: if cfg!(target_os = "windows") {
                 Implemented {
                     by: "crates/neovm-core/src/emacs_core/lisp/native/builtins/file_notify/platform/windows -- \
-                         w32notify-add-watch/-rm-watch/-valid-p over notify's explicit \
+                         w32notify-add-watch/-rm-watch/-valid-p over an explicit \
                          ReadDirectoryChangesW adapter, with GNU-compatible event shapes",
                 }
             } else {

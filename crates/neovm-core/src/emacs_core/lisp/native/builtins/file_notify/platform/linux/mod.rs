@@ -5,9 +5,11 @@
 //! low-level `inotify-*` contract (notably `dont-follow`, `onlydir`, combined
 //! bits, `isdir`, `unmount`, and terminal `ignored`).
 
+use super::super::delivery::DeliveryRecord;
 use super::super::{
-    DrainBatch, FileNotifyBackend, FileNotifyEvent, FileWatch, WatchActivity, WatchId,
-    WatchIdAllocator, file_notify_error,
+    DrainBatch, FileNotifyBackend, FileNotifyEvent, FileWatch, RemoveWatchOutcome, TrackedWatch,
+    WatchActivity, WatchId, WatchIdAllocator, WatchRegistration, file_notify_error,
+    finish_watch_drain,
 };
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::process::WaitNotifier;
@@ -23,7 +25,7 @@ pub(crate) use lisp::{inotify_add_watch, inotify_rm_watch, inotify_valid_p};
 #[cfg(test)]
 mod linux_test;
 
-use worker::{NativeEvent, Worker};
+use worker::{NativeEvent, Worker, WorkerControl};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(in super::super) struct InotifyRequest {
@@ -120,10 +122,19 @@ impl InotifyRequest {
 }
 
 #[derive(Clone, Debug)]
+enum InotifyEventName {
+    /// A child name supplied by the kernel and decoded at evaluator time.
+    Native(PathBuf),
+    /// A nameless event for the watched object. GNU returns the exact Lisp
+    /// filename object retained by `inotify-add-watch` for this case.
+    RegisteredWatch,
+}
+
+#[derive(Clone, Debug)]
 pub(in super::super) struct InotifyEvent {
     watch_id: WatchId,
     aspects: Vec<&'static str>,
-    path: PathBuf,
+    name: InotifyEventName,
     cookie: u32,
 }
 
@@ -132,12 +143,20 @@ impl FileNotifyEvent for InotifyEvent {
         &self.watch_id
     }
 
-    fn into_lisp(self, ctx: &crate::emacs_core::eval::Context) -> Value {
+    fn into_lisp(
+        self,
+        ctx: &crate::emacs_core::eval::Context,
+        registration: WatchRegistration,
+    ) -> Value {
         // GNU inotify events are `(DESCRIPTOR ASPECTS NAME COOKIE)`.
+        let name = match self.name {
+            InotifyEventName::Native(path) => super::super::lisp::file_name_to_lisp(ctx, &path),
+            InotifyEventName::RegisteredWatch => registration.registered_file_name(),
+        };
         Value::list(vec![
             self.watch_id.to_inotify_lisp(),
             Value::list(self.aspects.into_iter().map(Value::symbol).collect()),
-            super::super::lisp::file_name_to_lisp(ctx, &self.path),
+            name,
             Value::fixnum(i64::from(self.cookie)),
         ])
     }
@@ -148,6 +167,12 @@ struct InotifyWatch {
     common: FileWatch<InotifyRequest>,
     native_descriptor: i32,
     activity: WatchActivity,
+}
+
+impl TrackedWatch for InotifyWatch {
+    fn watch_id(&self) -> &WatchId {
+        &self.common.id
+    }
 }
 
 #[derive(Default)]
@@ -209,23 +234,24 @@ impl InotifyBackend {
             .map(|watch| InotifyEvent {
                 watch_id: watch.common.id.clone(),
                 aspects: Self::aspects(event.mask),
-                path: event
+                name: event
                     .name
                     .as_ref()
                     .map(PathBuf::from)
-                    .unwrap_or_else(|| watch.common.path.clone()),
+                    .map(InotifyEventName::Native)
+                    .unwrap_or(InotifyEventName::RegisteredWatch),
                 cookie: event.cookie,
             })
             .collect()
     }
 
-    fn overflow_events(&self) -> Vec<InotifyEvent> {
-        self.watches
+    fn overflow_events(watches: &[InotifyWatch]) -> Vec<InotifyEvent> {
+        watches
             .iter()
             .map(|watch| InotifyEvent {
                 watch_id: watch.common.id.clone(),
                 aspects: vec!["q-overflow"],
-                path: watch.common.path.clone(),
+                name: InotifyEventName::RegisteredWatch,
                 cookie: 0,
             })
             .collect()
@@ -262,7 +288,6 @@ impl FileNotifyBackend for InotifyBackend {
         self.watches.push(InotifyWatch {
             common: FileWatch {
                 id: descriptor.clone(),
-                path: path.to_path_buf(),
                 request,
             },
             native_descriptor,
@@ -271,30 +296,39 @@ impl FileNotifyBackend for InotifyBackend {
         Ok(descriptor)
     }
 
-    fn remove_watch(&mut self, descriptor: &WatchId) -> Result<bool, Flow> {
+    fn remove_watch(&mut self, descriptor: &WatchId) -> RemoveWatchOutcome {
         let Some(index) = self
             .watches
             .iter()
             .position(|watch| watch.common.id == *descriptor)
         else {
-            return Ok(false);
+            return RemoveWatchOutcome::NotFound;
         };
         let native_descriptor = self.watches[index].native_descriptor;
         let remove_native = !self.watches.iter().enumerate().any(|(other_index, watch)| {
             other_index != index && watch.native_descriptor == native_descriptor
         });
-        if remove_native {
-            self.worker
-                .as_ref()
-                .expect("a live watch has a worker")
-                .remove(native_descriptor)
-                .map_err(|error| file_notify_error("Could not rm watch", Some(error), None))?;
-        }
+        let native_error = remove_native
+            .then(|| {
+                self.worker
+                    .as_ref()
+                    .expect("a live watch has a worker")
+                    .remove(native_descriptor)
+            })
+            .transpose()
+            .err();
         self.watches.remove(index);
         if self.watches.is_empty() {
             self.worker = None;
         }
-        Ok(true)
+        match native_error {
+            Some(error) => RemoveWatchOutcome::RemovedWithError(file_notify_error(
+                "Could not rm watch",
+                Some(error),
+                None,
+            )),
+            None => RemoveWatchOutcome::Removed,
+        }
     }
 
     fn valid_p(&self, descriptor: &WatchId) -> bool {
@@ -306,46 +340,53 @@ impl FileNotifyBackend for InotifyBackend {
     fn drain_events(&mut self) -> Result<DrainBatch<Self::Event>, Flow> {
         let mut events = Vec::new();
         let mut overflowed = false;
-        let mut failure = None;
+        let mut failures = Vec::new();
+        let mut terminated = Vec::new();
         if let Some(worker) = self.worker.as_ref() {
-            if worker.take_overflow() {
+            let delivery = worker.drain();
+            if delivery.overflowed {
                 overflowed = true;
                 tracing::warn!(
                     capacity = super::super::delivery::EVENT_CAPACITY,
                     "inotify delivery queue overflowed; requesting conservative rescan"
                 );
             }
-            loop {
-                match worker.try_recv() {
-                    Ok(Ok(event)) => {
-                        events.extend(self.translate_event(event));
-                    }
-                    Ok(Err(error)) => {
-                        failure = Some(file_notify_error(
-                            "Error while retrieving file system events",
-                            Some(error),
-                            None,
-                        ));
-                        break;
-                    }
-                    Err(crossbeam_channel::TryRecvError::Empty) => break,
-                    Err(crossbeam_channel::TryRecvError::Disconnected) => break,
+            for record in delivery.records {
+                match record {
+                    DeliveryRecord::Event(event) => events.extend(self.translate_event(event)),
+                    DeliveryRecord::Control(control) => match control {
+                        WorkerControl::Terminal(event) => {
+                            let translated = self.translate_event(event);
+                            terminated
+                                .extend(translated.iter().map(|event| event.watch_id.clone()));
+                            events.extend(translated);
+                        }
+                        WorkerControl::Failed(error) => {
+                            failures.push(error.to_string());
+                            terminated
+                                .extend(self.watches.iter().map(|watch| watch.common.id.clone()));
+                        }
+                    },
                 }
             }
         }
-        let terminated = self
-            .watches
-            .iter()
-            .filter(|watch| !watch.activity.is_active())
-            .map(|watch| watch.common.id.clone())
-            .collect::<Vec<_>>();
-        self.watches.retain(|watch| watch.activity.is_active());
-        if overflowed {
-            events.extend(self.overflow_events());
-        }
+        terminated.sort_by_key(WatchId::slot);
+        terminated.dedup();
+        finish_watch_drain(&mut self.watches, &terminated, |watches| {
+            if overflowed {
+                events.extend(Self::overflow_events(watches));
+            }
+        });
         if self.watches.is_empty() {
             self.worker = None;
         }
+        let failure = (!failures.is_empty()).then(|| {
+            file_notify_error(
+                "Error while retrieving file system events",
+                Some(failures.join("\n")),
+                None,
+            )
+        });
         Ok(DrainBatch {
             events,
             terminated,

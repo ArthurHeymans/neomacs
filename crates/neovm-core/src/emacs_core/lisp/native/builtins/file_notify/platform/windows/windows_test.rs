@@ -60,8 +60,10 @@ fn w32_request_parsing_and_lisp_event_shape_match_gnu() {
         path: PathBuf::from(r"nested\new.txt"),
     };
     let eval = crate::test_utils::runtime_startup_context();
-    let fields = crate::emacs_core::value::list_to_vec(&event.into_lisp(&eval))
-        .expect("w32 event is a proper list");
+    let fields = crate::emacs_core::value::list_to_vec(
+        &event.into_lisp(&eval, WatchRegistration::new(Value::NIL, Value::NIL)),
+    )
+    .expect("w32 event is a proper list");
     assert_eq!(
         fields,
         [

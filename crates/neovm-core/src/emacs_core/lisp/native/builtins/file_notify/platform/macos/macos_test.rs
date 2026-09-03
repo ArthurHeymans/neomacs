@@ -1,6 +1,6 @@
 use super::{
-    DirectoryChange, DirectoryEntrySnapshot, DirectorySnapshot, requested_vnode_actions,
-    vnode_actions,
+    DirectoryChange, DirectoryEntrySnapshot, DirectorySnapshot, overflow_recovery_action,
+    requested_vnode_actions, vnode_actions,
 };
 use super::{KqueueAction, KqueueVnodeAction};
 use enumflags2::BitFlags;
@@ -148,4 +148,15 @@ fn unrequested_native_actions_are_filtered_without_aliases() {
         requested_vnode_actions(native, requested),
         [KqueueAction::Extend]
     );
+}
+
+#[test]
+fn overflow_recovery_bypasses_the_native_request_filter() {
+    let requested = KqueueAction::Attrib.into();
+
+    assert!(
+        requested_vnode_actions(KqueueVnodeAction::Write.into(), requested).is_empty(),
+        "a fake native write would be filtered"
+    );
+    assert_eq!(overflow_recovery_action(), KqueueAction::Write);
 }

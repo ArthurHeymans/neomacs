@@ -1,32 +1,36 @@
-//! Evaluator-owned Lisp callback registry.
+//! Evaluator-owned Lisp watch registry.
 //!
-//! Native watcher threads never hold Lisp values.  All callback lookup and GC
-//! rooting stays on the evaluator thread behind this small ownership boundary.
+//! Native watcher threads never hold Lisp values.  Callback lookup and every
+//! Lisp object that native events may need to reuse stay GC-rooted on the
+//! evaluator thread behind this small ownership boundary.
 
-use super::WatchId;
+use super::{WatchId, WatchRegistration};
 use crate::emacs_core::value::Value;
 use hashbrown::HashMap;
 
 #[derive(Default)]
 pub(super) struct WatchRegistry {
-    callbacks: HashMap<WatchId, Value>,
+    registrations: HashMap<WatchId, WatchRegistration>,
 }
 
 impl WatchRegistry {
-    pub(super) fn register(&mut self, watch_id: WatchId, callback: Value) {
-        let replaced = self.callbacks.insert(watch_id, callback);
+    pub(super) fn register(&mut self, watch_id: WatchId, callback: Value, file_name: Value) {
+        let registration = WatchRegistration::new(callback, file_name);
+        let replaced = self.registrations.insert(watch_id, registration);
         debug_assert!(replaced.is_none(), "native backend reused a live watch id");
     }
 
     pub(super) fn unregister(&mut self, watch_id: &WatchId) {
-        self.callbacks.remove(watch_id);
+        self.registrations.remove(watch_id);
     }
 
-    pub(super) fn callback(&self, watch_id: &WatchId) -> Option<Value> {
-        self.callbacks.get(watch_id).copied()
+    pub(super) fn registration(&self, watch_id: &WatchId) -> Option<WatchRegistration> {
+        self.registrations.get(watch_id).copied()
     }
 
     pub(super) fn collect_gc_roots(&self, roots: &mut Vec<Value>) {
-        roots.extend(self.callbacks.values().copied());
+        for registration in self.registrations.values() {
+            registration.collect_gc_roots(roots);
+        }
     }
 }

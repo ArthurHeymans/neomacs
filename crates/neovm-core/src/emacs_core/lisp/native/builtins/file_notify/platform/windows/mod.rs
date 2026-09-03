@@ -1,8 +1,9 @@
 #[cfg(target_os = "windows")]
 use super::super::{
-    DrainBatch, FileNotifyBackend, FileWatch, WatchActivity, WatchIdAllocator, file_notify_error,
+    DrainBatch, FileNotifyBackend, FileWatch, RemoveWatchOutcome, TrackedWatch, WatchActivity,
+    WatchIdAllocator, file_notify_error, finish_watch_drain,
 };
-use super::super::{FileNotifyEvent, WatchId};
+use super::super::{FileNotifyEvent, WatchId, WatchRegistration};
 #[cfg(target_os = "windows")]
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::value::Value;
@@ -120,7 +121,11 @@ impl FileNotifyEvent for W32Event {
         &self.watch_id
     }
 
-    fn into_lisp(self, ctx: &crate::emacs_core::eval::Context) -> Value {
+    fn into_lisp(
+        self,
+        ctx: &crate::emacs_core::eval::Context,
+        _registration: WatchRegistration,
+    ) -> Value {
         // GNU w32notify events are `(DESCRIPTOR ACTION FILE)` and use a
         // pointer-like integer as the opaque descriptor.
         Value::list(vec![
@@ -133,21 +138,30 @@ impl FileNotifyEvent for W32Event {
 
 #[cfg(target_os = "windows")]
 mod native {
-    use super::super::super::delivery::{self, DeliveryReceiver, DeliverySender, EVENT_CAPACITY};
+    use super::super::super::delivery::{
+        self, DeliveryReceiver, DeliveryRecord, DeliverySender, EVENT_CAPACITY,
+    };
     use super::*;
     use crate::emacs_core::process::WaitNotifier;
-    use worker::{Worker, WorkerMessage};
+    use worker::{Worker, WorkerFailure, WorkerMessage};
 
     struct W32Watch {
         common: FileWatch<W32Request>,
+        path: PathBuf,
         activity: WatchActivity,
         _worker: Worker,
     }
 
+    impl TrackedWatch for W32Watch {
+        fn watch_id(&self) -> &WatchId {
+            &self.common.id
+        }
+    }
+
     #[derive(Default)]
     pub(crate) struct W32NotifyBackend {
-        tx: Option<DeliverySender<WorkerMessage>>,
-        rx: Option<DeliveryReceiver<WorkerMessage>>,
+        tx: Option<DeliverySender<WorkerMessage, WorkerFailure>>,
+        rx: Option<DeliveryReceiver<WorkerMessage, WorkerFailure>>,
         watches: Vec<W32Watch>,
         ids: WatchIdAllocator,
     }
@@ -201,29 +215,29 @@ mod native {
             self.watches.push(W32Watch {
                 common: FileWatch {
                     id: descriptor.clone(),
-                    path: path.to_path_buf(),
                     request,
                 },
+                path: path.to_path_buf(),
                 activity,
                 _worker: worker,
             });
             Ok(descriptor)
         }
 
-        fn remove_watch(&mut self, descriptor: &WatchId) -> Result<bool, Flow> {
+        fn remove_watch(&mut self, descriptor: &WatchId) -> RemoveWatchOutcome {
             let Some(index) = self
                 .watches
                 .iter()
                 .position(|watch| watch.common.id == *descriptor)
             else {
-                return Ok(false);
+                return RemoveWatchOutcome::NotFound;
             };
             self.watches.remove(index);
             if self.watches.is_empty() {
                 self.tx = None;
                 self.rx = None;
             }
-            Ok(true)
+            RemoveWatchOutcome::Removed
         }
 
         fn valid_p(&self, descriptor: &WatchId) -> bool {
@@ -235,62 +249,61 @@ mod native {
         fn drain_events(&mut self) -> Result<DrainBatch<Self::Event>, Flow> {
             let mut events = Vec::new();
             let mut rescans = Vec::new();
-            let mut failure = None;
+            let mut failures = Vec::new();
+            let mut terminated = Vec::new();
             let mut delivery_overflow = false;
             if let Some(rx) = self.rx.as_ref() {
-                delivery_overflow = rx.take_overflow();
-                loop {
-                    match rx.try_recv() {
-                        Ok(WorkerMessage::Event(event)) => events.push(event),
-                        Ok(WorkerMessage::Overflow(watch_id)) => rescans.push(watch_id),
-                        Ok(WorkerMessage::Failed(error)) => {
-                            if failure.is_none() {
-                                failure = Some(file_notify_error(
-                                    "Error while retrieving file system events",
-                                    Some(error),
-                                    None,
-                                ));
-                            }
+                let delivery = rx.drain_consistent();
+                delivery_overflow = delivery.overflowed;
+                for record in delivery.records {
+                    match record {
+                        DeliveryRecord::Event(message) => match message {
+                            WorkerMessage::Event(event) => events.push(event),
+                            WorkerMessage::Overflow(watch_id) => rescans.push(watch_id),
+                        },
+                        DeliveryRecord::Control(WorkerFailure { watch_id, error }) => {
+                            failures.push(format!("watch {}: {error}", watch_id.slot()));
+                            terminated.push(watch_id);
                         }
-                        Err(crossbeam_channel::TryRecvError::Empty) => break,
-                        Err(crossbeam_channel::TryRecvError::Disconnected) => break,
                     }
                 }
             }
-            let terminated = self
-                .watches
-                .iter()
-                .filter(|watch| !watch.activity.is_active())
-                .map(|watch| watch.common.id.clone())
-                .collect::<Vec<_>>();
-            self.watches.retain(|watch| watch.activity.is_active());
-            if delivery_overflow {
-                tracing::warn!(
-                    capacity = EVENT_CAPACITY,
-                    "Windows file-notification queue overflowed; emitting conservative changes"
+            terminated.sort_by_key(WatchId::slot);
+            terminated.dedup();
+            finish_watch_drain(&mut self.watches, &terminated, |watches| {
+                if delivery_overflow {
+                    tracing::warn!(
+                        capacity = EVENT_CAPACITY,
+                        "Windows file-notification queue overflowed; emitting conservative changes"
+                    );
+                    rescans.extend(watches.iter().map(|watch| watch.common.id.clone()));
+                }
+                rescans.sort_by_key(WatchId::slot);
+                rescans.dedup();
+                events.extend(
+                    rescans
+                        .drain(..)
+                        .filter_map(|watch_id| {
+                            watches.iter().find(|watch| watch.common.id == watch_id)
+                        })
+                        .map(|watch| W32Event {
+                            watch_id: watch.common.id.clone(),
+                            action: W32Action::Modified,
+                            path: watch.path.clone(),
+                        }),
                 );
-                rescans.extend(self.watches.iter().map(|watch| watch.common.id.clone()));
-            }
-            rescans.sort_by_key(WatchId::slot);
-            rescans.dedup();
-            events.extend(
-                rescans
-                    .into_iter()
-                    .filter_map(|watch_id| {
-                        self.watches
-                            .iter()
-                            .find(|watch| watch.common.id == watch_id)
-                    })
-                    .map(|watch| W32Event {
-                        watch_id: watch.common.id.clone(),
-                        action: W32Action::Modified,
-                        path: watch.common.path.clone(),
-                    }),
-            );
+            });
             if self.watches.is_empty() {
                 self.tx = None;
                 self.rx = None;
             }
+            let failure = (!failures.is_empty()).then(|| {
+                file_notify_error(
+                    "Error while retrieving file system events",
+                    Some(failures.join("\n")),
+                    None,
+                )
+            });
             Ok(DrainBatch {
                 events,
                 terminated,

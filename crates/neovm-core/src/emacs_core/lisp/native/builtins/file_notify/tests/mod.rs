@@ -4,7 +4,7 @@ use crate::emacs_core::intern::intern;
 
 fn workspace_temp_dir() -> tempfile::TempDir {
     let parent = std::path::Path::new(env!("CARGO_WORKSPACE_DIR"))
-        .join("tmp")
+        .join("target")
         .join("neovm-core-file-notify-tests");
     std::fs::create_dir_all(&parent).expect("create workspace test directory");
     tempfile::Builder::new()
@@ -45,19 +45,27 @@ impl FileNotifyEvent for LifecycleTestEvent {
         &self.0
     }
 
-    fn into_lisp(self, _ctx: &crate::emacs_core::eval::Context) -> Value {
+    fn into_lisp(
+        self,
+        _ctx: &crate::emacs_core::eval::Context,
+        _registration: WatchRegistration,
+    ) -> Value {
         unreachable!("the lifecycle test does not encode events")
     }
 }
 
 #[test]
-fn terminal_watch_without_a_visible_event_releases_its_callback_root() {
+fn terminal_watch_stays_rooted_until_delivery_finishes() {
     let watch_id = WatchId::new(7, 3);
     let mut registry = WatchRegistry::default();
-    registry.register(watch_id.clone(), Value::fixnum(42));
+    registry.register(
+        watch_id.clone(),
+        Value::fixnum(42),
+        Value::string("watched"),
+    );
 
-    let (deliveries, failure) = prepare_deliveries(
-        &mut registry,
+    let (deliveries, terminated, failure) = prepare_deliveries(
+        &registry,
         DrainBatch::<LifecycleTestEvent> {
             events: Vec::new(),
             terminated: vec![watch_id],
@@ -69,7 +77,98 @@ fn terminal_watch_without_a_visible_event_releases_its_callback_root() {
     assert!(failure.is_none());
     let mut roots = Vec::new();
     registry.collect_gc_roots(&mut roots);
-    assert!(roots.is_empty(), "terminated callback remained GC-rooted");
+    assert!(
+        roots.contains(&Value::fixnum(42)),
+        "terminal callback lost its GC root before delivery completed"
+    );
+
+    for watch_id in terminated {
+        registry.unregister(&watch_id);
+    }
+    roots.clear();
+    registry.collect_gc_roots(&mut roots);
+    assert!(
+        roots.is_empty(),
+        "completed registration remained GC-rooted"
+    );
+}
+
+#[test]
+fn terminal_delivery_values_survive_exact_gc_until_queued() {
+    reset_file_notify_thread_locals();
+    let watch_id = WatchId::new(9, 0);
+    let callback = Value::heap_string(crate::heap_types::LispString::from_unibyte(
+        b"callback-root".to_vec(),
+    ));
+    let file_name = Value::heap_string(crate::heap_types::LispString::from_unibyte(
+        b"file-name-root".to_vec(),
+    ));
+    let (deliveries, terminated, failure) = FILE_NOTIFY_STATE.with(|slot| {
+        let mut state = slot.borrow_mut();
+        state
+            .registry
+            .register(watch_id.clone(), callback, file_name);
+        prepare_deliveries(
+            &state.registry,
+            DrainBatch {
+                events: vec![LifecycleTestEvent(watch_id)],
+                terminated: vec![WatchId::new(9, 0)],
+                failure: None,
+            },
+        )
+    });
+    assert!(failure.is_none());
+
+    let mut eval = crate::test_utils::runtime_startup_context();
+    eval.eval_str("(garbage-collect)")
+        .expect("run an exact collection while terminal delivery is pending");
+
+    let registration = deliveries[0].1;
+    assert_eq!(
+        registration
+            .callback()
+            .as_lisp_string()
+            .expect("callback remained a string")
+            .as_bytes(),
+        b"callback-root"
+    );
+    assert_eq!(
+        registration
+            .registered_file_name()
+            .as_lisp_string()
+            .expect("file name remained a string")
+            .as_bytes(),
+        b"file-name-root"
+    );
+
+    FILE_NOTIFY_STATE.with(|slot| {
+        let mut state = slot.borrow_mut();
+        for watch_id in terminated {
+            state.registry.unregister(&watch_id);
+        }
+    });
+}
+
+#[test]
+fn watch_registry_roots_every_lisp_object_needed_for_delivery() {
+    let watch_id = WatchId::new(8, 0);
+    let callback = Value::symbol("file-notify-test-callback");
+    let file_name = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
+        b'f', 0xff, b'o',
+    ]));
+    let mut registry = WatchRegistry::default();
+    registry.register(watch_id.clone(), callback, file_name);
+
+    let registration = registry
+        .registration(&watch_id)
+        .expect("registered watch has evaluator state");
+    assert_eq!(registration.callback(), callback);
+    assert_eq!(registration.registered_file_name(), file_name);
+
+    let mut roots = Vec::new();
+    registry.collect_gc_roots(&mut roots);
+    assert!(roots.contains(&callback));
+    assert!(roots.contains(&file_name));
 }
 
 /// Destructure a `Flow` into its signal payload; Debug-printing a `SymId`

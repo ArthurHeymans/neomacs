@@ -7,9 +7,42 @@
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::process::WaitNotifier;
 use crate::emacs_core::value::Value;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Evaluator-owned Lisp state for one native watch.
+///
+/// Every platform registers the exact public filename object for its low-level
+/// API (the original inotify argument, or the normalized kqueue/w32 name).
+/// Keeping this required avoids a representable "backend needs a filename but
+/// none was rooted" state and keeps all Lisp values off native worker threads.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct WatchRegistration {
+    callback: Value,
+    registered_file_name: Value,
+}
+
+impl WatchRegistration {
+    pub(super) fn new(callback: Value, registered_file_name: Value) -> Self {
+        Self {
+            callback,
+            registered_file_name,
+        }
+    }
+
+    pub(super) fn callback(self) -> Value {
+        self.callback
+    }
+
+    pub(super) fn registered_file_name(self) -> Value {
+        self.registered_file_name
+    }
+
+    pub(super) fn collect_gc_roots(self, roots: &mut Vec<Value>) {
+        roots.extend([self.callback, self.registered_file_name]);
+    }
+}
 
 /// Stable identity for one native watch registration.
 ///
@@ -64,9 +97,9 @@ impl WatchIdAllocator {
 
 /// Shared monotonic native-watch lifecycle.
 ///
-/// A worker flips this token before publishing a terminal event. The
-/// evaluator can therefore reconcile validity even when bounded event
-/// delivery overflows and drops the corresponding data-plane record.
+/// A worker flips this token while publishing a lossless terminal control
+/// record, so `valid-p` changes immediately. Registry retirement is driven by
+/// consuming that control record rather than by polling this atomic alone.
 #[derive(Clone, Debug)]
 pub(super) struct WatchActivity(Arc<AtomicBool>);
 
@@ -91,13 +124,38 @@ impl WatchActivity {
 #[derive(Clone, Debug)]
 pub(super) struct FileWatch<Request> {
     pub(super) id: WatchId,
-    pub(super) path: PathBuf,
     pub(super) request: Request,
+}
+
+/// Native-watch state needed by the shared drain lifecycle.
+pub(super) trait TrackedWatch {
+    fn watch_id(&self) -> &WatchId;
+}
+
+/// Run overflow recovery while every affected registration is still present,
+/// then retire watches acknowledged by lossless control records.
+///
+/// Keeping this ordering in one cross-platform operation prevents a terminal
+/// event burst from losing callbacks during conservative recovery. Atomic
+/// activity is intentionally not consulted here: only a consumed control
+/// record is a safe cross-thread retirement acknowledgment.
+pub(super) fn finish_watch_drain<Watch: TrackedWatch>(
+    watches: &mut Vec<Watch>,
+    terminated: &[WatchId],
+    before_retire: impl FnOnce(&mut [Watch]),
+) {
+    before_retire(watches);
+    let terminated = terminated.iter().collect::<hashbrown::HashSet<_>>();
+    watches.retain(|watch| !terminated.contains(watch.watch_id()));
 }
 
 pub(super) trait BackendEvent {
     fn watch_id(&self) -> &WatchId;
-    fn into_lisp(self, ctx: &crate::emacs_core::eval::Context) -> Value;
+    fn into_lisp(
+        self,
+        ctx: &crate::emacs_core::eval::Context,
+        registration: WatchRegistration,
+    ) -> Value;
 }
 
 /// One atomic handoff from a native backend to the evaluator.
@@ -115,6 +173,17 @@ pub(super) struct DrainBatch<Event> {
     pub(super) failure: Option<Flow>,
 }
 
+/// Result of removing one logical watch.
+///
+/// Some native APIs can fail after the public descriptor has already been
+/// retired (GNU inotify deliberately has this behavior). Keeping that state in
+/// the type forces Lisp adapters to release roots before propagating the error.
+pub(super) enum RemoveWatchOutcome {
+    NotFound,
+    Removed,
+    RemovedWithError(Flow),
+}
+
 pub(super) trait Backend {
     type Request;
     type Event: BackendEvent;
@@ -125,8 +194,12 @@ pub(super) trait Backend {
         request: Self::Request,
         notifier: Option<WaitNotifier>,
     ) -> Result<WatchId, Flow>;
-    fn remove_watch(&mut self, watch_id: &WatchId) -> Result<bool, Flow>;
+    fn remove_watch(&mut self, watch_id: &WatchId) -> RemoveWatchOutcome;
     fn valid_p(&self, watch_id: &WatchId) -> bool;
     fn drain_events(&mut self) -> Result<DrainBatch<Self::Event>, Flow>;
     fn has_watches(&self) -> bool;
 }
+
+#[cfg(test)]
+#[path = "model_test.rs"]
+mod tests;

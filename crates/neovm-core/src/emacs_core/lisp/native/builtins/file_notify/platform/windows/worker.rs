@@ -31,7 +31,11 @@ const BUFFER_CAPACITY: usize = 64 * 1024;
 pub(super) enum WorkerMessage {
     Event(W32Event),
     Overflow(WatchId),
-    Failed(String),
+}
+
+pub(super) struct WorkerFailure {
+    pub(super) watch_id: WatchId,
+    pub(super) error: String,
 }
 
 pub(super) struct Worker {
@@ -46,7 +50,7 @@ impl Worker {
         native_filter: u32,
         watch_id: WatchId,
         activity: WatchActivity,
-        events: DeliverySender<WorkerMessage>,
+        events: DeliverySender<WorkerMessage, WorkerFailure>,
     ) -> Result<Self, String> {
         let (directory, watched_name) = if path.is_dir() {
             (path.to_path_buf(), None)
@@ -106,7 +110,7 @@ fn run(
     native_filter: u32,
     watch_id: WatchId,
     activity: WatchActivity,
-    events: DeliverySender<WorkerMessage>,
+    events: DeliverySender<WorkerMessage, WorkerFailure>,
 ) {
     let directory_raw = directory.as_raw_handle() as HANDLE;
     let io_event_raw = io_event.as_raw_handle() as HANDLE;
@@ -128,7 +132,7 @@ fn run(
         ) {
             Ok(pending) => pending,
             Err(error) => {
-                fail(&activity, &events, error.to_string());
+                fail(&activity, events, watch_id, error.to_string());
                 return;
             }
         };
@@ -146,7 +150,7 @@ fn run(
             } else {
                 format!("unexpected wait result {ready}")
             };
-            fail(&activity, &events, error);
+            fail(&activity, events, watch_id, error);
             return;
         }
 
@@ -156,7 +160,7 @@ fn run(
                 if error.raw_os_error() == Some(ERROR_OPERATION_ABORTED as i32) {
                     return;
                 }
-                fail(&activity, &events, error.to_string());
+                fail(&activity, events, watch_id, error.to_string());
                 return;
             }
         };
@@ -276,9 +280,13 @@ impl Drop for PendingDirectoryRead<'_> {
     }
 }
 
-fn fail(activity: &WatchActivity, events: &DeliverySender<WorkerMessage>, error: String) {
-    activity.terminate();
-    events.publish(WorkerMessage::Failed(error));
+fn fail(
+    activity: &WatchActivity,
+    events: DeliverySender<WorkerMessage, WorkerFailure>,
+    watch_id: WatchId,
+    error: String,
+) {
+    events.finish_with(WorkerFailure { watch_id, error }, || activity.terminate());
 }
 
 fn open_directory(path: &Path) -> Result<OwnedHandle, String> {

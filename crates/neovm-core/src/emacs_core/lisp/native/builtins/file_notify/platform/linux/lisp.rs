@@ -105,8 +105,10 @@ pub(crate) fn inotify_add_watch(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("inotify-add-watch", &args, 3)?;
-    let path =
-        crate::emacs_core::fileio::lisp_file_name_to_path_buf(ctx.expect_lisp_string(args[0])?);
+    let registered_file_name = args[0];
+    let path = crate::emacs_core::fileio::lisp_file_name_to_path_buf(
+        ctx.expect_lisp_string(registered_file_name)?,
+    );
     let aspects = parse_aspects(args[1])?;
     let callback = args[2];
     let notifier = ctx.wait_notifier();
@@ -116,7 +118,9 @@ pub(crate) fn inotify_add_watch(
         let watch_id = state
             .backend
             .add_watch(&path, InotifyRequest::new(aspects), notifier)?;
-        state.registry.register(watch_id.clone(), callback);
+        state
+            .registry
+            .register(watch_id.clone(), callback, registered_file_name);
         Ok(watch_id.to_inotify_lisp())
     })
 }
@@ -134,9 +138,16 @@ pub(crate) fn inotify_rm_watch(args: Vec<Value>) -> EvalResult {
 
     FILE_NOTIFY_STATE.with(|slot| {
         let mut state = slot.borrow_mut();
-        if state.backend.remove_watch(&watch_id)? {
-            state.registry.unregister(&watch_id);
+        match state.backend.remove_watch(&watch_id) {
+            RemoveWatchOutcome::NotFound => Ok(Value::T),
+            RemoveWatchOutcome::Removed => {
+                state.registry.unregister(&watch_id);
+                Ok(Value::T)
+            }
+            RemoveWatchOutcome::RemovedWithError(error) => {
+                state.registry.unregister(&watch_id);
+                Err(error)
+            }
         }
-        Ok(Value::T)
     })
 }

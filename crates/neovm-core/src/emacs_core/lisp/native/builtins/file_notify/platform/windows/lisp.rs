@@ -43,7 +43,9 @@ pub(crate) fn w32notify_add_watch(
         let watch_id = state
             .backend
             .add_watch(&path, W32Request::new(filters), notifier)?;
-        state.registry.register(watch_id.clone(), callback);
+        state
+            .registry
+            .register(watch_id.clone(), callback, normalized);
         Ok(Value::fixnum(watch_id.slot()))
     })
 }
@@ -56,11 +58,16 @@ pub(crate) fn w32notify_rm_watch(args: Vec<Value>) -> EvalResult {
     };
     FILE_NOTIFY_STATE.with(|slot| {
         let mut state = slot.borrow_mut();
-        if state.backend.remove_watch(&watch_id)? {
-            state.registry.unregister(&watch_id);
-            Ok(Value::NIL)
-        } else {
-            Err(invalid())
+        match state.backend.remove_watch(&watch_id) {
+            RemoveWatchOutcome::NotFound => Err(invalid()),
+            RemoveWatchOutcome::Removed => {
+                state.registry.unregister(&watch_id);
+                Ok(Value::NIL)
+            }
+            RemoveWatchOutcome::RemovedWithError(error) => {
+                state.registry.unregister(&watch_id);
+                Err(error)
+            }
         }
     })
 }

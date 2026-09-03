@@ -10,7 +10,8 @@ mod registry;
 pub(super) use lisp::file_notify_error;
 use model::{
     Backend as FileNotifyBackend, BackendEvent as FileNotifyEvent, DrainBatch, FileWatch,
-    WatchActivity, WatchId, WatchIdAllocator,
+    RemoveWatchOutcome, TrackedWatch, WatchActivity, WatchId, WatchIdAllocator, WatchRegistration,
+    finish_watch_drain,
 };
 use registry::WatchRegistry;
 
@@ -76,44 +77,51 @@ pub(crate) fn has_active_file_notify_watches() -> bool {
 }
 
 fn prepare_deliveries<Event: FileNotifyEvent>(
-    registry: &mut WatchRegistry,
+    registry: &WatchRegistry,
     batch: DrainBatch<Event>,
-) -> (Vec<(Event, Value)>, Option<Flow>) {
-    // Capture callbacks before unregistering terminal watches so the final
-    // event, when present, is still delivered exactly once.
+) -> (Vec<(Event, WatchRegistration)>, Vec<WatchId>, Option<Flow>) {
+    // Capture evaluator-owned registration data before unregistering terminal
+    // watches so the final event, when present, is still delivered exactly once.
     let deliverable = batch
         .events
         .into_iter()
         .filter_map(|event| {
             registry
-                .callback(event.watch_id())
-                .map(|callback| (event, callback))
+                .registration(event.watch_id())
+                .map(|registration| (event, registration))
         })
         .collect();
-    for watch_id in batch.terminated {
-        registry.unregister(&watch_id);
-    }
-    (deliverable, batch.failure)
+    (deliverable, batch.terminated, batch.failure)
 }
 
 pub(crate) fn drain_file_notify_events(
     ctx: &mut crate::emacs_core::eval::Context,
 ) -> Result<usize, Flow> {
-    let (events, failure) = FILE_NOTIFY_STATE.with(|slot| {
+    let (events, terminated, failure) = FILE_NOTIFY_STATE.with(|slot| {
         let mut state = slot.borrow_mut();
         let batch = state.backend.drain_events()?;
-        Ok::<_, Flow>(prepare_deliveries(&mut state.registry, batch))
+        Ok::<_, Flow>(prepare_deliveries(&state.registry, batch))
     })?;
     let count = events.len();
 
-    for (event, callback) in events {
-        let raw_event = event.into_lisp(ctx);
+    for (event, registration) in events {
+        let raw_event = event.into_lisp(ctx, registration);
         ctx.queue_special_event(Value::list(vec![
             Value::symbol("file-notify"),
             raw_event,
-            callback,
+            registration.callback(),
         ]));
     }
+
+    // Encoding allocates Lisp lists, so terminal registrations must remain in
+    // the GC root registry until every final event and callback wrapper has
+    // been constructed and queued.
+    FILE_NOTIFY_STATE.with(|slot| {
+        let mut state = slot.borrow_mut();
+        for watch_id in terminated {
+            state.registry.unregister(&watch_id);
+        }
+    });
 
     match failure {
         Some(error) => Err(error),

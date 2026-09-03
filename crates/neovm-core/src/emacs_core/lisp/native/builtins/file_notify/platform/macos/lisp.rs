@@ -62,7 +62,9 @@ pub(crate) fn kqueue_add_watch(
         let watch_id = state
             .backend
             .add_watch(&path, KqueueRequest::new(actions), notifier)?;
-        state.registry.register(watch_id.clone(), callback);
+        state
+            .registry
+            .register(watch_id.clone(), callback, normalized);
         Ok(Value::fixnum(watch_id.slot()))
     })
 }
@@ -76,11 +78,16 @@ pub(crate) fn kqueue_rm_watch(args: Vec<Value>) -> EvalResult {
     };
     FILE_NOTIFY_STATE.with(|slot| {
         let mut state = slot.borrow_mut();
-        if state.backend.remove_watch(&watch_id)? {
-            state.registry.unregister(&watch_id);
-            Ok(Value::T)
-        } else {
-            Err(not_a_watch_descriptor())
+        match state.backend.remove_watch(&watch_id) {
+            RemoveWatchOutcome::NotFound => Err(not_a_watch_descriptor()),
+            RemoveWatchOutcome::Removed => {
+                state.registry.unregister(&watch_id);
+                Ok(Value::T)
+            }
+            RemoveWatchOutcome::RemovedWithError(error) => {
+                state.registry.unregister(&watch_id);
+                Err(error)
+            }
         }
     })
 }

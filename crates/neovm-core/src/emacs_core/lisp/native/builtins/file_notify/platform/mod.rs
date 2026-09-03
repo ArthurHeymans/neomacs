@@ -15,6 +15,15 @@ pub(super) mod macos;
 #[cfg(any(target_os = "windows", all(test, target_os = "linux")))]
 pub(super) mod windows;
 
+// Keep the common evaluator lifecycle available on targets with no native
+// file-notification subrs. Linux tests compile this adapter as an architecture
+// check without weakening the compile-time desktop backend selection.
+#[cfg(any(
+    not(any(target_os = "linux", target_os = "macos", target_os = "windows")),
+    all(test, target_os = "linux")
+))]
+mod unsupported;
+
 std::cfg_select! {
     target_os = "linux" => {
         pub(super) type Backend = linux::InotifyBackend;
@@ -26,6 +35,6 @@ std::cfg_select! {
         pub(super) type Backend = windows::W32NotifyBackend;
     }
     _ => {
-        compile_error!("file notification has no backend for this target");
+        pub(super) type Backend = unsupported::UnsupportedBackend;
     }
 }

@@ -28,7 +28,7 @@ const LOCALIZED_SUBR_CATALOG: &[SubrBatch] = &[
     crate::emacs_core::video::SUBRS,
     crate::emacs_core::xwidget::SUBRS,
     crate::emacs_core::indent::SUBRS,
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     file_notify::SUBRS,
     crate::emacs_core::sqlite::SUBRS,
     crate::emacs_core::font::SUBRS,
