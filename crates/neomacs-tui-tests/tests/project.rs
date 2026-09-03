@@ -90,6 +90,11 @@ fn project_find_file_via_mx_opens_file_relative_to_git_root() {
                 .iter()
                 .any(|row| row.contains("(defun neo-project-beta"))
     });
+    // `show-paren-mode` paints through GNU's `show-paren-delay` idle timer.
+    // File contents becoming visible is therefore not yet a stable display
+    // boundary: allow both editors to reach the same post-idle presentation
+    // before comparing their complete cell grids.
+    read_both(&mut gnu, &mut neo, Duration::from_millis(700));
     assert_pair_exact_display(
         "project_find_file_via_mx_opens_file_relative_to_git_root",
         &gnu,
