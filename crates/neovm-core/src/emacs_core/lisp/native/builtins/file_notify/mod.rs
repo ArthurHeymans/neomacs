@@ -6,7 +6,10 @@ mod model;
 mod platform;
 mod registry;
 
-use model::{Backend as FileNotifyBackend, BackendEvent as FileNotifyEvent, FileWatch, WatchId};
+use model::{
+    Backend as FileNotifyBackend, BackendEvent as FileNotifyEvent, FileWatch, WatchId,
+    WatchLifecycle,
+};
 use registry::WatchRegistry;
 
 std::cfg_select! {
@@ -253,17 +256,23 @@ pub(crate) fn drain_file_notify_events(
     let events = FILE_NOTIFY_STATE.with(|slot| {
         let mut state = slot.borrow_mut();
         let events = state.backend.drain_events()?;
-        Ok::<_, Flow>(
-            events
-                .into_iter()
-                .filter_map(|event| {
-                    state
-                        .registry
-                        .callback(event.watch_id())
-                        .map(|callback| (event, callback))
-                })
-                .collect::<Vec<_>>(),
-        )
+        let mut terminated = Vec::new();
+        let deliverable = events
+            .into_iter()
+            .filter_map(|event| {
+                if event.lifecycle() == WatchLifecycle::Terminated {
+                    terminated.push(event.watch_id().clone());
+                }
+                state
+                    .registry
+                    .callback(event.watch_id())
+                    .map(|callback| (event, callback))
+            })
+            .collect::<Vec<_>>();
+        for watch_id in terminated {
+            state.registry.unregister(&watch_id);
+        }
+        Ok::<_, Flow>(deliverable)
     })?;
     let count = events.len();
 

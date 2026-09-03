@@ -44,13 +44,19 @@ impl WatchId {
 pub(super) struct FileWatch<Request> {
     pub(super) id: WatchId,
     pub(super) path: PathBuf,
-    pub(super) is_directory: bool,
     pub(super) request: Request,
 }
 
 pub(super) trait BackendEvent {
     fn watch_id(&self) -> &WatchId;
+    fn lifecycle(&self) -> WatchLifecycle;
     fn into_lisp(self) -> Value;
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum WatchLifecycle {
+    Active,
+    Terminated,
 }
 
 pub(super) trait Backend {

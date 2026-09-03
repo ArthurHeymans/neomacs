@@ -157,7 +157,7 @@ pub(crate) fn gnu_c_features() -> [GnuCFeature; 30] {
             gnu_guard: BuildOption("HAVE_W32NOTIFY"),
             here: if cfg!(target_os = "windows") {
                 Implemented {
-                    by: "crates/neovm-core/src/emacs_core/lisp/native/builtins/file_notify/platform/windows.rs -- \
+                    by: "crates/neovm-core/src/emacs_core/lisp/native/builtins/file_notify/platform/windows -- \
                          w32notify-add-watch/-rm-watch/-valid-p over notify's explicit \
                          ReadDirectoryChangesW adapter, with GNU-compatible event shapes",
                 }
@@ -184,8 +184,8 @@ pub(crate) fn gnu_c_features() -> [GnuCFeature; 30] {
             gnu_site: "src/gfilenotify.c:335",
             gnu_guard: BuildOption("HAVE_GFILENOTIFY"),
             here: NotBuilt {
-                because: "file notification here is the `notify' crate, which is inotify \
-                          on GNU/Linux; GNU's gfilenotify is the GIO backend and a build \
+                because: "file notification here uses the native inotify/kqueue/\
+                          ReadDirectoryChangesW adapters; GNU's gfilenotify is the GIO backend and a build \
                           picks exactly one (`configure.ac' --with-file-notification)",
             },
         },
@@ -214,9 +214,9 @@ pub(crate) fn gnu_c_features() -> [GnuCFeature; 30] {
             gnu_guard: BuildOption("HAVE_INOTIFY"),
             here: if cfg!(target_os = "linux") {
                 Implemented {
-                    by: "crates/neovm-core/src/emacs_core/lisp/native/builtins/file_notify/platform/linux.rs -- \
-                         real watches through the `notify' crate, which is inotify on \
-                         GNU/Linux; inotify-add-watch/-rm-watch/-valid-p",
+                    by: "crates/neovm-core/src/emacs_core/lisp/native/builtins/file_notify/platform/linux -- \
+                         direct typed inotify masks through the `inotify' crate; \
+                         inotify-add-watch/-rm-watch/-valid-p",
                 }
             } else {
                 NotBuilt {

@@ -38,7 +38,7 @@ pub(super) fn requested_vnode_actions(
 #[cfg(target_os = "macos")]
 mod native {
     use super::super::super::{
-        FileNotifyBackend, FileNotifyEvent, FileWatch, WatchId, file_notify_error,
+        FileNotifyBackend, FileNotifyEvent, FileWatch, WatchId, WatchLifecycle, file_notify_error,
     };
     use super::*;
     use crate::emacs_core::error::Flow;
@@ -73,11 +73,20 @@ mod native {
         actions: Vec<KqueueAction>,
         path: PathBuf,
         file1: Option<PathBuf>,
+        terminal: bool,
     }
 
     impl FileNotifyEvent for KqueueEvent {
         fn watch_id(&self) -> &WatchId {
             &self.watch_id
+        }
+
+        fn lifecycle(&self) -> WatchLifecycle {
+            if self.terminal {
+                WatchLifecycle::Terminated
+            } else {
+                WatchLifecycle::Active
+            }
         }
 
         fn into_lisp(self) -> Value {
@@ -484,6 +493,7 @@ mod native {
                                 actions: vec![action],
                                 path,
                                 file1,
+                                terminal: false,
                             });
                         }
                     }
@@ -494,6 +504,7 @@ mod native {
                         actions: vec![KqueueAction::Delete],
                         path: watch.common.path.clone(),
                         file1: None,
+                        terminal: false,
                     });
                 }
             }
@@ -505,6 +516,11 @@ mod native {
                     actions,
                     path: watch.common.path.clone(),
                     file1: None,
+                    terminal: native_actions.intersects(
+                        KqueueVnodeAction::Delete
+                            | KqueueVnodeAction::Rename
+                            | KqueueVnodeAction::Revoke,
+                    ),
                 });
             }
             Ok(translated)
@@ -558,7 +574,6 @@ mod native {
                 common: FileWatch {
                     id: descriptor.clone(),
                     path: path.to_path_buf(),
-                    is_directory,
                     request,
                 },
                 directory,

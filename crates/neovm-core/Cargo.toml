@@ -92,6 +92,9 @@ cranelift-native = { workspace = true, optional = true }
 whoami = "2.1.2"
 windows-sys.workspace = true
 
+[target.'cfg(target_os = "linux")'.dependencies]
+inotify.workspace = true
+
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 notify.workspace = true
 
