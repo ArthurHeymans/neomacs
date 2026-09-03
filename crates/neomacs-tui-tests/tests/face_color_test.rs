@@ -104,6 +104,14 @@ fn index_org_has_face_colours() {
     // launch keeps this test focused on face rendering rather than Doom keymap
     // or completion-UI differences.
     let mut gnu = TuiSession::gnu_emacs_with_init_args(launch_args.clone());
+    // GNU makes its shared TTY input/output file description nonblocking
+    // (`src/keyboard.c:8256`).  Doom's initial full-screen repaint exceeds a
+    // Linux PTY's output queue, so leaving GNU undrained while Neomacs starts
+    // can make stdio lose the first byte of an escape sequence at the 4095-byte
+    // boundary.  Drain the oracle to quiescence before doing the second costly
+    // startup, just as a real terminal emulator continuously drains its child.
+    // The parsed screen is retained, so this changes no assertion or state.
+    gnu.read(Duration::from_secs(5));
     let mut neo = TuiSession::neomacs_with_init_args(launch_args);
     let has_index = |grid: &[String]| {
         grid.iter().any(|row| row.contains("index.org"))
