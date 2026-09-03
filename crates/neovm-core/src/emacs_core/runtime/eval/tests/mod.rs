@@ -24718,3 +24718,46 @@ fn forwarded_globals_keep_alias_and_buffer_local_semantics() {
         "OK (3 3 8)"
     );
 }
+
+/// `throw-on-input` is cached on the evaluator so the quit poll does not ask
+/// the obarray on every safe point.  A cache is only correct while it agrees
+/// with the cell it mirrors, so check it after each way Lisp can write the
+/// variable: `setq`, entering a `let`, leaving it, and `set`.
+#[test]
+fn cached_throw_on_input_tracks_every_write_path() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let agrees = |ev: &Context, where_: &str| {
+        let obarray = ev
+            .obarray()
+            .symbol_value("throw-on-input")
+            .copied()
+            .unwrap_or(Value::NIL);
+        assert!(
+            crate::emacs_core::value::eq_value(&ev.cached_throw_on_input_for_test(), &obarray),
+            "{where_}: cached {:?} != obarray {:?}",
+            ev.cached_throw_on_input_for_test(),
+            obarray
+        );
+    };
+    agrees(&ev, "fresh context");
+
+    ev.eval_str("(setq throw-on-input 'from-setq)")
+        .expect("setq");
+    agrees(&ev, "after setq");
+
+    // The value must be visible INSIDE the binding, and restored after it.
+    let inside = format_eval_result(&ev.eval_str(
+        "(let ((throw-on-input 'from-let)) (list throw-on-input (symbol-value 'throw-on-input)))",
+    ));
+    assert_eq!(inside, "OK (from-let from-let)");
+    agrees(&ev, "after the let unwound");
+    assert_eq!(
+        format_eval_result(&ev.eval_str("throw-on-input")),
+        "OK from-setq",
+        "the let restored the outer value"
+    );
+
+    ev.eval_str("(set 'throw-on-input nil)").expect("set");
+    agrees(&ev, "after set to nil");
+}

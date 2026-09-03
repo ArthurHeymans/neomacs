@@ -2560,6 +2560,12 @@ pub struct Context {
     kill_emacs_symbol: SymId,
     quit_flag: Value,
     inhibit_quit: Value,
+    /// `throw-on-input`'s value, cached beside the two flags it is polled
+    /// with.  GNU's `QUIT` reads C globals; reading this one out of the
+    /// obarray instead put a symbol lookup on every safe point, because the
+    /// poll's guard is true in any session that owns an input channel -- 8 M
+    /// lookups in a 20-keystroke rust-lsp run.
+    throw_on_input: Value,
     /// Nonzero while `unbind_to` is running unwind cleanup forms.
     ///
     /// GNU `unbind_to` clears `Vquit_flag` and then runs cleanup forms without
@@ -6294,6 +6300,8 @@ impl Context {
             .is_cons();
         let quit_flag = obarray.symbol_value_id_or_nil(core_eval_symbols.quit_flag_symbol);
         let inhibit_quit = obarray.symbol_value_id_or_nil(core_eval_symbols.inhibit_quit_symbol);
+        let throw_on_input =
+            obarray.symbol_value_id_or_nil(core_eval_symbols.throw_on_input_symbol);
 
         let mut ev = Self {
             tagged_heap,
@@ -6314,6 +6322,7 @@ impl Context {
             kill_emacs_symbol: core_eval_symbols.kill_emacs_symbol,
             quit_flag,
             inhibit_quit,
+            throw_on_input,
             unwind_cleanup_depth: 0,
             noninteractive_symbol: core_eval_symbols.noninteractive_symbol,
             noninteractive,
@@ -6497,6 +6506,8 @@ impl Context {
             .is_cons();
         let quit_flag = obarray.symbol_value_id_or_nil(core_eval_symbols.quit_flag_symbol);
         let inhibit_quit = obarray.symbol_value_id_or_nil(core_eval_symbols.inhibit_quit_symbol);
+        let throw_on_input =
+            obarray.symbol_value_id_or_nil(core_eval_symbols.throw_on_input_symbol);
 
         let mut ev = Self {
             tagged_heap,
@@ -6517,6 +6528,7 @@ impl Context {
             kill_emacs_symbol: core_eval_symbols.kill_emacs_symbol,
             quit_flag,
             inhibit_quit,
+            throw_on_input,
             unwind_cleanup_depth: 0,
             noninteractive_symbol: core_eval_symbols.noninteractive_symbol,
             noninteractive,
@@ -9673,11 +9685,7 @@ impl Context {
             && !self
                 .quit_requested
                 .load(std::sync::atomic::Ordering::Relaxed)
-            && (!self.has_throw_on_input_poll_source()
-                || self
-                    .obarray
-                    .symbol_value_id_or_nil(self.throw_on_input_symbol)
-                    .is_nil())
+            && (self.throw_on_input.is_nil() || !self.has_throw_on_input_poll_source())
     }
 
     #[inline(always)]
@@ -9699,11 +9707,7 @@ impl Context {
             && !self
                 .quit_requested
                 .load(std::sync::atomic::Ordering::Relaxed)
-            && (!self.has_throw_on_input_poll_source()
-                || self
-                    .obarray
-                    .symbol_value_id_or_nil(self.throw_on_input_symbol)
-                    .is_nil())
+            && (self.throw_on_input.is_nil() || !self.has_throw_on_input_poll_source())
         {
             return Ok(());
         }
@@ -10075,6 +10079,8 @@ impl Context {
             self.quit_flag = value;
         } else if sym_id == self.inhibit_quit_symbol {
             self.inhibit_quit = value;
+        } else if sym_id == self.throw_on_input_symbol {
+            self.throw_on_input = value;
         } else if sym_id == self.compiler_function_overrides_symbol {
             self.compiler_function_overrides_active = value.is_cons();
         } else if sym_id == self.noninteractive_symbol {
@@ -10088,6 +10094,13 @@ impl Context {
         {
             self.max_depth = depth.max(100) as usize;
         }
+    }
+
+    /// Test-only view of the cached `throw-on-input`, so a test can assert the
+    /// cache still agrees with the obarray after each write path.
+    #[cfg(test)]
+    pub(crate) fn cached_throw_on_input_for_test(&self) -> Value {
+        self.throw_on_input
     }
 
     /// Publish a completed runtime-variable write to every derived subsystem.
@@ -17489,6 +17502,13 @@ impl Context {
         // runtime value and invalidates retained redisplay state.
         let value = old_value.unwrap_or(Value::UNBOUND);
         super::data::set_default_internal_resolved(self, sym_id, value, bindflag)?;
+        // The evaluator caches a few of these cells in its own fields (the
+        // quit flags, `throw-on-input`, the eval-depth limit) so its hot
+        // paths do not consult the obarray. The plain-cell restore in
+        // `unbind_to_result` republishes them; this one restores a
+        // LOCALIZED/FORWARDED cell and must do the same, or a cache keeps a
+        // value the binding it mirrors has already given up.
+        self.sync_cached_runtime_binding_by_id(sym_id, old_value.unwrap_or(Value::NIL));
         Ok(())
     }
 
