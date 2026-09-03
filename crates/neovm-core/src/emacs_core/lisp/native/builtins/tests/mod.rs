@@ -13994,7 +13994,7 @@ fn inhibit_message_has_gnu_native_boolean_storage_semantics() {
 }
 
 #[test]
-fn message_respects_inhibit_message_and_clears_echo_area() {
+fn inhibited_message_preserves_the_current_echo_area_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
     // Interactive echo-area path (GNU populates `current-message` only when not
@@ -14007,7 +14007,11 @@ fn message_respects_inhibit_message_and_clears_echo_area() {
     eval.eval_str("(let ((inhibit-message t)) (message \"hidden\"))")
         .expect("message with inhibit-message should evaluate");
 
-    assert_eq!(eval.current_message_text(), None);
+    // GNU `message3' always logs first, but `clear_message (true, true)'
+    // refuses to clear the current echo-area slot while `inhibit-message' is
+    // non-nil, and `message3_nolog' is skipped.  Thus the hidden message is
+    // logged without replacing or erasing the message the user can see.
+    assert_eq!(eval.current_message_text(), Some("visible".to_string()));
 }
 
 #[test]

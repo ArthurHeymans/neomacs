@@ -295,7 +295,12 @@ impl super::eval::Context {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum EchoMessageSetResult {
+    /// `message3' logged the text, but `inhibit-message' prevented every
+    /// echo-area side effect.  The current message must remain untouched.
+    Inhibited,
     EchoArea(crate::heap_types::LispString),
+    /// `set-message-function' accepted responsibility for presenting the
+    /// message outside GNU's echo-area buffer.
     LispHandled,
 }
 
@@ -307,7 +312,7 @@ fn message_echo_result(
         .visible_variable_value_or_nil("inhibit-message")
         .is_truthy()
     {
-        return Ok(EchoMessageSetResult::LispHandled);
+        return Ok(EchoMessageSetResult::Inhibited);
     }
 
     let set_message_function = ctx.visible_variable_value_or_nil("set-message-function");
@@ -427,14 +432,13 @@ pub(crate) fn builtin_message(ctx: &mut super::eval::Context, args: Vec<Value>) 
         // `set-message-function`, then materialize the echo-area buffers and
         // store the message so `current-message` can read it back.
         let displayed_message = message_echo_result(ctx, &msg)?;
-        if matches!(displayed_message, EchoMessageSetResult::EchoArea(_)) {
-            ctx.ensure_echo_area_buffers();
-        }
         match &displayed_message {
             EchoMessageSetResult::EchoArea(displayed) => {
+                ctx.ensure_echo_area_buffers();
                 ctx.set_current_message(Some(displayed.clone()))
             }
             EchoMessageSetResult::LispHandled => ctx.discard_current_message_without_clear_hook(),
+            EchoMessageSetResult::Inhibited => {}
         }
         Ok(())
     })();

@@ -388,19 +388,32 @@ fn unbound_key_echoes_is_undefined() {
 /// second, spurious quit.
 #[test]
 fn single_keyboard_quit_echoes_quit_once_and_stays_responsive() {
-    let mut neo = boot_neo("");
+    let (mut gnu, mut neo) = boot_pair("");
 
     let start = std::time::Instant::now();
-    neo.send(b"\x07"); // a single C-g
+    send_both_raw(&mut gnu, &mut neo, b"\x07"); // a single C-g
 
     let quit_shown = |grid: &[String]| grid.iter().any(|row| row.contains("Quit"));
+    gnu.read_until(Duration::from_secs(6), quit_shown);
     neo.read_until(Duration::from_secs(6), quit_shown);
+    assert!(
+        quit_shown(&gnu.text_grid()),
+        "GNU Emacs should echo `Quit':\n{}",
+        gnu.text_grid().join("\n")
+    );
     assert!(
         quit_shown(&neo.text_grid()),
         "a single C-g should echo `Quit' (took {:?}):\n{}",
         start.elapsed(),
         neo.text_grid().join("\n")
     );
+
+    // GNU `command_loop_2' reports the uncaught quit, restarts
+    // `command_loop_1', and leaves that ordinary error message displayed while
+    // it waits for the next real input event.  Exercise the idle restart, not
+    // merely the instant at which the reporter first publishes the message.
+    read_both(&mut gnu, &mut neo, Duration::from_secs(5));
+    assert_pair_exact_display("idle screen after a single keyboard quit", &gnu, &neo);
 
     // Responsiveness probe: an eval round-trips, proving the command loop
     // was not wedged or left in a recurring-quit state by the single C-g.
