@@ -2119,6 +2119,33 @@ fn the_identity_fast_path_belongs_to_code_convert_string_only() {
     );
 }
 
+/// GNU's bracketed-paste reader (`lisp/term/xterm.el:xterm--pasted-text`)
+/// decodes its temporary unibyte buffer with a `t` destination.  That reaches
+/// `decode_coding_object`, whose string-result branch acquires the persistent
+/// reusable buffer through `code_conversion_save` (`src/coding.c:8134-8141`).
+/// The buffer and its initialized state remain Lisp-visible after conversion.
+#[test]
+fn decode_coding_region_string_destination_retains_gnu_workspace() {
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"(with-temp-buffer
+             (set-buffer-multibyte nil)
+             (insert (unibyte-string 195 169))
+             (let ((decoded
+                    (decode-coding-region (point-min) (point-max) 'utf-8 t)))
+               (list decoded
+                     (and (get-buffer " *code-conversion-work*") t)
+                     (and (get-buffer " *code-converting-work*") t)
+                     (with-current-buffer " *code-conversion-work*"
+                       (list (buffer-string)
+                             buffer-undo-list
+                             enable-multibyte-characters
+                             inhibit-modification-hooks
+                             (point))))))"#,
+    );
+
+    assert_eq!(result, "OK (\"é\" t nil (\"é\" t t t 1))");
+}
+
 /// DIVERGENCES.md entry 139: `utf-16` and `utf-8-auto` pick a concrete BASE
 /// coding system from the byte-order mark.
 ///

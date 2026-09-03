@@ -8696,10 +8696,10 @@ fn other_buffer_visible_preference_elisp_functions_match_gnu_semantics() {
 fn buffer_list_startup_elisp_functions_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 
-    let expr = r#"(message "buflist:%S" (let ((names (mapcar (function buffer-name) (buffer-list)))) (list (member " *code-converting-work*" names) names)))"#;
+    let expr = r#"(message "buflist:%S" (let ((names (mapcar (function buffer-name) (buffer-list)))) (list (and (member " *code-conversion-work*" names) t) (member " *code-converting-work*" names) names)))"#;
     support::eval_expression(&mut gnu, &mut neo, expr);
 
-    let expected = r#"buflist:(nil (\"*scratch*\" \" *Minibuf-1*\" \" *Minibuf-0*\" \"*Messages*\" \" *Echo Area 0*\" \" *Echo Area 1*\"))"#;
+    let expected = r#"buflist:(t nil (\"*scratch*\" \" *Minibuf-1*\" \" *Minibuf-0*\" \"*Messages*\" \" *Echo Area 0*\" \" *Echo Area 1*\" \" *code-conversion-work*\"))"#;
     let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
     gnu.read_until(Duration::from_secs(6), ready);
     neo.read_until(Duration::from_secs(8), ready);

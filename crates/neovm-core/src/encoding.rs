@@ -5455,7 +5455,39 @@ fn builtin_coding_region(
         .buffer_substring_lisp_string_range(byte_range);
     let start_byte = byte_range.start().get();
     let end_byte = byte_range.end().get();
-    let result = transformed_region_string_in_context(ctx, source, &coding, direction)?;
+    // GNU's decode-coding-region DESTINATION=t branch passes Qt through to
+    // `decode_coding_object`.  That is a request for the reusable conversion
+    // buffer, unlike nil/in-place and BUFFER destinations.  Acquire before the
+    // decoder runs so recursive Lisp conversion hooks receive a nested
+    // temporary rather than clobbering the outer conversion's storage.
+    let workspace_lease = if direction == CodingDirection::Decode && destination.is_none() {
+        let encoding = ctx
+            .coding_systems
+            .conversion_buffer_encoding(intern(&coding));
+        Some(ctx.acquire_code_conversion_buffer(encoding)?)
+    } else {
+        None
+    };
+    let conversion = transformed_region_string_in_context(ctx, source, &coding, direction);
+    let result = match conversion {
+        Ok(result) => {
+            if let Some(lease) = workspace_lease.as_ref()
+                && let Some(text) = result.as_lisp_string()
+            {
+                ctx.set_code_conversion_buffer_contents(lease, text);
+            }
+            if let Some(lease) = workspace_lease {
+                ctx.release_code_conversion_buffer(lease);
+            }
+            result
+        }
+        Err(flow) => {
+            if let Some(lease) = workspace_lease {
+                ctx.release_code_conversion_buffer(lease);
+            }
+            return Err(flow);
+        }
+    };
     let result_text = result
         .as_lisp_string()
         .ok_or_else(|| {

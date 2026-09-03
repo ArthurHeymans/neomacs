@@ -1,4 +1,5 @@
 pub mod buffer;
+mod code_conversion_workspace;
 pub mod display_evaluation;
 pub mod emacs_core;
 pub mod encoding;

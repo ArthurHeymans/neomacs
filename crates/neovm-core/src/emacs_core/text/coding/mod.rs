@@ -1366,6 +1366,24 @@ impl CodingSystemManager {
     pub(crate) fn keyboard_coding_sym(&self) -> SymId {
         self.keyboard_coding
     }
+
+    /// GNU's `CODING_FOR_UNIBYTE` decision for a conversion destination.
+    /// Keep this lookup on the registry so aliases and Lisp-defined coding
+    /// systems cannot be reclassified by string matching at call sites.
+    pub(crate) fn conversion_buffer_encoding(
+        &self,
+        coding_system: SymId,
+    ) -> crate::code_conversion_workspace::ConversionBufferEncoding {
+        let for_unibyte = self
+            .resolve(resolve_sym(coding_system))
+            .and_then(|canonical| self.systems.get(&canonical))
+            .is_some_and(|info| info.for_unibyte);
+        if for_unibyte {
+            crate::code_conversion_workspace::ConversionBufferEncoding::Unibyte
+        } else {
+            crate::code_conversion_workspace::ConversionBufferEncoding::Multibyte
+        }
+    }
     pub(crate) fn terminal_coding_sym(&self) -> SymId {
         self.terminal_coding
     }

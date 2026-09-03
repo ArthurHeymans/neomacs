@@ -2811,6 +2811,10 @@ pub struct Context {
     pub(crate) pending_menu_bar_popup_anchor: Option<super::MenuBarPopupAnchor>,
     /// Coding system manager — encoding/decoding registry.
     pub(crate) coding_systems: CodingSystemManager,
+    /// Reusable scratch-buffer lifecycle shared by code-conversion entry
+    /// points. This is transient runtime state, like GNU's
+    /// `Vcode_conversion_reused_workbuf` and `reused_workbuf_in_use`.
+    pub(crate) code_conversion_workspace: crate::code_conversion_workspace::CodeConversionWorkspace,
     /// Face table — global registry of named face definitions.
     pub(crate) face_table: FaceTable,
     /// Incremented when any face attribute changes; layout engine uses
@@ -6376,6 +6380,8 @@ impl Context {
             visual_config: neomacs_display_protocol::VisualConfig::default(),
             pending_menu_bar_popup_anchor: None,
             coding_systems: CodingSystemManager::new(),
+            code_conversion_workspace:
+                crate::code_conversion_workspace::CodeConversionWorkspace::default(),
             face_table: FaceTable::new(),
             face_change_count: 0,
             materialized_face_table_source: None,
@@ -6577,6 +6583,8 @@ impl Context {
             visual_config: neomacs_display_protocol::VisualConfig::default(),
             pending_menu_bar_popup_anchor: None,
             coding_systems,
+            code_conversion_workspace:
+                crate::code_conversion_workspace::CodeConversionWorkspace::default(),
             face_table,
             face_change_count: 0,
             materialized_face_table_source: None,
