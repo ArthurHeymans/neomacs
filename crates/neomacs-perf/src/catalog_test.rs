@@ -7,7 +7,7 @@ use super::{CrossEditorParityMetric, Frontend, MetricName, ScenarioId, scenario,
 #[test]
 fn catalog_exposes_the_rust_lsp_typing_workload_as_a_typed_scenario() {
     let scenarios = scenarios();
-    assert_eq!(scenarios.len(), 12);
+    assert_eq!(scenarios.len(), 13);
 
     let rust_lsp = scenario(ScenarioId::RustLspTyping);
     assert_eq!(rust_lsp.id, ScenarioId::RustLspTyping);
@@ -30,6 +30,32 @@ fn catalog_exposes_the_rust_lsp_typing_workload_as_a_typed_scenario() {
         NonZeroU32::new(100).expect("non-zero default")
     );
     assert_eq!(rust_lsp.primary_metric, MetricName::PerEditCpuTime);
+}
+
+#[test]
+fn catalog_exposes_sustained_native_video_on_a_real_gui() {
+    let video = scenario(ScenarioId::SustainedNativeVideo);
+
+    assert_eq!(video.id.to_string(), "sustained-native-video");
+    assert_eq!(
+        ScenarioId::from_str("sustained-native-video"),
+        Ok(ScenarioId::SustainedNativeVideo)
+    );
+    assert_eq!(
+        video.default_frontend,
+        Frontend::Gui {
+            width: 1920,
+            height: 1080,
+        }
+    );
+    assert_eq!(
+        video.default_iterations,
+        NonZeroU32::new(300).expect("30 seconds at one 100 ms sample tick")
+    );
+    assert_eq!(
+        video.primary_metric,
+        MetricName::P99VideoPresentationInterval
+    );
 }
 
 #[test]

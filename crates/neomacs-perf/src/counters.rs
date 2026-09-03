@@ -8,7 +8,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use crate::profile_gate::ProfileGate;
-use crate::{ArtifactFile, ArtifactKind, Frontend, Measurement, MetricName, MetricUnit};
+use crate::{ArtifactFile, ArtifactKind, CaptureRoute, Measurement, MetricName, MetricUnit};
 
 const STANDARD_EVENTS: &[&str] = &[
     "cycles:u",
@@ -120,7 +120,7 @@ impl PerfStatCapture {
     pub(crate) fn wrap(
         &mut self,
         mut command: Command,
-        frontend: Frontend,
+        route: CaptureRoute,
     ) -> Result<Command, String> {
         if !cfg!(target_os = "linux") {
             return Err("hardware counter collection requires Linux perf".to_string());
@@ -133,12 +133,7 @@ impl PerfStatCapture {
                 self.timeout,
             )?);
         }
-        let adapter_prefix = match frontend {
-            Frontend::Batch => None,
-            Frontend::Tui { .. } => Some("PTY"),
-            Frontend::Gui { .. } => Some("GUI"),
-        };
-        if let Some(prefix) = adapter_prefix {
+        if let CaptureRoute::Adapter(prefix) = route {
             command.env(format!("{prefix}_PERF_STAT"), &self.output);
             command.env(format!("{prefix}_PERF_EVENTS"), STANDARD_EVENTS.join(","));
             self.configure_gate_environment(&mut command, Some(prefix));

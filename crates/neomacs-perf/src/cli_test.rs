@@ -49,6 +49,7 @@ fn run_command_parses_into_a_typed_workload_request() {
                 required_governor: Some("performance".to_string()),
             },
             counters: Some(CounterScope::WholeProcess),
+            video_file: None,
         }
     );
 }
@@ -74,6 +75,33 @@ fn workload_defaults_come_from_the_typed_scenario_spec() {
     assert_eq!(scenario, ScenarioId::MxTabCompletion);
     assert_eq!(iterations, NonZeroU32::new(5).expect("non-zero literal"));
     assert_eq!(frontend, None);
+}
+
+#[test]
+fn sustained_native_video_parses_its_required_input_asset() {
+    let PerfCommand::Run {
+        scenario,
+        iterations,
+        frontend,
+        video_file,
+        ..
+    } = parse(&[
+        "run",
+        "sustained-native-video",
+        "--video-file",
+        "target/perf-inputs/4k60.mp4",
+    ])
+    .expect("parse native-video workload")
+    else {
+        panic!("run command must remain typed")
+    };
+    assert_eq!(scenario, ScenarioId::SustainedNativeVideo);
+    assert_eq!(iterations, NonZeroU32::new(300).expect("non-zero literal"));
+    assert_eq!(frontend, None);
+    assert_eq!(
+        video_file,
+        Some(PathBuf::from("target/perf-inputs/4k60.mp4"))
+    );
 }
 
 #[test]
@@ -109,6 +137,7 @@ fn compare_command_requires_two_editors_and_parses_repetition_controls() {
             timeout: Duration::from_secs(180),
             machine: MachinePolicy::default(),
             counters: None,
+            video_file: None,
         }
     );
 }
@@ -176,6 +205,7 @@ fn profile_command_selects_native_sampling_without_becoming_a_comparison() {
             }),
             timeout: Duration::from_secs(180),
             machine: MachinePolicy::default(),
+            video_file: None,
         }
     );
 

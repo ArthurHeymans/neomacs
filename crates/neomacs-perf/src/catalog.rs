@@ -43,6 +43,7 @@ pub enum ScenarioId {
     LargeFileEditing,
     Indentation,
     RegexSearch,
+    SustainedNativeVideo,
 }
 
 impl ScenarioId {
@@ -60,6 +61,7 @@ impl ScenarioId {
             Self::LargeFileEditing => "large-file-editing",
             Self::Indentation => "indentation",
             Self::RegexSearch => "regex-search",
+            Self::SustainedNativeVideo => "sustained-native-video",
         }
     }
 }
@@ -98,6 +100,7 @@ impl FromStr for ScenarioId {
             "large-file-editing" => Ok(Self::LargeFileEditing),
             "indentation" => Ok(Self::Indentation),
             "regex-search" => Ok(Self::RegexSearch),
+            "sustained-native-video" => Ok(Self::SustainedNativeVideo),
             unknown => Err(UnknownScenarioId(unknown.to_string())),
         }
     }
@@ -232,6 +235,19 @@ const SCENARIOS: &[ScenarioSpec] = &[
         primary_metric: MetricName::PerOperationWallTime,
         cross_editor_parity_metrics: &[],
     },
+    ScenarioSpec {
+        id: ScenarioId::SustainedNativeVideo,
+        description: "Sustained native video decode, zero-copy import, GPU composition, pacing, and pool reuse on the caller's physical Linux display",
+        default_frontend: Frontend::Gui {
+            width: 1920,
+            height: 1080,
+        },
+        // One operation is a 100 ms observation tick: 300 gives a 30 second
+        // measurement window after decoder and renderer warmup.
+        default_iterations: NonZeroU32::new(300).expect("non-zero scenario default"),
+        primary_metric: MetricName::P99VideoPresentationInterval,
+        cross_editor_parity_metrics: &[],
+    },
 ];
 
 pub fn scenarios() -> &'static [ScenarioSpec] {
@@ -257,5 +273,6 @@ pub const fn scenario(id: ScenarioId) -> &'static ScenarioSpec {
         ScenarioId::LargeFileEditing => &SCENARIOS[9],
         ScenarioId::Indentation => &SCENARIOS[10],
         ScenarioId::RegexSearch => &SCENARIOS[11],
+        ScenarioId::SustainedNativeVideo => &SCENARIOS[12],
     }
 }

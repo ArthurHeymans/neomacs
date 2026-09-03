@@ -88,6 +88,24 @@ pub enum MetricName {
     P50InputToRedisplayLatency,
     P95InputToRedisplayLatency,
     P99InputToRedisplayLatency,
+    VideoPresentationFramesPerSecond,
+    VideoDecodeFramesPerSecond,
+    P50VideoPresentationInterval,
+    P95VideoPresentationInterval,
+    P99VideoPresentationInterval,
+    MaxVideoPresentationInterval,
+    AverageVideoGpuPassTime,
+    VideoDecodedFrames,
+    VideoPresentedFrames,
+    VideoReplacedFrames,
+    VideoLateDroppedFrames,
+    VideoBackpressuredFrames,
+    VideoGpuPassSamples,
+    VideoGpuMemoryBytes,
+    VideoSurfacePoolAllocations,
+    VideoSurfacePoolReuses,
+    VideoSurfacePoolBackpressuredAcquires,
+    VideoSurfacePoolInFlightHighWater,
 }
 
 impl MetricName {
@@ -112,12 +130,20 @@ impl MetricName {
             | Self::MotionPhaseCpuTime
             | Self::P50InputToRedisplayLatency
             | Self::P95InputToRedisplayLatency
-            | Self::P99InputToRedisplayLatency => MetricUnit::Microseconds,
+            | Self::P99InputToRedisplayLatency
+            | Self::P50VideoPresentationInterval
+            | Self::P95VideoPresentationInterval
+            | Self::P99VideoPresentationInterval
+            | Self::MaxVideoPresentationInterval => MetricUnit::Microseconds,
             Self::PerEditCpuTime | Self::PerEditWallTime => MetricUnit::MicrosecondsPerEdit,
             Self::PerCompletionCpuTime => MetricUnit::MicrosecondsPerCompletion,
             Self::PerBytecodeCallCpuTime => MetricUnit::MicrosecondsPerBytecodeCall,
             Self::PerOperationCpuTime | Self::PerOperationWallTime => {
                 MetricUnit::MicrosecondsPerOperation
+            }
+            Self::AverageVideoGpuPassTime => MetricUnit::MicrosecondsPerFrame,
+            Self::VideoPresentationFramesPerSecond | Self::VideoDecodeFramesPerSecond => {
+                MetricUnit::FramesPerSecond
             }
             Self::Iterations
             | Self::Edits
@@ -134,7 +160,18 @@ impl MetricName {
             | Self::CacheMisses
             | Self::L1DataCacheLoadMisses
             | Self::DataTlbLoadMisses => MetricUnit::Count,
-            Self::OperationCount => MetricUnit::Count,
+            Self::OperationCount
+            | Self::VideoDecodedFrames
+            | Self::VideoPresentedFrames
+            | Self::VideoReplacedFrames
+            | Self::VideoLateDroppedFrames
+            | Self::VideoBackpressuredFrames
+            | Self::VideoGpuPassSamples
+            | Self::VideoSurfacePoolAllocations
+            | Self::VideoSurfacePoolReuses
+            | Self::VideoSurfacePoolBackpressuredAcquires
+            | Self::VideoSurfacePoolInFlightHighWater => MetricUnit::Count,
+            Self::VideoGpuMemoryBytes => MetricUnit::Bytes,
         }
     }
 }
@@ -147,6 +184,9 @@ pub enum MetricUnit {
     MicrosecondsPerCompletion,
     MicrosecondsPerBytecodeCall,
     MicrosecondsPerOperation,
+    MicrosecondsPerFrame,
+    FramesPerSecond,
+    Bytes,
     Count,
 }
 

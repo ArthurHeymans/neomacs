@@ -532,6 +532,142 @@ fn sustained_editing_reports_insert_and_delete_as_two_edits() {
 }
 
 #[test]
+fn sustained_native_video_promotes_pacing_gpu_pool_and_memory_metrics() {
+    let workspace_root = PathBuf::from(env!("CARGO_WORKSPACE_DIR"));
+    let workspace_tmp = workspace_root.join("tmp");
+    fs::create_dir_all(&workspace_tmp).expect("create workspace-local test scratch root");
+    let scratch = tempfile::Builder::new()
+        .prefix("neomacs-perf-native-video-test-")
+        .tempdir_in(&workspace_tmp)
+        .expect("create workspace-local test directory");
+    let request = RunRequest::new(
+        ScenarioId::SustainedNativeVideo,
+        "/unused/editor",
+        NonZeroU32::new(300).expect("non-zero literal"),
+    );
+    let raw_result = r#"{
+      "schema_version": 1,
+      "scenario": "sustained-native-video",
+      "status": "ok",
+      "iterations": 300,
+      "elapsed_cpu_us": 6000000,
+      "elapsed_wall_us": 30000000,
+      "backend": "gstreamer",
+      "frame_format": "nv12",
+      "compositor_import": "borrowed-native-surface",
+      "presentation": "wgpu-composited",
+      "decoded_frames": 1800,
+      "replaced_frames": 1,
+      "late_dropped_frames": 2,
+      "imported_frames": 1797,
+      "backpressured_frames": 3,
+      "borrowed_native_frames": 1797,
+      "gpu_blit_frames": 0,
+      "cpu_upload_frames": 0,
+      "submitted_frames": 1797,
+      "presented_frames": 1795,
+      "interval_samples": 1794,
+      "interval_p50_us": 16667,
+      "interval_p95_us": 17000,
+      "interval_p99_us": 18500,
+      "interval_max_us": 22000,
+      "gpu_timing_status": "enabled",
+      "gpu_pass_samples": 1790,
+      "gpu_pass_total_us": 895000,
+      "gpu_pass_min_us": 350,
+      "gpu_pass_max_us": 900,
+      "gpu_memory_bytes": 24883200,
+      "pool_capacity": 64,
+      "pool_allocations": 0,
+      "pool_reuses": 1793,
+      "pool_backpressured_acquires": 0,
+      "pool_in_flight_high_water": 3,
+      "error": null
+    }"#;
+
+    let report = PerfHarness::new(scratch.path())
+        .record_fixture_result(&request, raw_result)
+        .expect("persist valid native-video result");
+    let measurements = report
+        .artifact
+        .verdict
+        .measurements()
+        .expect("valid native-video measurements");
+    let metric = |name| {
+        measurements
+            .iter()
+            .find(|measurement| measurement.name == name)
+            .expect("promoted typed metric")
+            .value
+    };
+    assert_eq!(
+        metric(MetricName::VideoPresentationFramesPerSecond),
+        1795.0 / 30.0
+    );
+    assert_eq!(metric(MetricName::P99VideoPresentationInterval), 18_500.0);
+    assert_eq!(metric(MetricName::AverageVideoGpuPassTime), 500.0);
+    assert_eq!(metric(MetricName::VideoSurfacePoolReuses), 1793.0);
+    assert_eq!(metric(MetricName::VideoGpuMemoryBytes), 24_883_200.0);
+}
+
+#[test]
+fn sustained_native_video_owns_acknowledged_sampling_boundaries() {
+    let fixture = fs::read_to_string(
+        PathBuf::from(env!("CARGO_WORKSPACE_DIR"))
+            .join("crates/neomacs-perf/fixtures/sustained-native-video.el"),
+    )
+    .expect("read committed native-video fixture");
+    assert!(fixture.contains("(neomacs-perf-native-video--sampling-command \"enable\")"));
+    assert!(fixture.contains("(neomacs-perf-native-video--sampling-command \"disable\")"));
+    assert!(fixture.contains("NEOMACS_PERF_GATE_PORT"));
+}
+
+#[test]
+fn sustained_native_video_rejects_a_cpu_upload_fallback() {
+    let workspace_root = PathBuf::from(env!("CARGO_WORKSPACE_DIR"));
+    let workspace_tmp = workspace_root.join("tmp");
+    fs::create_dir_all(&workspace_tmp).expect("create workspace-local test scratch root");
+    let scratch = tempfile::Builder::new()
+        .prefix("neomacs-perf-native-video-fallback-test-")
+        .tempdir_in(&workspace_tmp)
+        .expect("create workspace-local test directory");
+    let request = RunRequest::new(
+        ScenarioId::SustainedNativeVideo,
+        "/unused/editor",
+        NonZeroU32::new(1).expect("non-zero literal"),
+    );
+    let raw_result = r#"{
+      "schema_version": 1, "scenario": "sustained-native-video", "status": "ok",
+      "iterations": 1, "elapsed_cpu_us": 1, "elapsed_wall_us": 100000,
+      "backend": "gstreamer", "frame_format": "rgba8",
+      "compositor_import": "cpu-upload", "presentation": "wgpu-composited",
+      "decoded_frames": 2, "replaced_frames": 0, "late_dropped_frames": 0,
+      "imported_frames": 1, "backpressured_frames": 0,
+      "borrowed_native_frames": 0, "gpu_blit_frames": 0, "cpu_upload_frames": 1,
+      "submitted_frames": 1, "presented_frames": 1, "interval_samples": 1,
+      "interval_p50_us": 16667, "interval_p95_us": 16667,
+      "interval_p99_us": 16667, "interval_max_us": 16667,
+      "gpu_timing_status": "enabled", "gpu_pass_samples": 1,
+      "gpu_pass_total_us": 500, "gpu_pass_min_us": 500, "gpu_pass_max_us": 500,
+      "gpu_memory_bytes": 1, "pool_capacity": 1, "pool_allocations": 1,
+      "pool_reuses": 0, "pool_backpressured_acquires": 0,
+      "pool_in_flight_high_water": 1, "error": null
+    }"#;
+
+    let report = PerfHarness::new(scratch.path())
+        .record_fixture_result(&request, raw_result)
+        .expect("persist rejected native-video result");
+    let RunVerdict::CorrectnessMismatch { mismatches } = report.artifact.verdict else {
+        panic!("CPU upload fallback must reject a native-video sample")
+    };
+    assert!(mismatches.iter().any(|mismatch| {
+        mismatch.invariant == "compositor-import"
+            && mismatch.expected == "borrowed-native-surface"
+            && mismatch.actual == "cpu-upload"
+    }));
+}
+
+#[test]
 fn run_persists_a_missing_editor_as_an_infrastructure_failure() {
     let workspace_tmp = PathBuf::from(env!("CARGO_WORKSPACE_DIR")).join("tmp");
     fs::create_dir_all(&workspace_tmp).expect("create workspace-local test scratch root");

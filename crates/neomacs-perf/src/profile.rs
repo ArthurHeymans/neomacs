@@ -34,6 +34,7 @@ pub struct ProfileRequest {
     pub(crate) frontend: Option<Frontend>,
     pub(crate) timeout: Duration,
     pub(crate) machine: MachinePolicy,
+    pub(crate) video_file: Option<PathBuf>,
 }
 
 impl ProfileRequest {
@@ -52,6 +53,7 @@ impl ProfileRequest {
             frontend: None,
             timeout: Duration::from_secs(300),
             machine: MachinePolicy::default(),
+            video_file: None,
         }
     }
 
@@ -72,6 +74,11 @@ impl ProfileRequest {
 
     pub fn with_machine_policy(mut self, machine: MachinePolicy) -> Self {
         self.machine = machine;
+        self
+    }
+
+    pub fn with_video_file(mut self, video_file: Option<PathBuf>) -> Self {
+        self.video_file = video_file;
         self
     }
 
@@ -238,6 +245,7 @@ pub struct ProfileArtifact {
     pub scenario: ScenarioId,
     pub frontend: Frontend,
     pub editor: PathBuf,
+    pub video_file: Option<PathBuf>,
     pub iterations: NonZeroU32,
     pub profiler: NativeProfiler,
     pub scope: ProfileScope,
@@ -247,7 +255,7 @@ pub struct ProfileArtifact {
 }
 
 impl ProfileArtifact {
-    pub const SCHEMA_VERSION: u32 = 2;
+    pub const SCHEMA_VERSION: u32 = 3;
 }
 
 #[derive(Clone, Debug, PartialEq)]

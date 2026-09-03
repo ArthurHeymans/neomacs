@@ -78,6 +78,7 @@ fn input() -> ComparisonInput {
         candidate_editor: editor(ComparisonRunRole::Candidate),
         machine: crate::MachinePolicy::default(),
         counters: None,
+        video_file: None,
     }
 }
 

@@ -8,8 +8,8 @@ use std::thread;
 use std::time::Duration;
 
 use super::{
-    Frontend, NativeProfiler, PerfCallGraph, PerfCapture, PerfCaptureConfiguration, PerfHarness,
-    PerfSamplingEvent, ProfileArtifact, ProfileGate, ProfileRejection, ProfileRequest,
+    CaptureRoute, Frontend, NativeProfiler, PerfCallGraph, PerfCapture, PerfCaptureConfiguration,
+    PerfHarness, PerfSamplingEvent, ProfileArtifact, ProfileGate, ProfileRejection, ProfileRequest,
     ProfileScope, ProfileVerdict, RunArtifact, RunReport, RunVerdict, ScenarioId,
     perf_data_sample_count, profile_verdict,
 };
@@ -25,6 +25,7 @@ fn captured_profile_artifact_links_raw_data_report_and_scenario_run_without_timi
             columns: 120,
         },
         editor: PathBuf::from("target/profiling/neomacs"),
+        video_file: None,
         iterations: NonZeroU32::new(40).expect("non-zero literal"),
         profiler: NativeProfiler::Perf,
         scope: ProfileScope::EditLoop,
@@ -48,7 +49,7 @@ fn captured_profile_artifact_links_raw_data_report_and_scenario_run_without_timi
         serde_json::from_str(&json).expect("deserialize profile artifact");
 
     assert_eq!(decoded, artifact);
-    assert_eq!(decoded.schema_version, 2);
+    assert_eq!(decoded.schema_version, 3);
     assert!(json.contains(r##""event": "user-cpu-clock""##));
     assert!(json.contains(r##""scope": "edit-loop""##));
     assert!(json.contains(r##""perf_data_path": "perf.data""##));
@@ -421,7 +422,7 @@ fn batch_capture_distinguishes_edit_loop_from_whole_process_scope() {
         Duration::from_secs(2),
     );
     let edit_command = edit_loop
-        .wrap(Command::new("neomacs"), Frontend::Batch)
+        .wrap(Command::new("neomacs"), CaptureRoute::Direct)
         .expect("wrap edit-loop batch command");
     let edit_arguments = edit_command
         .get_args()
@@ -452,7 +453,7 @@ fn batch_capture_distinguishes_edit_loop_from_whole_process_scope() {
         Duration::from_secs(2),
     );
     let whole_command = whole_process
-        .wrap(Command::new("neomacs"), Frontend::Batch)
+        .wrap(Command::new("neomacs"), CaptureRoute::Direct)
         .expect("wrap whole-process batch command");
     let whole_arguments = whole_command
         .get_args()
@@ -490,10 +491,7 @@ fn gui_capture_profiles_only_the_app_via_the_frontend_hook() {
     let command = capture
         .wrap(
             Command::new("tools/bench/gui-run.sh"),
-            Frontend::Gui {
-                width: 1200,
-                height: 800,
-            },
+            CaptureRoute::Adapter("GUI"),
         )
         .expect("wrap GUI command");
 
@@ -534,13 +532,7 @@ fn tui_capture_profiles_only_the_app_inside_the_private_pty() {
         Duration::from_secs(2),
     );
     let command = capture
-        .wrap(
-            Command::new("python3"),
-            Frontend::Tui {
-                rows: 40,
-                columns: 120,
-            },
-        )
+        .wrap(Command::new("python3"), CaptureRoute::Adapter("PTY"))
         .expect("wrap TUI command");
 
     assert_eq!(command.get_program(), "python3");

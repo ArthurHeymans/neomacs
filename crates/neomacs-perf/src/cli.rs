@@ -27,6 +27,7 @@ pub enum PerfCommand {
         timeout: Duration,
         machine: MachinePolicy,
         counters: Option<CounterScope>,
+        video_file: Option<PathBuf>,
     },
     Compare {
         scenario: ScenarioId,
@@ -38,6 +39,7 @@ pub enum PerfCommand {
         timeout: Duration,
         machine: MachinePolicy,
         counters: Option<CounterScope>,
+        video_file: Option<PathBuf>,
     },
     Profile {
         scenario: ScenarioId,
@@ -48,6 +50,7 @@ pub enum PerfCommand {
         frontend: Option<Frontend>,
         timeout: Duration,
         machine: MachinePolicy,
+        video_file: Option<PathBuf>,
     },
     Suite {
         suite: SuiteId,
@@ -184,13 +187,22 @@ struct WorkloadArgs {
     /// Reject the run unless the selected CPU uses this scaling governor.
     #[arg(long)]
     require_governor: Option<String>,
+    /// Video input for the sustained-native-video scenario.
+    #[arg(long)]
+    video_file: Option<PathBuf>,
 }
 
 impl WorkloadArgs {
     fn into_semantic(
         self,
         scenario_id: ScenarioId,
-    ) -> (NonZeroU32, Option<Frontend>, Duration, MachinePolicy) {
+    ) -> (
+        NonZeroU32,
+        Option<Frontend>,
+        Duration,
+        MachinePolicy,
+        Option<PathBuf>,
+    ) {
         let default_iterations = crate::scenario(scenario_id).default_iterations;
         (
             self.iterations.unwrap_or(default_iterations),
@@ -200,6 +212,7 @@ impl WorkloadArgs {
                 cpu: self.cpu,
                 required_governor: self.require_governor,
             },
+            self.video_file,
         )
     }
 }
@@ -330,7 +343,7 @@ impl From<PerfSubcommand> for PerfCommand {
             PerfSubcommand::List => Self::List,
             PerfSubcommand::Run(arguments) => {
                 let counters = arguments.counters.scope();
-                let (iterations, frontend, timeout, machine) =
+                let (iterations, frontend, timeout, machine, video_file) =
                     arguments.workload.into_semantic(arguments.scenario);
                 Self::Run {
                     scenario: arguments.scenario,
@@ -340,11 +353,12 @@ impl From<PerfSubcommand> for PerfCommand {
                     timeout,
                     machine,
                     counters,
+                    video_file,
                 }
             }
             PerfSubcommand::Compare(arguments) => {
                 let counters = arguments.counters.scope();
-                let (iterations, frontend, timeout, machine) =
+                let (iterations, frontend, timeout, machine, video_file) =
                     arguments.workload.into_semantic(arguments.scenario);
                 Self::Compare {
                     scenario: arguments.scenario,
@@ -356,10 +370,11 @@ impl From<PerfSubcommand> for PerfCommand {
                     timeout,
                     machine,
                     counters,
+                    video_file,
                 }
             }
             PerfSubcommand::Profile(arguments) => {
-                let (iterations, frontend, timeout, machine) =
+                let (iterations, frontend, timeout, machine, video_file) =
                     arguments.workload.into_semantic(arguments.scenario);
                 Self::Profile {
                     scenario: arguments.scenario,
@@ -370,6 +385,7 @@ impl From<PerfSubcommand> for PerfCommand {
                     frontend,
                     timeout,
                     machine,
+                    video_file,
                 }
             }
             PerfSubcommand::Suite(arguments) => Self::Suite {
@@ -413,12 +429,14 @@ pub fn run_cli(
             timeout,
             machine,
             counters,
+            video_file,
         } => {
             let editor = editor.unwrap_or_else(|| workspace_root.join("target/release/neomacs"));
             let mut request = RunRequest::new(scenario, editor, iterations)
                 .with_timeout(timeout)
                 .with_machine_policy(machine)
-                .with_counters(counters);
+                .with_counters(counters)
+                .with_video_file(video_file);
             if let Some(frontend) = frontend {
                 request = request.with_frontend(frontend);
             }
@@ -444,6 +462,7 @@ pub fn run_cli(
             timeout,
             machine,
             counters,
+            video_file,
         } => {
             let mut request = ComparisonRequest::new(
                 scenario,
@@ -454,7 +473,8 @@ pub fn run_cli(
             )
             .with_timeout(timeout)
             .with_machine_policy(machine)
-            .with_counters(counters);
+            .with_counters(counters)
+            .with_video_file(video_file);
             if let Some(frontend) = frontend {
                 request = request.with_frontend(frontend);
             }
@@ -493,12 +513,14 @@ pub fn run_cli(
             frontend,
             timeout,
             machine,
+            video_file,
         } => {
             let editor = editor.unwrap_or_else(|| workspace_root.join("target/profiling/neomacs"));
             let mut request = ProfileRequest::new(scenario, editor, iterations, profiler)
                 .with_scope(scope)
                 .with_timeout(timeout)
-                .with_machine_policy(machine);
+                .with_machine_policy(machine)
+                .with_video_file(video_file);
             if let Some(frontend) = frontend {
                 request = request.with_frontend(frontend);
             }

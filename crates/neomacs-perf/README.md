@@ -21,6 +21,8 @@ cargo xtask perf run magit-status
 cargo xtask perf run large-file-editing
 cargo xtask perf run indentation
 cargo xtask perf run regex-search
+cargo xtask perf run sustained-native-video \
+  --video-file target/perf-inputs/4k60.mp4
 cargo xtask perf run rust-lsp-typing --iterations 20 --frontend tui
 cargo xtask perf run editing-simulation --cpu 3 \
   --require-governor performance --hardware-counters
@@ -85,6 +87,26 @@ headless Weston session to X11-only GNU Emacs builds through Xwayland. The
 `mx-tab-completion` fixture installs 1,024 identically named no-op commands
 before measurement, then performs a real `M-x`, TAB, completion-window,
 selection, and minibuffer-exit lifecycle over that controlled namespace.
+
+The Linux-only `sustained-native-video` scenario is different from the
+portable GUI workloads: it uses the caller's real Wayland or X11 session so
+the selected physical GPU, native decoder, compositor import, and display
+cadence remain part of the measurement. Supply a locally retained 3840x2160,
+60 fps input with `--video-file`; the harness hashes that file and records its
+absolute path, size, display environment, editor identity, and fixture hash in
+the run provenance. Its default 300 observation ticks give a 30-second sample
+after warmup.
+
+A valid native-video run must observe GStreamer hardware-shared decoding,
+NV12 or P010 frames, borrowed native-surface import, wgpu composition, positive
+decode/import/submission/presentation activity, bounded pool occupancy, and no
+GPU-blit or CPU-upload fallback. The artifact reports decode and presentation
+rates, p50/p95/p99/max presentation intervals, workload CPU and wall time,
+timestamp-query GPU pass time when the adapter supports it, dropped/replaced/
+backpressured frame counts, video GPU memory, and surface-pool allocation,
+reuse, pressure, and high-water counters. Timestamp queries use a bounded
+asynchronous pool and are enabled only for this explicit benchmark, so normal
+playback has no query or readback cost.
 
 ## Comparing two builds
 
@@ -194,8 +216,11 @@ phases. Narrower workflows emit their applicable subset.
 
 ## Thresholded suites and history
 
-`perf suite standard` runs interleaved comparisons for all catalogued
-scenarios. Each scenario owns an explicit maximum regression percentage. The
+`perf suite standard` runs interleaved comparisons for the portable catalogued
+scenarios. The physical-display `sustained-native-video` workload remains an
+explicit standalone run or comparison because it requires a retained input
+asset and a controlled GPU/display host. Each suite scenario owns an explicit
+maximum regression percentage. The
 suite passes only when every child comparison is valid and no candidate median
 exceeds its budget. `tmp/perf-suites/<suite-id>/suite.json` records every
 threshold, observed percentage change, and immutable child comparison path.

@@ -16,7 +16,7 @@ use crate::{
     scenario,
 };
 
-pub(crate) const COMPARISON_ARTIFACT_SCHEMA_VERSION: u32 = 2;
+pub(crate) const COMPARISON_ARTIFACT_SCHEMA_VERSION: u32 = 3;
 static COMPARISON_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// Immutable parameters shared by every run in one comparison.
@@ -32,6 +32,7 @@ pub struct ComparisonInput {
     pub candidate_editor: PathBuf,
     pub machine: crate::MachinePolicy,
     pub counters: Option<crate::CounterScope>,
+    pub video_file: Option<PathBuf>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -177,6 +178,7 @@ pub struct ComparisonRequest {
     timeout: Duration,
     machine: crate::MachinePolicy,
     counters: Option<crate::CounterScope>,
+    video_file: Option<PathBuf>,
 }
 
 impl ComparisonRequest {
@@ -197,6 +199,7 @@ impl ComparisonRequest {
             timeout: Duration::from_secs(300),
             machine: crate::MachinePolicy::default(),
             counters: None,
+            video_file: None,
         }
     }
 
@@ -217,6 +220,11 @@ impl ComparisonRequest {
 
     pub fn with_counters(mut self, counters: Option<crate::CounterScope>) -> Self {
         self.counters = counters;
+        self
+    }
+
+    pub fn with_video_file(mut self, video_file: Option<PathBuf>) -> Self {
+        self.video_file = video_file;
         self
     }
 
@@ -650,6 +658,7 @@ impl PerfHarness {
             candidate_editor: request.candidate_editor.clone(),
             machine: request.machine.clone(),
             counters: request.counters,
+            video_file: request.video_file.clone(),
         };
         let mut observations = Vec::with_capacity(request.samples_per_side.get() as usize * 2);
         for (role, sample_index) in comparison_schedule(request.samples_per_side) {
@@ -661,7 +670,8 @@ impl PerfHarness {
                 .with_frontend(frontend)
                 .with_timeout(request.timeout)
                 .with_machine_policy(request.machine.clone())
-                .with_counters(request.counters);
+                .with_counters(request.counters)
+                .with_video_file(request.video_file.clone());
             let report = self.run(&run_request)?;
             let editor_provenance = read_child_editor_provenance(&report.artifact_path);
             let child = report.artifact;

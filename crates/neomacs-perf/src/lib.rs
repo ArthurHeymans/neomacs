@@ -1,5 +1,6 @@
 mod artifact;
 mod artifact_store;
+mod capture;
 mod catalog;
 mod cli;
 mod comparison;
@@ -14,6 +15,7 @@ pub use artifact::{
     ArtifactFile, ArtifactKind, CorrectnessMismatch, EditorCapabilities, EditorKind,
     EditorProvenance, Measurement, MetricName, MetricUnit, RunArtifact, RunVerdict,
 };
+pub(crate) use capture::CaptureRoute;
 pub use catalog::{
     CrossEditorParityMetric, Frontend, ScenarioId, ScenarioSpec, scenario, scenarios,
 };
