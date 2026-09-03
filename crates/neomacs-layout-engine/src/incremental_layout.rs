@@ -992,11 +992,20 @@ impl RetainedWindowMatrix {
         let first_body_index = body_rows.first().map(|(idx, _)| *idx);
         let last_body_index = body_rows.last().map(|(idx, _)| *idx);
         let window_at_buffer_top = curr.window_start <= curr.buffer_begv + 1;
-        if Some(new_cursor_row_index) == last_body_index && !cursor_row.ends_at_zv {
-            return Err(CursorOnlyDecline::PointMoveMayScrollDown);
-        }
-        if Some(new_cursor_row_index) == first_body_index && !window_at_buffer_top {
-            return Err(CursorOnlyDecline::PointMoveMayScrollUp);
+        // Both bails are about a point MOVE onto an edge row, which is why they
+        // are gated on `point_moved`. With point unchanged there is no motion
+        // to keep visible: the retained matrix IS the layout a full pass
+        // already accepted for exactly these inputs, scroll decision included.
+        // Ungated, this rejected every frame of a window nothing had touched --
+        // 200 consecutive frames of the rust-lsp-typing fixture rebuilt a
+        // 7-row window in full with `differing=[]`.
+        if point_moved {
+            if Some(new_cursor_row_index) == last_body_index && !cursor_row.ends_at_zv {
+                return Err(CursorOnlyDecline::PointMoveMayScrollDown);
+            }
+            if Some(new_cursor_row_index) == first_body_index && !window_at_buffer_top {
+                return Err(CursorOnlyDecline::PointMoveMayScrollUp);
+            }
         }
         let body_row_snapshots = self
             .display_snapshot
@@ -1696,6 +1705,43 @@ mod scroll_classifier_tests {
             chrome_uses_column: false,
             chrome_modified_flag: false,
         }
+    }
+
+    /// A window nothing touched reuses its body verbatim even when its point
+    /// sits on the LAST visible row with more buffer below it. That geometry
+    /// is a scroll hazard only for a point MOVE -- the full pass that produced
+    /// this matrix already made whatever scroll decision these inputs call
+    /// for. Ungated, this rejected 200 consecutive frames of the
+    /// rust-lsp-typing fixture with `differing=[]`, rebuilding a 7-row window
+    /// in full every time for a window nothing had touched.
+    #[test]
+    fn cursor_only_reuses_an_untouched_window_whose_point_sits_on_the_last_row() {
+        let mut m = synthetic_matrix(0, 5); // rows span 0-9, 10-19, ... 40-49
+        // Point on the last body row, and the buffer does NOT end there.
+        m.key.point = 45;
+        for row in m.matrix.rows.iter_mut() {
+            MatrixRow::make_mut(row).ends_at_zv = false;
+        }
+        let unchanged = m.key.clone();
+        assert_eq!(
+            m.key.differing_fields(&unchanged),
+            Vec::<&str>::new(),
+            "the fixture must present an IDENTICAL key, or it pins nothing"
+        );
+        assert!(
+            m.cursor_only_replay(&unchanged).is_ok(),
+            "an untouched window must reuse its body verbatim"
+        );
+
+        // The same geometry with point MOVED onto that row keeps declining:
+        // a full pass might answer the move by scrolling.
+        let mut moved = m.key.clone();
+        moved.point = 46;
+        assert_eq!(
+            m.cursor_only_replay(&moved).err(),
+            Some(CursorOnlyDecline::PointMoveMayScrollDown),
+            "a point move onto the last row with buffer below still declines"
+        );
     }
 
     #[test]
