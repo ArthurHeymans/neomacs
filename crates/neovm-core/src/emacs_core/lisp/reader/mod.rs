@@ -2985,9 +2985,19 @@ pub(crate) fn finish_yes_or_no_p_in_eval(
     eval: &mut super::eval::Context,
     args: &[Value],
 ) -> EvalResult {
-    finish_yes_or_no_p_with_minibuffer(args, |minibuffer_args| {
+    // GNU `Fyes_or_no_p` dynamically binds `real-this-command` around the
+    // recursive minibuffer (src/fns.c).  The minibuffer command loop is
+    // allowed to assign this variable while it dispatches self-insert and
+    // `exit-minibuffer`, but those assignments belong to the nested command
+    // context.  Keeping the boundary in the specpdl means every return path --
+    // success, quit, signal, or future retry error -- restores the caller.
+    let specpdl_count = eval.specpdl.len();
+    let caller = eval.eval_symbol("real-this-command").unwrap_or(Value::NIL);
+    eval.try_specbind_or_unwind_to(specpdl_count, intern("real-this-command"), caller)?;
+    let result = finish_yes_or_no_p_with_minibuffer(args, |minibuffer_args| {
         finish_read_from_minibuffer_in_eval(eval, minibuffer_args)
-    })
+    });
+    eval.unbind_to_with_result(specpdl_count, result)
 }
 
 pub(crate) fn finish_yes_or_no_p_with_minibuffer(

@@ -22100,6 +22100,61 @@ fn unbound_key_runs_undefined_command_and_per_command_hooks() {
     );
 }
 
+/// GNU `yes-or-no-p` dynamically binds `real-this-command` around its recursive
+/// minibuffer (`src/fns.c:Fyes_or_no_p`).  The answer's `exit-minibuffer`
+/// command therefore cannot replace the caller that the outer command loop
+/// later commits to `real-last-command`.
+#[test]
+fn yes_or_no_p_preserves_callers_real_this_command() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = command_loop_test_context();
+
+    fn stop_command_loop_for_yes_or_no_test(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
+        assert!(args.is_empty(), "stop helper should not receive arguments");
+        ctx.command_loop.running = false;
+        Ok(Value::NIL)
+    }
+    ev.register_subr(SubrSpec::new(
+        "neo-stop-command-loop-for-yes-or-no-test",
+        NativeFn::ContextVec(stop_command_loop_for_yes_or_no_test),
+        SubrArity::new(0, Some(0)),
+    ));
+
+    ev.eval_str(
+        r#"(progn
+             (setq neo-real-command-after-query nil)
+             (fset 'neo-query-command
+                   (lambda ()
+                     (interactive)
+                     (yes-or-no-p "Proceed?")
+                     (setq neo-real-command-after-query real-this-command)
+                     (neo-stop-command-loop-for-yes-or-no-test)))
+             (keymap-set global-map "a" 'neo-query-command))"#,
+    )
+    .expect("install yes-or-no-p caller-preservation probe");
+
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+    let _tx_keepalive = tx;
+    for event in ['a', 'y', 'e', 's', '\r'] {
+        ev.command_loop
+            .keyboard
+            .kboard
+            .unread_events
+            .push_back(Value::fixnum(event as i64));
+    }
+    ev.command_loop.running = true;
+    ev.recursive_edit_inner()
+        .expect("query command should stop the command loop");
+
+    assert_eq!(
+        ev.eval_symbol("neo-real-command-after-query")
+            .expect("captured real-this-command"),
+        Value::symbol("neo-query-command"),
+        "yes-or-no-p must restore its caller after the recursive minibuffer"
+    );
+}
+
 #[test]
 fn command_loop_dispatches_select_window_before_following_key() {
     crate::test_utils::init_test_tracing();
