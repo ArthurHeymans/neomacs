@@ -1,4 +1,4 @@
-use super::kqueue::{
+use super::{
     DirectoryChange, DirectoryEntrySnapshot, DirectorySnapshot, requested_vnode_actions,
     vnode_actions,
 };

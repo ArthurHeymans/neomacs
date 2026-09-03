@@ -1,8 +1,11 @@
-use super::{KqueueAction, KqueueVnodeAction};
+use super::super::{KqueueAction, KqueueVnodeAction};
 use enumflags2::BitFlags;
-#[cfg(target_os = "macos")]
-use std::path::Path;
-use std::path::PathBuf;
+
+mod snapshot;
+
+#[cfg(test)]
+use snapshot::DirectoryEntrySnapshot;
+use snapshot::{DirectoryChange, DirectorySnapshot};
 
 /// Decode all vnode bits in GNU's observable consing order
 /// (`kqueue_callback`, src/kqueue.c).  This accepts a set, rather than a
@@ -32,154 +35,10 @@ pub(super) fn requested_vnode_actions(
         .collect()
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct DirectoryEntrySnapshot {
-    pub(super) inode: u64,
-    pub(super) name: PathBuf,
-    pub(super) modified: (i64, i64),
-    pub(super) changed: (i64, i64),
-    pub(super) size: u64,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(super) struct DirectorySnapshot {
-    entries: Vec<DirectoryEntrySnapshot>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) enum DirectoryChange {
-    Action { action: KqueueAction, path: PathBuf },
-    Rename { from: PathBuf, to: PathBuf },
-}
-
-impl DirectorySnapshot {
-    #[cfg(test)]
-    pub(super) fn from_entries(entries: Vec<DirectoryEntrySnapshot>) -> Self {
-        Self { entries }
-    }
-
-    #[cfg(target_os = "macos")]
-    fn read(directory: &Path) -> std::io::Result<Self> {
-        use std::os::unix::fs::MetadataExt;
-
-        let mut entries = Vec::new();
-        for result in std::fs::read_dir(directory)? {
-            let entry = result?;
-            let metadata = std::fs::symlink_metadata(entry.path())?;
-            entries.push(DirectoryEntrySnapshot {
-                inode: metadata.ino(),
-                name: PathBuf::from(entry.file_name()),
-                modified: (metadata.mtime(), metadata.mtime_nsec()),
-                changed: (metadata.ctime(), metadata.ctime_nsec()),
-                size: metadata.size(),
-            });
-        }
-        Ok(Self { entries })
-    }
-
-    /// Reproduce GNU `kqueue_compare_dir_list' as a pure transition.  Keeping
-    /// the old and new snapshots explicit makes rename pairing, replacement,
-    /// and metadata classification independently testable from kqueue I/O.
-    pub(super) fn diff(&self, new: &Self) -> Vec<DirectoryChange> {
-        let mut available_new = new.entries.clone();
-        let mut pending = Vec::<DirectoryEntrySnapshot>::new();
-        let mut renamed_destinations = Vec::<DirectoryEntrySnapshot>::new();
-        let mut changes = Vec::new();
-
-        for old_entry in &self.entries {
-            if let Some(index) = available_new
-                .iter()
-                .position(|new_entry| new_entry.inode == old_entry.inode)
-            {
-                let new_entry = available_new.remove(index);
-                if *old_entry == new_entry {
-                    continue;
-                }
-                if old_entry.name == new_entry.name {
-                    if old_entry.modified != new_entry.modified {
-                        changes.push(DirectoryChange::Action {
-                            action: KqueueAction::Write,
-                            path: old_entry.name.clone(),
-                        });
-                    }
-                    if old_entry.changed != new_entry.changed {
-                        changes.push(DirectoryChange::Action {
-                            action: KqueueAction::Attrib,
-                            path: old_entry.name.clone(),
-                        });
-                    }
-                } else {
-                    changes.push(DirectoryChange::Rename {
-                        from: old_entry.name.clone(),
-                        to: new_entry.name.clone(),
-                    });
-                    renamed_destinations.push(new_entry);
-                }
-                continue;
-            }
-
-            if let Some(index) = available_new
-                .iter()
-                .position(|new_entry| new_entry.name == old_entry.name)
-            {
-                pending.push(available_new.remove(index));
-                continue;
-            }
-
-            if let Some(index) = pending
-                .iter()
-                .position(|new_entry| new_entry.inode == old_entry.inode)
-            {
-                let new_entry = pending.remove(index);
-                changes.push(DirectoryChange::Rename {
-                    from: old_entry.name.clone(),
-                    to: new_entry.name,
-                });
-                continue;
-            }
-
-            if let Some(index) = renamed_destinations
-                .iter()
-                .position(|new_entry| new_entry.name == old_entry.name)
-            {
-                renamed_destinations.remove(index);
-                continue;
-            }
-
-            changes.push(DirectoryChange::Action {
-                action: KqueueAction::Delete,
-                path: old_entry.name.clone(),
-            });
-        }
-
-        for entry in available_new {
-            changes.push(DirectoryChange::Action {
-                action: KqueueAction::Create,
-                path: entry.name.clone(),
-            });
-            if entry.size > 0 {
-                changes.push(DirectoryChange::Action {
-                    action: KqueueAction::Write,
-                    path: entry.name,
-                });
-            }
-        }
-        for entry in pending {
-            changes.push(DirectoryChange::Action {
-                action: KqueueAction::Write,
-                path: entry.name,
-            });
-        }
-
-        changes
-    }
-}
-
 #[cfg(target_os = "macos")]
 mod native {
-    use super::super::{
-        FileNotifyBackend, FileNotifyEvent, FileNotifyWatchDescriptor, FileWatch, WatchDialect,
-        WatchRequest, file_notify_error,
+    use super::super::super::{
+        FileNotifyBackend, FileNotifyEvent, FileWatch, WatchId, file_notify_error,
     };
     use super::*;
     use crate::emacs_core::error::Flow;
@@ -190,11 +49,56 @@ mod native {
     };
     use rustix::fd::{AsRawFd, OwnedFd, RawFd};
     use std::collections::HashMap;
+    use std::path::{Path, PathBuf};
     use std::ptr;
     use std::sync::mpsc::{self, Receiver, Sender, SyncSender, TryRecvError};
     use std::thread::JoinHandle;
 
     const COMMAND_EVENT_IDENT: isize = 1;
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub(crate) struct KqueueRequest {
+        actions: BitFlags<KqueueAction>,
+    }
+
+    impl KqueueRequest {
+        pub(crate) fn new(actions: BitFlags<KqueueAction>) -> Self {
+            Self { actions }
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub(crate) struct KqueueEvent {
+        watch_id: WatchId,
+        actions: Vec<KqueueAction>,
+        path: PathBuf,
+        file1: Option<PathBuf>,
+    }
+
+    impl FileNotifyEvent for KqueueEvent {
+        fn watch_id(&self) -> &WatchId {
+            &self.watch_id
+        }
+
+        fn into_lisp(self) -> Value {
+            // GNU kqueue events use a bare-fixnum descriptor and have no
+            // trailing cookie (`kqueue_generate_event`, src/kqueue.c:94-104).
+            let mut fields = vec![
+                Value::fixnum(self.watch_id.slot()),
+                Value::list(
+                    self.actions
+                        .into_iter()
+                        .map(|action| Value::symbol(action.as_lisp_name()))
+                        .collect(),
+                ),
+                Value::string(self.path.display().to_string()),
+            ];
+            if let Some(file1) = self.file1 {
+                fields.push(Value::string(file1.display().to_string()));
+            }
+            Value::list(fields)
+        }
+    }
 
     #[derive(Debug)]
     struct NativeEvent {
@@ -493,7 +397,7 @@ mod native {
     }
 
     struct KqueueWatch {
-        common: FileWatch,
+        common: FileWatch<KqueueRequest>,
         directory: Option<DirectorySnapshot>,
     }
 
@@ -549,11 +453,9 @@ mod native {
         fn translate_event(
             watch: &mut KqueueWatch,
             mut native_actions: BitFlags<KqueueVnodeAction>,
-        ) -> Result<Vec<FileNotifyEvent>, Flow> {
-            let WatchRequest::Kqueue { actions: requested } = &watch.common.request else {
-                unreachable!("the macOS backend only stores kqueue watches")
-            };
-            let descriptor = FileNotifyWatchDescriptor::new(watch.common.id, 0);
+        ) -> Result<Vec<KqueueEvent>, Flow> {
+            let requested = watch.common.request.actions;
+            let watch_id = watch.common.id.clone();
             let mut translated = Vec::new();
 
             if native_actions.contains(KqueueVnodeAction::Write)
@@ -577,8 +479,8 @@ mod native {
                             }
                         };
                         if requested.contains(action) {
-                            translated.push(FileNotifyEvent::Kqueue {
-                                descriptor: descriptor.clone(),
+                            translated.push(KqueueEvent {
+                                watch_id: watch_id.clone(),
                                 actions: vec![action],
                                 path,
                                 file1,
@@ -587,8 +489,8 @@ mod native {
                     }
                     watch.directory = Some(new_snapshot);
                 } else if requested.contains(KqueueAction::Delete) {
-                    translated.push(FileNotifyEvent::Kqueue {
-                        descriptor: descriptor.clone(),
+                    translated.push(KqueueEvent {
+                        watch_id: watch_id.clone(),
                         actions: vec![KqueueAction::Delete],
                         path: watch.common.path.clone(),
                         file1: None,
@@ -596,10 +498,10 @@ mod native {
                 }
             }
 
-            let actions = requested_vnode_actions(native_actions, *requested);
+            let actions = requested_vnode_actions(native_actions, requested);
             if !actions.is_empty() {
-                translated.push(FileNotifyEvent::Kqueue {
-                    descriptor,
+                translated.push(KqueueEvent {
+                    watch_id,
                     actions,
                     path: watch.common.path.clone(),
                     file1: None,
@@ -610,19 +512,16 @@ mod native {
     }
 
     impl FileNotifyBackend for KqueueBackend {
+        type Request = KqueueRequest;
+        type Event = KqueueEvent;
+
         fn add_watch(
             &mut self,
             path: &Path,
-            request: WatchRequest,
+            request: Self::Request,
             notifier: Option<WaitNotifier>,
-        ) -> Result<FileNotifyWatchDescriptor, Flow> {
-            let WatchRequest::Kqueue { actions } = request else {
-                return Err(file_notify_error(
-                    "Wrong file notification backend",
-                    Some("inotify watch requested from kqueue".to_owned()),
-                    None,
-                ));
-            };
+        ) -> Result<WatchId, Flow> {
+            let actions = request.actions;
             let is_directory = path.is_dir();
             let fd = Self::open_watch(path)?;
             let descriptor = self
@@ -654,32 +553,25 @@ mod native {
             } else {
                 None
             };
-            let descriptor = FileNotifyWatchDescriptor::new(i64::from(descriptor), 0);
+            let descriptor = WatchId::new(i64::from(descriptor), 0);
             self.watches.push(KqueueWatch {
                 common: FileWatch {
-                    id: descriptor.id(),
-                    generation: 0,
+                    id: descriptor.clone(),
                     path: path.to_path_buf(),
                     is_directory,
-                    request: WatchRequest::Kqueue { actions },
+                    request,
                 },
                 directory,
             });
             Ok(descriptor)
         }
 
-        fn remove_watch(
-            &mut self,
-            descriptor: &FileNotifyWatchDescriptor,
-            dialect: WatchDialect,
-        ) -> Result<bool, Flow> {
-            if dialect != WatchDialect::Kqueue {
-                return Ok(false);
-            }
-            let Some(index) = self.watches.iter().position(|watch| {
-                watch.common.id == descriptor.id()
-                    && watch.common.generation == descriptor.generation()
-            }) else {
+        fn remove_watch(&mut self, descriptor: &WatchId) -> Result<bool, Flow> {
+            let Some(index) = self
+                .watches
+                .iter()
+                .position(|watch| watch.common.id == *descriptor)
+            else {
                 return Ok(false);
             };
             self.watches.remove(index);
@@ -687,7 +579,7 @@ mod native {
                 .worker
                 .as_ref()
                 .expect("a live watch has a worker")
-                .remove(descriptor.id())
+                .remove(descriptor.slot())
                 .map_err(|error| file_notify_error("Cannot remove watch", Some(error), None))?;
             if self.watches.is_empty() {
                 self.worker = None;
@@ -699,15 +591,13 @@ mod native {
             Ok(true)
         }
 
-        fn valid_p(&self, descriptor: &FileNotifyWatchDescriptor, dialect: WatchDialect) -> bool {
-            dialect == WatchDialect::Kqueue
-                && self.watches.iter().any(|watch| {
-                    watch.common.id == descriptor.id()
-                        && watch.common.generation == descriptor.generation()
-                })
+        fn valid_p(&self, descriptor: &WatchId) -> bool {
+            self.watches
+                .iter()
+                .any(|watch| watch.common.id == *descriptor)
         }
 
-        fn drain_events(&mut self) -> Result<Vec<FileNotifyEvent>, Flow> {
+        fn drain_events(&mut self) -> Result<Vec<Self::Event>, Flow> {
             let mut raw_events = Vec::new();
             if let Some(worker) = self.worker.as_ref() {
                 loop {
@@ -730,7 +620,7 @@ mod native {
                 let Some(index) = self
                     .watches
                     .iter()
-                    .position(|watch| watch.common.id == event.descriptor)
+                    .position(|watch| watch.common.id.slot() == event.descriptor)
                 else {
                     continue;
                 };
@@ -760,4 +650,7 @@ mod native {
 }
 
 #[cfg(target_os = "macos")]
-pub(super) use native::KqueueBackend;
+pub(super) use native::{KqueueBackend, KqueueRequest};
+
+#[cfg(test)]
+mod macos_test;

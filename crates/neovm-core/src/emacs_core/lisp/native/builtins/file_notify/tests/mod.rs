@@ -26,8 +26,15 @@ fn compiled_file_notification_subrs_match_the_target_backend() {
         names,
         ["kqueue-add-watch", "kqueue-rm-watch", "kqueue-valid-p"]
     );
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-    assert!(names.is_empty());
+    #[cfg(target_os = "windows")]
+    assert_eq!(
+        names,
+        [
+            "w32notify-add-watch",
+            "w32notify-rm-watch",
+            "w32notify-valid-p"
+        ]
+    );
 }
 
 /// Destructure a `Flow` into its signal payload; Debug-printing a `SymId`

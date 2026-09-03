@@ -155,8 +155,16 @@ pub(crate) fn gnu_c_features() -> [GnuCFeature; 30] {
             name: "w32notify",
             gnu_site: "src/w32notify.c:739",
             gnu_guard: BuildOption("HAVE_W32NOTIFY"),
-            here: NotBuilt {
-                because: "no Windows native notification backend",
+            here: if cfg!(target_os = "windows") {
+                Implemented {
+                    by: "crates/neovm-core/src/emacs_core/lisp/native/builtins/file_notify/platform/windows.rs -- \
+                         w32notify-add-watch/-rm-watch/-valid-p over notify's explicit \
+                         ReadDirectoryChangesW adapter, with GNU-compatible event shapes",
+                }
+            } else {
+                NotBuilt {
+                    because: "GNU's ReadDirectoryChangesW backend is Windows-only",
+                }
             },
         },
         GnuCFeature {
@@ -206,7 +214,7 @@ pub(crate) fn gnu_c_features() -> [GnuCFeature; 30] {
             gnu_guard: BuildOption("HAVE_INOTIFY"),
             here: if cfg!(target_os = "linux") {
                 Implemented {
-                    by: "crates/neovm-core/src/emacs_core/lisp/native/builtins/file_notify/notify_rs.rs -- \
+                    by: "crates/neovm-core/src/emacs_core/lisp/native/builtins/file_notify/platform/linux.rs -- \
                          real watches through the `notify' crate, which is inotify on \
                          GNU/Linux; inotify-add-watch/-rm-watch/-valid-p",
                 }

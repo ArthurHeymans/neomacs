@@ -321,10 +321,12 @@ fn without_a_dbus_transport_the_whole_dbusbind_surface_is_absent() {
 #[test]
 fn the_features_this_build_really_has_still_answer_t() {
     crate::test_utils::init_test_tracing();
-    // The file-notification feature is the platform's: `inotify` on
-    // GNU/Linux, `kqueue` on macOS, exactly one of the two per build.
+    // The file-notification feature is selected with the native backend,
+    // exactly one per build.
     let file_notification_probe = if cfg!(target_os = "macos") {
         "(and (featurep 'kqueue) (fboundp 'kqueue-add-watch))"
+    } else if cfg!(target_os = "windows") {
+        "(and (featurep 'w32notify) (fboundp 'w32notify-add-watch))"
     } else {
         "(and (featurep 'inotify) (fboundp 'inotify-add-watch))"
     };

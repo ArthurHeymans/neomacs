@@ -1,7 +1,4 @@
-use super::{
-    FileNotifyBackend, FileNotifyEvent, FileNotifyWatchDescriptor, FileWatch, WatchDialect,
-    WatchRequest, file_notify_error,
-};
+use super::super::{FileNotifyBackend, FileNotifyEvent, FileWatch, WatchId, file_notify_error};
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::process::WaitNotifier;
 use crate::emacs_core::value::Value;
@@ -9,15 +6,50 @@ use notify::Watcher;
 use notify::event::{AccessKind, AccessMode, ModifyKind, RenameMode};
 use std::path::{Path, PathBuf};
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(in super::super) struct InotifyRequest {
+    aspects: Vec<String>,
+}
+
+impl InotifyRequest {
+    pub(in super::super) fn new(aspects: Vec<String>) -> Self {
+        Self { aspects }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(in super::super) struct InotifyEvent {
+    watch_id: WatchId,
+    aspects: Vec<&'static str>,
+    path: PathBuf,
+    cookie: usize,
+}
+
+impl FileNotifyEvent for InotifyEvent {
+    fn watch_id(&self) -> &WatchId {
+        &self.watch_id
+    }
+
+    fn into_lisp(self) -> Value {
+        // GNU inotify events are `(DESCRIPTOR ASPECTS NAME COOKIE)`.
+        Value::list(vec![
+            self.watch_id.to_inotify_lisp(),
+            Value::list(self.aspects.into_iter().map(Value::symbol).collect()),
+            Value::string(self.path.display().to_string()),
+            Value::fixnum(i64::try_from(self.cookie).unwrap_or(i64::MAX)),
+        ])
+    }
+}
+
 #[derive(Default)]
-pub(super) struct NotifyRsBackend {
+pub(in super::super) struct InotifyBackend {
     watcher: Option<notify::RecommendedWatcher>,
     rx: Option<std::sync::mpsc::Receiver<Result<notify::Event, notify::Error>>>,
-    watches: Vec<FileWatch>,
+    watches: Vec<FileWatch<InotifyRequest>>,
     next_id: i64,
 }
 
-impl NotifyRsBackend {
+impl InotifyBackend {
     fn ensure_watcher(&mut self, notifier: Option<WaitNotifier>) -> Result<(), Flow> {
         if self.watcher.is_some() {
             return Ok(());
@@ -48,21 +80,20 @@ impl NotifyRsBackend {
         id
     }
 
-    fn watch_requests(watch: &FileWatch, aspect: &str) -> bool {
-        let aspects = match &watch.request {
-            WatchRequest::Inotify { aspects } => aspects,
-            #[cfg(target_os = "macos")]
-            WatchRequest::Kqueue { .. } => return false,
-        };
-        aspects.iter().any(|requested| match requested.as_str() {
-            "t" | "all-events" => true,
-            "move" => matches!(aspect, "moved-from" | "moved-to"),
-            "close" => matches!(aspect, "close-write" | "close-nowrite"),
-            requested => requested == aspect,
-        })
+    fn watch_requests(watch: &FileWatch<InotifyRequest>, aspect: &str) -> bool {
+        watch
+            .request
+            .aspects
+            .iter()
+            .any(|requested| match requested.as_str() {
+                "t" | "all-events" => true,
+                "move" => matches!(aspect, "moved-from" | "moved-to"),
+                "close" => matches!(aspect, "close-write" | "close-nowrite"),
+                requested => requested == aspect,
+            })
     }
 
-    fn watch_matches_path(watch: &FileWatch, event_path: &Path) -> bool {
+    fn watch_matches_path(watch: &FileWatch<InotifyRequest>, event_path: &Path) -> bool {
         if watch.is_directory {
             event_path == watch.path || event_path.parent() == Some(watch.path.as_path())
         } else {
@@ -70,7 +101,7 @@ impl NotifyRsBackend {
         }
     }
 
-    fn reported_path(watch: &FileWatch, event_path: &Path) -> PathBuf {
+    fn reported_path(watch: &FileWatch<InotifyRequest>, event_path: &Path) -> PathBuf {
         if watch.is_directory && event_path != watch.path {
             event_path
                 .file_name()
@@ -84,7 +115,7 @@ impl NotifyRsBackend {
     fn event_aspects(
         event: &notify::Event,
         path_index: usize,
-        watch: &FileWatch,
+        watch: &FileWatch<InotifyRequest>,
     ) -> Vec<&'static str> {
         if event.need_rescan() {
             return vec!["q-overflow"];
@@ -122,16 +153,13 @@ impl NotifyRsBackend {
         }
     }
 
-    fn translate_event(&self, event: notify::Event) -> Vec<FileNotifyEvent> {
+    fn translate_event(&self, event: notify::Event) -> Vec<InotifyEvent> {
         let cookie = event.tracker().unwrap_or(0);
         let mut translated = Vec::new();
 
         for watch in &self.watches {
             for (path_index, path) in event.paths.iter().enumerate() {
                 if !Self::watch_matches_path(watch, path) {
-                    continue;
-                }
-                if !matches!(&watch.request, WatchRequest::Inotify { .. }) {
                     continue;
                 }
                 let aspects = Self::event_aspects(&event, path_index, watch);
@@ -145,8 +173,8 @@ impl NotifyRsBackend {
                 if aspects.is_empty() {
                     continue;
                 }
-                translated.push(FileNotifyEvent::Inotify {
-                    descriptor: FileNotifyWatchDescriptor::new(watch.id, watch.generation),
+                translated.push(InotifyEvent {
+                    watch_id: watch.id.clone(),
                     aspects,
                     path: Self::reported_path(watch, path),
                     cookie,
@@ -158,21 +186,16 @@ impl NotifyRsBackend {
     }
 }
 
-impl FileNotifyBackend for NotifyRsBackend {
+impl FileNotifyBackend for InotifyBackend {
+    type Request = InotifyRequest;
+    type Event = InotifyEvent;
+
     fn add_watch(
         &mut self,
         path: &Path,
-        request: WatchRequest,
+        request: Self::Request,
         notifier: Option<WaitNotifier>,
-    ) -> Result<FileNotifyWatchDescriptor, Flow> {
-        #[cfg(target_os = "macos")]
-        if !matches!(&request, WatchRequest::Inotify { .. }) {
-            return Err(file_notify_error(
-                "Wrong file notification backend",
-                Some("kqueue watch requested from notify".to_owned()),
-                None,
-            ));
-        }
+    ) -> Result<WatchId, Flow> {
         self.ensure_watcher(notifier)?;
 
         if !path.exists() {
@@ -182,11 +205,7 @@ impl FileNotifyBackend for NotifyRsBackend {
                 Some(Value::string(path.display().to_string())),
             ));
         }
-        if matches!(
-            &request,
-            WatchRequest::Inotify { aspects }
-                if aspects.iter().any(|aspect| aspect == "onlydir") && !path.is_dir()
-        ) {
+        if request.aspects.iter().any(|aspect| aspect == "onlydir") && !path.is_dir() {
             return Err(file_notify_error(
                 "Could not add watch for file",
                 Some("Not a directory".to_owned()),
@@ -207,10 +226,9 @@ impl FileNotifyBackend for NotifyRsBackend {
         }
 
         let id = self.allocate_id();
-        let descriptor = FileNotifyWatchDescriptor::new(id, 0);
+        let descriptor = WatchId::new(id, 0);
         self.watches.push(FileWatch {
-            id,
-            generation: descriptor.generation(),
+            id: descriptor.clone(),
             path: path.to_path_buf(),
             is_directory: path.is_dir(),
             request,
@@ -219,16 +237,12 @@ impl FileNotifyBackend for NotifyRsBackend {
         Ok(descriptor)
     }
 
-    fn remove_watch(
-        &mut self,
-        descriptor: &FileNotifyWatchDescriptor,
-        dialect: WatchDialect,
-    ) -> Result<bool, Flow> {
-        let Some(pos) = self.watches.iter().position(|w| {
-            w.id == descriptor.id()
-                && w.generation == descriptor.generation()
-                && w.request.dialect() == dialect
-        }) else {
+    fn remove_watch(&mut self, descriptor: &WatchId) -> Result<bool, Flow> {
+        let Some(pos) = self
+            .watches
+            .iter()
+            .position(|watch| watch.id == *descriptor)
+        else {
             return Ok(false);
         };
 
@@ -246,15 +260,11 @@ impl FileNotifyBackend for NotifyRsBackend {
         Ok(true)
     }
 
-    fn valid_p(&self, descriptor: &FileNotifyWatchDescriptor, dialect: WatchDialect) -> bool {
-        self.watches.iter().any(|w| {
-            w.id == descriptor.id()
-                && w.generation == descriptor.generation()
-                && w.request.dialect() == dialect
-        })
+    fn valid_p(&self, descriptor: &WatchId) -> bool {
+        self.watches.iter().any(|watch| watch.id == *descriptor)
     }
 
-    fn drain_events(&mut self) -> Result<Vec<FileNotifyEvent>, Flow> {
+    fn drain_events(&mut self) -> Result<Vec<Self::Event>, Flow> {
         let mut raw_events = Vec::new();
         if let Some(rx) = self.rx.as_ref() {
             loop {

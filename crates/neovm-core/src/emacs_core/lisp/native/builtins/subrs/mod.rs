@@ -5286,7 +5286,7 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         .placeholder(NoEvalPlaceholder::Nil),
     );
     std::cfg_select! {
-        any(target_os = "linux", target_os = "macos") => {
+        any(target_os = "linux", target_os = "macos", target_os = "windows") => {
             file_notify::register_subrs(ctx);
         }
         _ => {}

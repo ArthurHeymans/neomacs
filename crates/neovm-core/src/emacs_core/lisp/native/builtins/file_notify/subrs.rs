@@ -40,4 +40,22 @@ crate::emacs_core::subr::define_subrs! {
         NativeFn::ContextVec(|_ctx, args| kqueue_valid_p(args)),
         SubrArity::new(1, Some(1)),
     ),
+    #[cfg(target_os = "windows")]
+    SubrSpec::new(
+        "w32notify-add-watch",
+        NativeFn::ContextVec(w32notify_add_watch),
+        SubrArity::new(3, Some(3)),
+    ),
+    #[cfg(target_os = "windows")]
+    SubrSpec::new(
+        "w32notify-rm-watch",
+        NativeFn::ContextVec(|_ctx, args| w32notify_rm_watch(args)),
+        SubrArity::new(1, Some(1)),
+    ),
+    #[cfg(target_os = "windows")]
+    SubrSpec::new(
+        "w32notify-valid-p",
+        NativeFn::ContextVec(|_ctx, args| w32notify_valid_p(args)),
+        SubrArity::new(1, Some(1)),
+    ),
 }
