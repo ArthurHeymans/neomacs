@@ -3067,9 +3067,17 @@ impl LayoutEngine {
         layout_box: WindowLayoutBox,
         evaluator: &neovm_core::emacs_core::Context,
     ) -> Option<ScrollReplay> {
-        if !params.selected {
-            return None;
-        }
+        // Deliberately NOT restricted to the selected window. GNU's
+        // `try_window_id` (xdisp.c:22560-22960) has no such condition -- it
+        // runs for whichever window `redisplay_window` is laying out -- and the
+        // restriction here dated only from the fast paths' first landing
+        // (ce214316a), where it was starting scope rather than a fix for
+        // anything. A non-selected window that took an edit is exactly the
+        // multi-window case worth catching, as `build_cursor_only_replay` says
+        // in its own comment. Selection is part of `RetainedWindowKey`
+        // (`selected` and `cursor_role`), so a window that GAINS or LOSES it
+        // still escalates to a full relayout rather than carrying a stale
+        // cursor in from the retained matrix.
         let window_id = DisplayWindowId::new(params.window_id);
         let prev = self.retained_window_matrices.get(&window_id)?;
         let curr_key = RetainedWindowKey::from_params(params, layout_box, evaluator);

@@ -4381,12 +4381,17 @@ fn phase3_fontlocked_first_row_edit_relays_only_the_span() {
 
 /// MULTI-WINDOW SAME BUFFER. Two windows on one buffer; an edit in the
 /// selected window. This is the case the multi-window race fix (spec §4.2)
-/// must keep sound: each window diffs from its own retained tick. The selected
-/// window takes the localized-edit replay; the non-selected window on the same
-/// buffer saw its chars tick move and is not eligible for any fast path, so it
-/// rebuilds in full.
+/// must keep sound: each window diffs from its OWN retained tick and its own
+/// window_start, so both windows can replay the same buffer edit independently.
+///
+/// Both take the localized-edit replay. GNU's `try_window_id` is likewise not
+/// restricted to the selected window (xdisp.c:22560-22960 names no such
+/// condition); it runs for whichever window `redisplay_window` is laying out.
+/// This test previously asserted the non-selected window rebuilt in full,
+/// which recorded `build_edit_replay`'s original starting scope rather than a
+/// requirement.
 #[test]
-fn phase3_multi_window_same_buffer_reuses_only_the_selected_window() {
+fn phase3_multi_window_same_buffer_replays_the_edit_in_both_windows() {
     let text = "(defun f (a b) (+ a b))\n".repeat(40);
     let (mut eval, frame_id, buf_id, selected_window) = incr_editing_frame(&text, 800, 600);
     eval.frame_manager_mut()
@@ -4406,13 +4411,19 @@ fn phase3_multi_window_same_buffer_reuses_only_the_selected_window() {
         buffer.insert("z");
     });
     assert_eq!(
-        m.stats.edit_windows, 1,
-        "the selected window takes the localized-edit replay (got {:?})",
+        m.stats.edit_windows, 2,
+        "both windows on the edited buffer take the localized-edit replay (got {:?})",
+        m.stats
+    );
+    assert_eq!(
+        m.stats.full_windows, 1,
+        "the only full rebuild left is the minibuffer, which shows another buffer \
+         and took no edit (got {:?})",
         m.stats
     );
     assert!(
-        m.stats.full_windows >= 1,
-        "the non-selected same-buffer window rebuilds in full (got {:?})",
+        m.stats.reused_rows > 0,
+        "the replay must actually reuse rows, not relay them all (got {:?})",
         m.stats
     );
     assert_eq!(
