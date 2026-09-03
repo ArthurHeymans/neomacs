@@ -29,7 +29,7 @@ thread_local! {
     static FILE_NOTIFY_STATE: RefCell<FileNotifyState> = RefCell::new(FileNotifyState::default());
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(super) struct FileNotifyWatchDescriptor {
     id: i64,
     generation: i64,
@@ -172,7 +172,6 @@ pub(super) struct FileWatch {
     pub(super) generation: i64,
     pub(super) path: PathBuf,
     pub(super) is_directory: bool,
-    pub(super) callback: Value,
     pub(super) request: WatchRequest,
 }
 
@@ -183,29 +182,32 @@ pub(super) enum FileNotifyEvent {
         aspects: Vec<&'static str>,
         path: PathBuf,
         cookie: usize,
-        callback: Value,
     },
     #[cfg(target_os = "macos")]
     Kqueue {
         descriptor: FileNotifyWatchDescriptor,
         actions: Vec<KqueueAction>,
         path: PathBuf,
-        callback: Value,
         /// FILE1 of a `rename' event (src/kqueue.c:171-172).
         file1: Option<PathBuf>,
     },
 }
 
+impl FileNotifyEvent {
+    fn descriptor(&self) -> &FileNotifyWatchDescriptor {
+        match self {
+            Self::Inotify { descriptor, .. } => descriptor,
+            #[cfg(target_os = "macos")]
+            Self::Kqueue { descriptor, .. } => descriptor,
+        }
+    }
+}
+
 pub(super) trait FileNotifyBackend {
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn allocated_p(&self) -> bool;
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn watch_list(&self) -> Vec<FileWatch>;
     fn add_watch(
         &mut self,
         path: &std::path::Path,
         request: WatchRequest,
-        callback: Value,
         notifier: Option<crate::emacs_core::process::WaitNotifier>,
     ) -> Result<FileNotifyWatchDescriptor, Flow>;
     fn remove_watch(
@@ -219,16 +221,25 @@ pub(super) trait FileNotifyBackend {
 }
 
 struct FileNotifyState {
-    backend: Box<dyn FileNotifyBackend>,
+    backend: PlatformBackend,
+    callbacks: hashbrown::HashMap<FileNotifyWatchDescriptor, Value>,
 }
+
+#[cfg(target_os = "macos")]
+type PlatformBackend = kqueue::KqueueBackend;
+#[cfg(not(target_os = "macos"))]
+type PlatformBackend = notify_rs::NotifyRsBackend;
 
 impl Default for FileNotifyState {
     fn default() -> Self {
         #[cfg(target_os = "macos")]
-        let backend: Box<dyn FileNotifyBackend> = Box::<kqueue::KqueueBackend>::default();
+        let backend = kqueue::KqueueBackend::default();
         #[cfg(not(target_os = "macos"))]
-        let backend: Box<dyn FileNotifyBackend> = Box::<notify_rs::NotifyRsBackend>::default();
-        Self { backend }
+        let backend = notify_rs::NotifyRsBackend::default();
+        Self {
+            backend,
+            callbacks: hashbrown::HashMap::new(),
+        }
     }
 }
 
@@ -358,13 +369,7 @@ pub(crate) fn reset_file_notify_thread_locals() {
 
 pub(crate) fn collect_file_notify_gc_roots(group: &mut Vec<Value>) {
     FILE_NOTIFY_STATE.with(|slot| {
-        group.extend(
-            slot.borrow()
-                .backend
-                .watch_list()
-                .into_iter()
-                .map(|watch| watch.callback),
-        );
+        group.extend(slot.borrow().callbacks.values().copied());
     });
 }
 
@@ -375,27 +380,38 @@ pub(crate) fn has_active_file_notify_watches() -> bool {
 pub(crate) fn drain_file_notify_events(
     ctx: &mut crate::emacs_core::eval::Context,
 ) -> Result<usize, Flow> {
-    let events = FILE_NOTIFY_STATE.with(|slot| slot.borrow_mut().backend.drain_events())?;
+    let events = FILE_NOTIFY_STATE.with(|slot| {
+        let mut state = slot.borrow_mut();
+        let events = state.backend.drain_events()?;
+        Ok::<_, Flow>(
+            events
+                .into_iter()
+                .filter_map(|event| {
+                    state
+                        .callbacks
+                        .get(event.descriptor())
+                        .copied()
+                        .map(|callback| (event, callback))
+                })
+                .collect::<Vec<_>>(),
+        )
+    })?;
     let count = events.len();
 
-    for event in events {
-        let (raw_event, callback) = match event {
+    for (event, callback) in events {
+        let raw_event = match event {
             // GNU inotify events are `(DESCRIPTOR ASPECTS NAME COOKIE)`.
             FileNotifyEvent::Inotify {
                 descriptor,
                 aspects,
                 path,
                 cookie,
-                callback,
-            } => (
-                Value::list(vec![
-                    descriptor.to_lisp(),
-                    Value::list(aspects.into_iter().map(Value::symbol).collect()),
-                    Value::string(path.display().to_string()),
-                    Value::fixnum(i64::try_from(cookie).unwrap_or(i64::MAX)),
-                ]),
-                callback,
-            ),
+            } => Value::list(vec![
+                descriptor.to_lisp(),
+                Value::list(aspects.into_iter().map(Value::symbol).collect()),
+                Value::string(path.display().to_string()),
+                Value::fixnum(i64::try_from(cookie).unwrap_or(i64::MAX)),
+            ]),
             // GNU kqueue events are `(DESCRIPTOR ACTIONS FILE [FILE1])` with
             // a bare-fixnum descriptor and no cookie (`kqueue_generate_event`,
             // src/kqueue.c:94-104).
@@ -404,7 +420,6 @@ pub(crate) fn drain_file_notify_events(
                 descriptor,
                 actions,
                 path,
-                callback,
                 file1,
             } => {
                 let mut fields = vec![
@@ -420,7 +435,7 @@ pub(crate) fn drain_file_notify_events(
                 if let Some(file1) = file1 {
                     fields.push(Value::string(file1.display().to_string()));
                 }
-                (Value::list(fields), callback)
+                Value::list(fields)
             }
         };
         ctx.queue_special_event(Value::list(vec![
@@ -460,12 +475,11 @@ pub(crate) fn inotify_add_watch(
 
     FILE_NOTIFY_STATE.with(|slot| {
         let mut state = slot.borrow_mut();
-        let descriptor = state.backend.add_watch(
-            &path,
-            WatchRequest::Inotify { aspects },
-            callback,
-            notifier,
-        )?;
+        let descriptor =
+            state
+                .backend
+                .add_watch(&path, WatchRequest::Inotify { aspects }, notifier)?;
+        state.callbacks.insert(descriptor.clone(), callback);
         Ok(descriptor.to_lisp())
     })
 }
@@ -484,9 +498,12 @@ pub(crate) fn inotify_rm_watch(args: Vec<Value>) -> EvalResult {
 
     FILE_NOTIFY_STATE.with(|slot| {
         let mut state = slot.borrow_mut();
-        let _ = state
+        let removed = state
             .backend
             .remove_watch(&descriptor, WatchDialect::Inotify)?;
+        if removed {
+            state.callbacks.remove(&descriptor);
+        }
         Ok(Value::T)
     })
 }
@@ -563,7 +580,8 @@ pub(crate) fn kqueue_add_watch(
         let descriptor =
             state
                 .backend
-                .add_watch(&path, WatchRequest::Kqueue { actions }, callback, notifier)?;
+                .add_watch(&path, WatchRequest::Kqueue { actions }, notifier)?;
+        state.callbacks.insert(descriptor.clone(), callback);
         Ok(Value::fixnum(descriptor.id()))
     })
 }
@@ -585,6 +603,7 @@ pub(crate) fn kqueue_rm_watch(args: Vec<Value>) -> EvalResult {
             .backend
             .remove_watch(&descriptor, WatchDialect::Kqueue)?
         {
+            state.callbacks.remove(&descriptor);
             Ok(Value::T)
         } else {
             Err(not_a_watch_descriptor())

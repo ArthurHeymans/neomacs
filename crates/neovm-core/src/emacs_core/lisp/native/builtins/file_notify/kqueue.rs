@@ -581,7 +581,6 @@ mod native {
                                 descriptor: descriptor.clone(),
                                 actions: vec![action],
                                 path,
-                                callback: watch.common.callback,
                                 file1,
                             });
                         }
@@ -592,7 +591,6 @@ mod native {
                         descriptor: descriptor.clone(),
                         actions: vec![KqueueAction::Delete],
                         path: watch.common.path.clone(),
-                        callback: watch.common.callback,
                         file1: None,
                     });
                 }
@@ -604,7 +602,6 @@ mod native {
                     descriptor,
                     actions,
                     path: watch.common.path.clone(),
-                    callback: watch.common.callback,
                     file1: None,
                 });
             }
@@ -613,22 +610,10 @@ mod native {
     }
 
     impl FileNotifyBackend for KqueueBackend {
-        fn allocated_p(&self) -> bool {
-            self.worker.is_some()
-        }
-
-        fn watch_list(&self) -> Vec<FileWatch> {
-            self.watches
-                .iter()
-                .map(|watch| watch.common.clone())
-                .collect()
-        }
-
         fn add_watch(
             &mut self,
             path: &Path,
             request: WatchRequest,
-            callback: Value,
             notifier: Option<WaitNotifier>,
         ) -> Result<FileNotifyWatchDescriptor, Flow> {
             let WatchRequest::Kqueue { actions } = request else {
@@ -676,7 +661,6 @@ mod native {
                     generation: 0,
                     path: path.to_path_buf(),
                     is_directory,
-                    callback,
                     request: WatchRequest::Kqueue { actions },
                 },
                 directory,

@@ -150,7 +150,6 @@ impl NotifyRsBackend {
                     aspects,
                     path: Self::reported_path(watch, path),
                     cookie,
-                    callback: watch.callback,
                 });
             }
         }
@@ -160,19 +159,10 @@ impl NotifyRsBackend {
 }
 
 impl FileNotifyBackend for NotifyRsBackend {
-    fn allocated_p(&self) -> bool {
-        self.watcher.is_some()
-    }
-
-    fn watch_list(&self) -> Vec<FileWatch> {
-        self.watches.clone()
-    }
-
     fn add_watch(
         &mut self,
         path: &Path,
         request: WatchRequest,
-        callback: Value,
         notifier: Option<WaitNotifier>,
     ) -> Result<FileNotifyWatchDescriptor, Flow> {
         #[cfg(target_os = "macos")]
@@ -223,7 +213,6 @@ impl FileNotifyBackend for NotifyRsBackend {
             generation: descriptor.generation(),
             path: path.to_path_buf(),
             is_directory: path.is_dir(),
-            callback,
             request,
         });
 
