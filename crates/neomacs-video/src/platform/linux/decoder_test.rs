@@ -1,7 +1,8 @@
 use super::{
     DmaBufMemoryLayout, DmaDrmNegotiation, NativeVideoFormatSupport, ParsedDrmFormat,
     PipelineDrmIdentity, PipelineDrmTopology, advertise_required_video_meta,
-    classify_pipeline_error, dma_buf_compositor_import, frame_format_from_fourcc,
+    classify_pipeline_error, decoder_kind_from_factory_class, dma_buf_compositor_import,
+    frame_format_from_fourcc,
     missing_video_plugin, preferred_sink_caps, rejected_dma_drm_format,
     reject_incomplete_fallback_at_eos, request_linear_fallback, retain_unready_decoder_writes,
     rotation_from_gstreamer_tag,
@@ -10,10 +11,26 @@ use crate::backend::{DecoderOutputGeneration, DecoderReconfiguration};
 use crate::sampling::LinuxDrmDevice;
 use crate::{
     FrameImportPolicy, LoopMode, MissingVideoPlugin, MissingVideoPlugins, VideoCommandError,
-    VideoCompositorImport, VideoInstallerHint, VideoRotation,
+    VideoCompositorImport, VideoDecoderKind, VideoInstallerHint, VideoRotation,
 };
 use std::num::NonZeroU32;
 use std::sync::atomic::AtomicBool;
+
+#[test]
+fn gstreamer_factory_classification_requires_explicit_hardware_evidence() {
+    assert_eq!(
+        decoder_kind_from_factory_class("Codec/Decoder/Video/Hardware"),
+        VideoDecoderKind::Hardware
+    );
+    assert_eq!(
+        decoder_kind_from_factory_class("Codec/Decoder/Video"),
+        VideoDecoderKind::Software
+    );
+    assert_eq!(
+        decoder_kind_from_factory_class("Codec/Parser/Video"),
+        VideoDecoderKind::Unknown
+    );
+}
 
 #[test]
 fn appsink_allocation_query_advertises_required_video_metadata() {

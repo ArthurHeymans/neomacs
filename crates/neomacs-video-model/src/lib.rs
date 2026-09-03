@@ -749,7 +749,10 @@ impl VideoSessionRecovery {
 /// enough information to prove how the decoder produced it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VideoDecodeResidency {
-    HardwareSharedPool,
+    /// Hardware decode whose output and renderer are proven to use the same
+    /// DRM device. This does not claim ownership of the decoder's internal
+    /// pool: a same-device GStreamer transform may have allocated the DMA-BUF.
+    HardwareSameDevice,
     HardwareUnverified,
     Software,
     Unknown,
@@ -842,6 +845,50 @@ pub enum VideoDecodeBackend {
     Unsupported,
 }
 
+/// Evidence reported by the native playback backend about the selected codec
+/// implementation.  This is separate from decoded-frame residency: a hardware
+/// decoder can still require a copy before composition.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoDecoderKind {
+    Hardware,
+    Software,
+    Unknown,
+}
+
+/// Stable, handle-free identity of the codec implementation selected for one
+/// playback session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VideoDecoderIdentity {
+    pub factory: String,
+    pub plugin: String,
+    pub kind: VideoDecoderKind,
+}
+
+/// Graphics API used by the compositor device.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoGraphicsBackend {
+    Vulkan,
+    Metal,
+    Dx12,
+    Gl,
+    BrowserWebGpu,
+    Other,
+}
+
+/// Stable, serializable renderer facts needed to compare native-video runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VideoRendererIdentity {
+    pub adapter_name: String,
+    pub vendor: u32,
+    pub device: u32,
+    pub device_type: String,
+    pub graphics_backend: VideoGraphicsBackend,
+    pub driver: String,
+    pub driver_info: String,
+    pub drm_render_node: Option<String>,
+    pub display_refresh_hz: Option<u16>,
+}
+
 /// Per-path frame counts and byte volumes that the platform could actually
 /// observe. Unknown upstream conversion volume is deliberately not estimated.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -912,6 +959,7 @@ pub struct VideoGpuTiming {
 pub struct VideoSessionDiagnostics {
     pub id: VideoId,
     pub backend: VideoDecodeBackend,
+    pub decoder: Option<VideoDecoderIdentity>,
     pub state: VideoSessionState,
     pub frame_path: Option<VideoFramePath>,
     pub frame_format: Option<VideoFrameFormat>,
@@ -966,6 +1014,7 @@ pub struct VideoSurfacePoolDiagnostics {
 /// Point-in-time diagnostics owned by the authoritative video system.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VideoDiagnostics {
+    pub renderer: Option<VideoRendererIdentity>,
     pub sessions: Vec<VideoSessionDiagnostics>,
     pub surface_pools: Vec<VideoSurfacePoolDiagnostics>,
     pub gpu_memory_bytes: usize,

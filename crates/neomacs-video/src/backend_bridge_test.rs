@@ -23,9 +23,10 @@ fn decoder_bridge_bounds_frames_per_session_but_keeps_control_order() {
     let id = VideoId::new(1);
 
     publisher.event(BackendEvent::Ended { id });
-    publisher.frame(id, frame(1));
-    publisher.frame(id, frame(2));
-    publisher.frame(id, frame(3));
+    let epoch = publisher.measurement_epoch();
+    publisher.frame(epoch, id, frame(1));
+    publisher.frame(epoch, id, frame(2));
+    publisher.frame(epoch, id, frame(3));
 
     let events = inbox.drain();
     assert_eq!(events.len(), 4);
@@ -46,6 +47,41 @@ fn decoder_bridge_bounds_frames_per_session_but_keeps_control_order() {
         } if event_id == id
     ));
     assert_eq!(wakes.load(Ordering::Relaxed), 4);
+}
+
+#[test]
+fn measurement_boundary_discards_prepublished_frames_but_keeps_lifecycle_events() {
+    let (publisher, inbox) = backend_bridge(VideoWake::new(|| {}));
+    let id = VideoId::new(1);
+    publisher.event(BackendEvent::Ended { id });
+    let warmup_epoch = publisher.measurement_epoch();
+    publisher.frame(warmup_epoch, id, frame(1));
+    publisher.frame(warmup_epoch, id, frame(2));
+
+    inbox.begin_measurement_epoch();
+
+    let events = inbox.drain();
+    assert_eq!(events.len(), 1);
+    assert!(matches!(events[0], BackendEvent::Ended { id: event_id } if event_id == id));
+}
+
+#[test]
+fn measurement_boundary_rejects_an_in_flight_old_generation_publication() {
+    let (publisher, inbox) = backend_bridge(VideoWake::new(|| {}));
+    let id = VideoId::new(1);
+    let in_flight_warmup_epoch = publisher.measurement_epoch();
+
+    inbox.begin_measurement_epoch();
+    publisher.frame(in_flight_warmup_epoch, id, frame(1));
+    let measured_epoch = publisher.measurement_epoch();
+    publisher.frame(measured_epoch, id, frame(2));
+
+    let events = inbox.drain();
+    assert_eq!(events.len(), 1);
+    assert!(matches!(
+        &events[0],
+        BackendEvent::Frame { frame, .. } if frame.lease == 2
+    ));
 }
 
 fn frame(lease: u64) -> DecodedFrame<u64> {

@@ -128,6 +128,19 @@ where
             in_flight_high_water: state.in_flight_high_water,
         }
     }
+
+    /// Start a new observation epoch without invalidating reusable surfaces.
+    /// Occupancy is state, so the new high-water mark starts at the number of
+    /// leases already checked out at the acknowledged boundary.
+    pub(crate) fn begin_measurement_epoch(&self) {
+        let mut state = lock_unpoisoned(&self.shared);
+        let allocated = state.allocated.saturating_sub(state.reservations);
+        let in_flight = allocated.saturating_sub(state.idle.len());
+        state.allocations = 0;
+        state.reuses = 0;
+        state.backpressured_acquires = 0;
+        state.in_flight_high_water = in_flight;
+    }
 }
 
 impl<K, V> SurfaceReservation<K, V> {

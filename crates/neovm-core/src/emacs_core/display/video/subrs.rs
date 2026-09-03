@@ -44,4 +44,9 @@ crate::emacs_core::subr::define_subrs! {
         NativeFn::ContextVec(diagnostics),
         SubrArity::new(0, Some(1)),
     ),
+    SubrSpec::new(
+        "neomacs-video-begin-measurement-epoch",
+        NativeFn::ContextVec(begin_measurement_epoch),
+        SubrArity::new(0, Some(0)),
+    ),
 }

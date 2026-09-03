@@ -119,6 +119,7 @@ enum OutputGenerationObservation {
 
 #[derive(Debug, Default)]
 struct SessionCounters {
+    decoder: Option<crate::VideoDecoderIdentity>,
     frame_path: Option<VideoFramePath>,
     frame_format: Option<VideoFrameFormat>,
     colorimetry: Option<crate::VideoColorimetry>,
@@ -129,6 +130,22 @@ struct SessionCounters {
     backpressured_frames: u64,
     output_reconfigurations: u64,
     import_counts: VideoImportCounts,
+}
+
+impl SessionCounters {
+    fn begin_measurement_epoch(&mut self) {
+        let decoder = self.decoder.take();
+        let frame_path = self.frame_path;
+        let frame_format = self.frame_format;
+        let colorimetry = self.colorimetry;
+        *self = Self {
+            decoder,
+            frame_path,
+            frame_format,
+            colorimetry,
+            ..Self::default()
+        };
+    }
 }
 
 impl SessionCounters {
@@ -295,10 +312,17 @@ impl VideoSystem {
 
     pub fn diagnostics(&self) -> VideoDiagnostics {
         VideoDiagnostics {
+            renderer: None,
             sessions: self.inner.session_diagnostics(),
             surface_pools: self.inner.surface_pool_diagnostics(),
             gpu_memory_bytes: self.gpu.allocated_bytes(),
         }
+    }
+
+    /// Begin one coherent diagnostics epoch while preserving playback and
+    /// native surface residency.
+    pub fn begin_measurement_epoch(&mut self) {
+        self.inner.begin_measurement_epoch();
     }
 
     /// Open a native session from GPU-independent playback intent.
@@ -367,6 +391,18 @@ pub(crate) struct VideoSystemImpl<P: Platform> {
 }
 
 impl<P: Platform> VideoSystemImpl<P> {
+    pub(crate) fn begin_measurement_epoch(&mut self) {
+        for session in self.sessions.values_mut() {
+            // A decoder frame may already have crossed the platform bridge
+            // into the common presentation mailbox. It belongs to warmup and
+            // must not become the first measured import.
+            session.mailbox.clear();
+            session.diagnostics.begin_measurement_epoch();
+        }
+        self.decoder.begin_measurement_epoch();
+        self.importer.begin_measurement_epoch();
+    }
+
     pub(crate) fn new(
         decoder: P::Decoder,
         importer: P::Importer,
@@ -923,6 +959,7 @@ impl<P: Platform> VideoSystemImpl<P> {
             .map(|(&id, session)| VideoSessionDiagnostics {
                 id,
                 backend: P::BACKEND,
+                decoder: session.diagnostics.decoder.clone(),
                 state: session.state,
                 frame_path: session.diagnostics.frame_path,
                 frame_format: session.diagnostics.frame_format,
@@ -996,6 +1033,10 @@ impl<P: Platform> VideoSystemImpl<P> {
                 };
                 session.clock = Some(PlaybackClock::new(now, clock_state));
                 Some(VideoEvent::Ready { id, width, height })
+            }
+            BackendEvent::DecoderSelected { id, decoder } => {
+                self.sessions.get_mut(&id)?.diagnostics.decoder = Some(decoder);
+                None
             }
             BackendEvent::Frame { id, frame } => {
                 let session = self.sessions.get_mut(&id)?;

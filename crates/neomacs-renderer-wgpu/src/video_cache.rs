@@ -147,6 +147,13 @@ fn percentile(sorted: &[u64], percentile: usize) -> Option<u64> {
 }
 
 impl VideoPresentationTracker {
+    fn begin_measurement_epoch(&mut self) {
+        self.counts.clear();
+        self.timing.clear();
+        self.gpu_timing.clear();
+        self.surface = SurfacePresentationState::Inactive;
+    }
+
     fn set_gpu_timing_status(&mut self, status: neomacs_video::VideoGpuTimingStatus) {
         self.gpu_timing_status = status;
     }
@@ -434,6 +441,7 @@ impl VideoSystemState {
         match self {
             Self::Ready(system) => Ok(system.diagnostics()),
             Self::Deferred(_) => Ok(VideoDiagnostics {
+                renderer: None,
                 sessions: Vec::new(),
                 surface_pools: Vec::new(),
                 gpu_memory_bytes: 0,
@@ -761,7 +769,20 @@ impl VideoCache {
         ids: impl IntoIterator<Item = VideoId>,
         duration_us: u64,
     ) {
-        self.presentation.record_gpu_frame_time(ids, duration_us);
+        let active_ids: Vec<_> = ids
+            .into_iter()
+            .filter(|id| self.videos.contains_key(id))
+            .collect();
+        self.presentation
+            .record_gpu_frame_time(active_ids, duration_us);
+    }
+
+    /// Reset measurement-only counters at one render-thread-acknowledged
+    /// boundary. Playback state and resident pooled surfaces remain intact.
+    pub fn begin_measurement_epoch(&mut self) -> Result<(), String> {
+        self.system.get_or_initialize()?.begin_measurement_epoch();
+        self.presentation.begin_measurement_epoch();
+        Ok(())
     }
 
     pub fn play(&mut self, id: u32) {
@@ -1163,6 +1184,7 @@ impl VideoCache {
         let mut diagnostics = match self.system.diagnostics() {
             Ok(diagnostics) => diagnostics,
             Err(_) if !self.terminal_diagnostics.is_empty() => VideoDiagnostics {
+                renderer: None,
                 sessions: Vec::new(),
                 surface_pools: Vec::new(),
                 gpu_memory_bytes: 0,
@@ -1417,6 +1439,7 @@ impl VideoCache {
             .or_insert_with(|| neomacs_video::VideoSessionDiagnostics {
                 id,
                 backend: VideoSystem::BACKEND,
+                decoder: None,
                 state: VideoSessionState::Failed,
                 frame_path: None,
                 frame_format: None,

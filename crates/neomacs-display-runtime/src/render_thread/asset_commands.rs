@@ -9,6 +9,46 @@ fn clear_image_terminals(shared: &super::SharedImageRenderState, image: ImageId)
 }
 
 impl RenderApp {
+    #[cfg(feature = "video")]
+    fn video_renderer_identity(&self) -> Option<neomacs_video::VideoRendererIdentity> {
+        let gpu = self.gpu.as_ref()?;
+        let info = gpu.adapter.get_info();
+        let graphics_backend = match info.backend {
+            wgpu::Backend::Vulkan => neomacs_video::VideoGraphicsBackend::Vulkan,
+            wgpu::Backend::Metal => neomacs_video::VideoGraphicsBackend::Metal,
+            wgpu::Backend::Dx12 => neomacs_video::VideoGraphicsBackend::Dx12,
+            wgpu::Backend::Gl => neomacs_video::VideoGraphicsBackend::Gl,
+            wgpu::Backend::BrowserWebGpu => neomacs_video::VideoGraphicsBackend::BrowserWebGpu,
+            _ => neomacs_video::VideoGraphicsBackend::Other,
+        };
+        let drm_render_node = std::cfg_select! {
+            target_os = "linux" => {
+                neomacs_video::linux_render_device_numbers(&gpu.device)
+                    .and_then(|(major, minor)| {
+                        crate::backend::wgpu::render_node_from_device_number(major, minor)
+                    })
+                    .map(|path| path.to_string_lossy().into_owned())
+            }
+            _ => { None }
+        };
+        let display_refresh_hz = self
+            .frame_windows
+            .primary_window()
+            .map(Self::window_max_rate)
+            .map(std::num::NonZeroU16::get);
+        Some(neomacs_video::VideoRendererIdentity {
+            adapter_name: info.name,
+            vendor: info.vendor,
+            device: info.device,
+            device_type: format!("{:?}", info.device_type),
+            graphics_backend,
+            driver: info.driver,
+            driver_info: info.driver_info,
+            drm_render_node,
+            display_refresh_hz,
+        })
+    }
+
     // WebView command fields (button/state/modifiers/keycode/script/frame id) are
     // consumed only inside the `webview` cfg blocks below.
     #[cfg_attr(not(feature = "webview"), allow(unused_variables))]
@@ -226,12 +266,41 @@ impl RenderApp {
                 }
             }
             AssetCommand::Video(VideoSessionCommand::Diagnostics { reply }) => {
+                #[cfg(feature = "video")]
+                let renderer_identity = self.video_renderer_identity();
                 let result = std::cfg_select! {
                     feature = "video" => {
                         self.renderer
                             .as_ref()
                             .ok_or_else(|| "video renderer is not initialized".to_owned())
                             .and_then(|renderer| renderer.video_diagnostics())
+                            .map(|mut diagnostics| {
+                                diagnostics.renderer = renderer_identity;
+                                diagnostics
+                            })
+                    }
+                    _ => {
+                        Err("native video support is not compiled into this Neomacs build".to_owned())
+                    }
+                };
+                let _ = reply.send(result);
+            }
+            AssetCommand::Video(VideoSessionCommand::BeginMeasurementEpoch { reply }) => {
+                #[cfg(feature = "video")]
+                let renderer_identity = self.video_renderer_identity();
+                let result = std::cfg_select! {
+                    feature = "video" => {
+                        self.renderer
+                            .as_mut()
+                            .ok_or_else(|| "video renderer is not initialized".to_owned())
+                            .and_then(|renderer| {
+                                renderer.begin_video_measurement_epoch()?;
+                                renderer.video_diagnostics()
+                            })
+                            .map(|mut diagnostics| {
+                                diagnostics.renderer = renderer_identity;
+                                diagnostics
+                            })
                     }
                     _ => {
                         Err("native video support is not compiled into this Neomacs build".to_owned())

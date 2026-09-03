@@ -16,10 +16,11 @@ use neomacs_display_protocol::VideoId;
 use neomacs_video_model::{
     BiPlanarVideoFormat, InitialPlayback, LoopMode, PackedVideoFormat, PlaybackAction,
     VideoChromaLocation, VideoColorPrimaries, VideoColorRange, VideoColorimetry,
-    VideoCompositorImport, VideoDecodeBackend, VideoDecodeResidency, VideoDiagnostics,
-    VideoFrameFormat, VideoFramePath, VideoGpuTiming, VideoGpuTimingStatus, VideoImportCounts,
-    VideoMatrixCoefficients, VideoOpenRequest, VideoPresentationCounts, VideoPresentationPath,
-    VideoPresentationTiming, VideoSessionDiagnostics, VideoSessionState, VideoSource,
+    VideoCompositorImport, VideoDecodeBackend, VideoDecodeResidency, VideoDecoderIdentity,
+    VideoDecoderKind, VideoDiagnostics, VideoFrameFormat, VideoFramePath, VideoGpuTiming,
+    VideoGpuTimingStatus, VideoGraphicsBackend, VideoImportCounts, VideoMatrixCoefficients,
+    VideoOpenRequest, VideoPresentationCounts, VideoPresentationPath, VideoPresentationTiming,
+    VideoRendererIdentity, VideoSessionDiagnostics, VideoSessionState, VideoSource,
     VideoSurfacePoolDiagnostics, VideoSurfacePoolRole, VideoTransferCharacteristic,
 };
 use std::path::PathBuf;
@@ -283,7 +284,7 @@ fn diagnostic_symbol(name: &'static str) -> Value {
 
 fn decode_residency_to_lisp(value: VideoDecodeResidency) -> Value {
     diagnostic_symbol(match value {
-        VideoDecodeResidency::HardwareSharedPool => "hardware-shared-pool",
+        VideoDecodeResidency::HardwareSameDevice => "hardware-same-device",
         VideoDecodeResidency::HardwareUnverified => "hardware-unverified",
         VideoDecodeResidency::Software => "software",
         VideoDecodeResidency::Unknown => "unknown",
@@ -453,6 +454,53 @@ fn gpu_timing_to_lisp(timing: VideoGpuTiming) -> Value {
     plist.finish()
 }
 
+fn decoder_identity_to_lisp(decoder: VideoDecoderIdentity) -> Value {
+    let mut plist = RootedListBuilder::with_capacity(6);
+    plist.field("factory", Value::string(decoder.factory));
+    plist.field("plugin", Value::string(decoder.plugin));
+    plist.field(
+        "kind",
+        diagnostic_symbol(match decoder.kind {
+            VideoDecoderKind::Hardware => "hardware",
+            VideoDecoderKind::Software => "software",
+            VideoDecoderKind::Unknown => "unknown",
+        }),
+    );
+    plist.finish()
+}
+
+fn renderer_identity_to_lisp(renderer: VideoRendererIdentity) -> Value {
+    let mut plist = RootedListBuilder::with_capacity(18);
+    plist.field("adapter-name", Value::string(renderer.adapter_name));
+    plist.field("vendor", diagnostic_integer(renderer.vendor));
+    plist.field("device", diagnostic_integer(renderer.device));
+    plist.field("device-type", Value::string(renderer.device_type));
+    plist.field(
+        "graphics-backend",
+        diagnostic_symbol(match renderer.graphics_backend {
+            VideoGraphicsBackend::Vulkan => "vulkan",
+            VideoGraphicsBackend::Metal => "metal",
+            VideoGraphicsBackend::Dx12 => "dx12",
+            VideoGraphicsBackend::Gl => "gl",
+            VideoGraphicsBackend::BrowserWebGpu => "browser-webgpu",
+            VideoGraphicsBackend::Other => "other",
+        }),
+    );
+    plist.field("driver", Value::string(renderer.driver));
+    plist.field("driver-info", Value::string(renderer.driver_info));
+    plist.field(
+        "drm-render-node",
+        renderer.drm_render_node.map_or(Value::NIL, Value::string),
+    );
+    plist.field(
+        "display-refresh-hz",
+        renderer
+            .display_refresh_hz
+            .map_or(Value::NIL, diagnostic_integer),
+    );
+    plist.finish()
+}
+
 fn session_diagnostics_to_lisp(session: VideoSessionDiagnostics) -> Value {
     let mut plist = RootedListBuilder::with_capacity(36);
     plist.field("id", diagnostic_integer(session.id.get()));
@@ -464,6 +512,10 @@ fn session_diagnostics_to_lisp(session: VideoSessionDiagnostics) -> Value {
             VideoDecodeBackend::MediaFoundation => "media-foundation",
             VideoDecodeBackend::Unsupported => "unsupported",
         }),
+    );
+    plist.field(
+        "decoder",
+        session.decoder.map_or(Value::NIL, decoder_identity_to_lisp),
     );
     plist.field(
         "state",
@@ -561,6 +613,12 @@ fn surface_pool_diagnostics_to_lisp(pool: VideoSurfacePoolDiagnostics) -> Value 
 
 fn diagnostics_to_lisp(snapshot: VideoDiagnostics, filter: Option<VideoId>) -> Value {
     let mut plist = RootedListBuilder::with_capacity(6);
+    plist.field(
+        "renderer",
+        snapshot
+            .renderer
+            .map_or(Value::NIL, renderer_identity_to_lisp),
+    );
     let mut sessions = RootedListBuilder::with_capacity(snapshot.sessions.len());
     for session in snapshot
         .sessions
@@ -594,4 +652,17 @@ fn diagnostics(eval: &mut Context, args: Vec<Value>) -> EvalResult {
         .video_diagnostics()
         .map_err(video_error)?;
     Ok(diagnostics_to_lisp(snapshot, filter))
+}
+
+/// `(neomacs-video-begin-measurement-epoch)`.
+///
+/// Reset observation-only native-video counters without changing playback or
+/// releasing pooled GPU surfaces. Return the zero-point snapshot captured by
+/// the same acknowledged render-thread command, so no post-boundary frame can
+/// slip between reset and the baseline.
+fn begin_measurement_epoch(eval: &mut Context, _args: Vec<Value>) -> EvalResult {
+    let snapshot = display_host(eval, "neomacs-video-begin-measurement-epoch")?
+        .begin_video_measurement_epoch()
+        .map_err(video_error)?;
+    Ok(diagnostics_to_lisp(snapshot, None))
 }

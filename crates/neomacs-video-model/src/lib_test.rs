@@ -90,7 +90,7 @@ fn video_event_identity_is_remapped_without_rebuilding_its_payload() {
         VideoPresentationPath::WgpuComposited,
     );
     let current = VideoFramePath::new(
-        VideoDecodeResidency::HardwareSharedPool,
+        VideoDecodeResidency::HardwareSameDevice,
         VideoCompositorImport::BorrowedNativeSurface,
         VideoPresentationPath::WgpuComposited,
     );
@@ -119,6 +119,7 @@ fn diagnostic_identity_remapping_drops_stale_native_sessions() {
     let session = |id| VideoSessionDiagnostics {
         id,
         backend: VideoDecodeBackend::GStreamer,
+        decoder: None,
         state: VideoSessionState::Playing,
         frame_path: None,
         frame_format: None,
@@ -136,6 +137,7 @@ fn diagnostic_identity_remapping_drops_stale_native_sessions() {
         terminal_error: None,
     };
     let diagnostics = VideoDiagnostics {
+        renderer: None,
         sessions: vec![session(current_native), session(stale_native)],
         surface_pools: Vec::new(),
         gpu_memory_bytes: 4096,

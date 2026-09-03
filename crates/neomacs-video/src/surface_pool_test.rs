@@ -43,6 +43,30 @@ fn diagnostics_measure_allocation_reuse_backpressure_and_occupancy() {
 }
 
 #[test]
+fn measurement_epoch_resets_activity_but_preserves_live_pool_state() {
+    let pool = BoundedSurfacePool::new(1);
+    let lease = match pool.acquire("decoder-slot") {
+        SurfacePoolAcquire::Allocate(reservation) => reservation.fulfill(7),
+        SurfacePoolAcquire::Reused(_) | SurfacePoolAcquire::Backpressured => unreachable!(),
+    };
+    assert!(matches!(
+        pool.acquire("other-slot"),
+        SurfacePoolAcquire::Backpressured
+    ));
+
+    pool.begin_measurement_epoch();
+
+    let reset = pool.diagnostics(VideoSurfacePoolRole::CompositorImport);
+    assert_eq!(reset.allocated, 1);
+    assert_eq!(reset.in_flight, 1);
+    assert_eq!(reset.in_flight_high_water, 1);
+    assert_eq!(reset.allocations, 0);
+    assert_eq!(reset.reuses, 0);
+    assert_eq!(reset.backpressured_acquires, 0);
+    drop(lease);
+}
+
+#[test]
 fn a_checked_out_surface_backpressures_at_capacity_and_reuses_after_retirement() {
     let pool = BoundedSurfacePool::new(1);
     let lease = match pool.acquire((1920, 1080)) {

@@ -2092,6 +2092,28 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         }
     }
 
+    fn begin_video_measurement_epoch(
+        &self,
+    ) -> Result<neomacs_video_model::VideoDiagnostics, String> {
+        cfg_select! {
+            feature = "video" => {
+                let (reply, received) = crossbeam_channel::bounded(1);
+                self.send_render_command(
+                    RenderCommand::Asset(AssetCommand::Video(
+                        VideoSessionCommand::BeginMeasurementEpoch { reply },
+                    )),
+                    "failed to begin video measurement epoch",
+                )?;
+                received
+                    .recv_timeout(VIDEO_DIAGNOSTICS_REPLY_TIMEOUT)
+                    .map_err(|error| format!("video measurement epoch reply failed: {error}"))?
+            }
+            _ => {
+                Err("native video support is not compiled into this Neomacs build".to_owned())
+            }
+        }
+    }
+
     fn request_webkit(
         &self,
         request: WebKitResolveRequest,

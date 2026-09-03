@@ -250,6 +250,71 @@ fn presentation_tracker_aggregates_supported_gpu_pass_timings() {
 }
 
 #[test]
+fn measurement_epoch_discards_warmup_distributions() {
+    let id = VideoId::new(19);
+    let started = Instant::now();
+    let mut tracker = super::VideoPresentationTracker::default();
+    tracker.set_gpu_timing_status(neomacs_video::VideoGpuTimingStatus::Enabled);
+    for offset_ms in [0, 16, 116] {
+        tracker.begin_surface();
+        tracker.record_submitted([id]);
+        tracker.finish_presented_surface_at(started + Duration::from_millis(offset_ms));
+    }
+    tracker.record_gpu_frame_time([id], 9_000);
+
+    tracker.begin_measurement_epoch();
+    for offset_ms in [200, 216, 233] {
+        tracker.begin_surface();
+        tracker.record_submitted([id]);
+        tracker.finish_presented_surface_at(started + Duration::from_millis(offset_ms));
+    }
+    tracker.record_gpu_frame_time([id], 200);
+
+    let timing = tracker.timing(id);
+    assert_eq!(timing.interval_samples, 2);
+    assert_eq!(timing.interval_max_us, Some(17_000));
+    assert_eq!(timing.interval_p99_us, Some(17_000));
+    assert_eq!(tracker.gpu_timing(id).pass_max_us, Some(200));
+}
+
+#[test]
+fn delayed_gpu_completion_cannot_recreate_a_removed_video_entry() {
+    let active = VideoId::new(7);
+    let removed = VideoId::new(8);
+    let mut cache = VideoCache {
+        sampling: None,
+        channel_targets: None,
+        system: VideoSystemState::unavailable("test fixture"),
+        videos: HashMap::from([(
+            active,
+            CachedVideo {
+                id: active,
+                width: 1920,
+                height: 1080,
+                state: VideoState::Playing,
+                frame_count: 3,
+                failure: None,
+                native_id: None,
+                parked: None,
+            },
+        )]),
+        next_id: 9,
+        next_native_id: 1,
+        native_to_video: HashMap::new(),
+        accounting: Vec::new(),
+        gpu_accounting: VideoGpuAccounting::default(),
+        presentation: Default::default(),
+        terminal_diagnostics: HashMap::new(),
+        last_service: Default::default(),
+    };
+
+    cache.record_gpu_frame_time([active, removed], 500);
+
+    assert_eq!(cache.presentation.gpu_timing(active).pass_samples, 1);
+    assert_eq!(cache.presentation.gpu_timing(removed).pass_samples, 0);
+}
+
+#[test]
 fn reopening_stable_session_detaches_the_previous_native_incarnation() {
     let stable = VideoId::new(7);
     let previous_native = NativeVideoSessionId(VideoId::new(41));

@@ -873,6 +873,12 @@ impl DecoderBackend for WindowsDecoder {
                 .diagnostics(crate::VideoSurfacePoolRole::CompositorImport),
         )
     }
+
+    fn begin_measurement_epoch(&mut self) {
+        self.pending
+            .retain(|event| !event.is_frame_measurement());
+        self.capture.surfaces.begin_measurement_epoch();
+    }
 }
 
 fn configure_media_engine(

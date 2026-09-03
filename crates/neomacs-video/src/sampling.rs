@@ -270,38 +270,8 @@ impl GpuVideoContext {
 
     #[cfg(target_os = "linux")]
     pub(crate) fn linux_render_device(&self) -> Option<LinuxDrmDevice> {
-        use std::ffi::CStr;
-
-        use ash::vk;
-        use wgpu::hal::api::Vulkan;
-
-        unsafe {
-            self.device.as_hal::<Vulkan>().and_then(|hal| {
-                let instance = hal.shared_instance().raw_instance();
-                let physical_device = hal.raw_physical_device();
-                let supports_drm_identity = instance
-                    .enumerate_device_extension_properties(physical_device)
-                    .ok()?
-                    .iter()
-                    .any(|extension| {
-                        CStr::from_ptr(extension.extension_name.as_ptr())
-                            == ash::ext::physical_device_drm::NAME
-                    });
-                if !supports_drm_identity {
-                    return None;
-                }
-                let mut drm = vk::PhysicalDeviceDrmPropertiesEXT::default();
-                let mut properties = vk::PhysicalDeviceProperties2::default().push_next(&mut drm);
-                instance.get_physical_device_properties2(physical_device, &mut properties);
-                if drm.has_render == 0 {
-                    return None;
-                }
-                Some(LinuxDrmDevice {
-                    major: u32::try_from(drm.render_major).ok()?,
-                    minor: u32::try_from(drm.render_minor).ok()?,
-                })
-            })
-        }
+        let (major, minor) = linux_render_device_numbers(&self.device)?;
+        Some(LinuxDrmDevice { major, minor })
     }
 
     /// Keep native decoder leases alive through all GPU work submitted before
@@ -622,6 +592,45 @@ impl GpuVideoContext {
             },
         );
         Ok(self.wrap_texture(geometry, format, texture, ()))
+    }
+}
+
+/// Query the exact DRM render-device identity selected by wgpu's Vulkan
+/// adapter. The device numbers come from Vulkan's DRM properties extension,
+/// avoiding ambiguous vendor/device scans on identical multi-GPU systems.
+#[cfg(target_os = "linux")]
+pub fn linux_render_device_numbers(device: &wgpu::Device) -> Option<(u32, u32)> {
+    use std::ffi::CStr;
+
+    use ash::vk;
+    use wgpu::hal::api::Vulkan;
+
+    unsafe {
+        device.as_hal::<Vulkan>().and_then(|hal| {
+            let instance = hal.shared_instance().raw_instance();
+            let physical_device = hal.raw_physical_device();
+            let supports_drm_identity = instance
+                .enumerate_device_extension_properties(physical_device)
+                .ok()?
+                .iter()
+                .any(|extension| {
+                    CStr::from_ptr(extension.extension_name.as_ptr())
+                        == ash::ext::physical_device_drm::NAME
+                });
+            if !supports_drm_identity {
+                return None;
+            }
+            let mut drm = vk::PhysicalDeviceDrmPropertiesEXT::default();
+            let mut properties = vk::PhysicalDeviceProperties2::default().push_next(&mut drm);
+            instance.get_physical_device_properties2(physical_device, &mut properties);
+            if drm.has_render == 0 {
+                return None;
+            }
+            Some((
+                u32::try_from(drm.render_major).ok()?,
+                u32::try_from(drm.render_minor).ok()?,
+            ))
+        })
     }
 }
 

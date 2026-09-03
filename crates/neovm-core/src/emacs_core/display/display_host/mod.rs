@@ -422,6 +422,12 @@ pub trait DisplayHost {
     fn video_diagnostics(&self) -> Result<VideoDiagnostics, String> {
         Err("video diagnostics are unsupported by this display host".to_owned())
     }
+    /// Begin a coherent video diagnostics epoch and return only after the
+    /// render thread has reset every participating counter. Return the
+    /// zero-point snapshot captured by that same render-thread command.
+    fn begin_video_measurement_epoch(&self) -> Result<VideoDiagnostics, String> {
+        Err("video diagnostics are unsupported by this display host".to_owned())
+    }
     fn request_webkit(
         &self,
         _request: WebKitResolveRequest,

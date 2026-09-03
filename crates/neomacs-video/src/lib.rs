@@ -20,17 +20,20 @@ pub use model::{
     MissingVideoPlugin, MissingVideoPlugins, PackedVideoFormat, PixelAspectRatio, PixelRect,
     PlaybackAction, PlaybackEpoch, PlaybackRate, PresentationVisibility, VideoChromaLocation,
     VideoColorPrimaries, VideoColorRange, VideoColorimetry, VideoCommand, VideoCommandError,
-    VideoCompositorImport, VideoDecodeBackend, VideoDecodeResidency, VideoDiagnostics, VideoEvent,
-    VideoFrameFormat, VideoFrameLayoutError, VideoFramePath, VideoFrameReady, VideoGeometry,
-    VideoGpuTiming, VideoGpuTimingStatus, VideoImportCounts, VideoInitError, VideoInstallerHint,
+    VideoCompositorImport, VideoDecodeBackend, VideoDecodeResidency, VideoDecoderIdentity,
+    VideoDecoderKind, VideoDiagnostics, VideoEvent, VideoFrameFormat, VideoFrameLayoutError,
+    VideoFramePath, VideoFrameReady, VideoGeometry, VideoGpuTiming, VideoGpuTimingStatus,
+    VideoGraphicsBackend, VideoImportCounts, VideoInitError, VideoInstallerHint,
     VideoMatrixCoefficients, VideoModelError, VideoOpenRequest, VideoPlaneFormat,
     VideoPresentationCounts, VideoPresentationPath, VideoPresentationTiming, VideoRecoveryManifest,
-    VideoRotation, VideoSampleKind, VideoSamplingTransform, VideoServiceRequest,
-    VideoServiceResult, VideoServiceTiming, VideoSessionDiagnostics, VideoSessionRecovery,
-    VideoSessionState, VideoSource, VideoSurfacePoolDiagnostics, VideoSurfacePoolRole,
-    VideoTextureCoordinates, VideoTransferCharacteristic,
+    VideoRendererIdentity, VideoRotation, VideoSampleKind, VideoSamplingTransform,
+    VideoServiceRequest, VideoServiceResult, VideoServiceTiming, VideoSessionDiagnostics,
+    VideoSessionRecovery, VideoSessionState, VideoSource, VideoSurfacePoolDiagnostics,
+    VideoSurfacePoolRole, VideoTextureCoordinates, VideoTransferCharacteristic,
 };
 pub(crate) use sampling::GpuVideoFrame;
+#[cfg(target_os = "linux")]
+pub use sampling::linux_render_device_numbers;
 pub use sampling::{GpuGeneration, PreparedVideoDraw, PreparedVideoDraws, VideoSamplingResources};
 pub use system::{VideoSystem, VideoWake};
 

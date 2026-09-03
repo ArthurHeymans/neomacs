@@ -386,6 +386,13 @@ pub enum VideoSessionCommand {
     Diagnostics {
         reply: Sender<Result<VideoDiagnostics, String>>,
     },
+    /// Start a fresh observation epoch and acknowledge after every
+    /// renderer/native counter has crossed the same boundary. The returned
+    /// zero-point snapshot is captured in that same render-thread command, so
+    /// callers cannot accidentally subtract post-boundary work.
+    BeginMeasurementEpoch {
+        reply: Sender<Result<VideoDiagnostics, String>>,
+    },
 }
 
 /// Content source for a shader surface

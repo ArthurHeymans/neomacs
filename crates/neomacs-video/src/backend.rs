@@ -2,6 +2,8 @@ use neomacs_display_protocol::types::VideoId;
 #[cfg(target_os = "linux")]
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(target_os = "linux")]
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -89,6 +91,13 @@ pub(crate) enum BackendEvent<F> {
         height: u32,
         initial_state: VideoSessionState,
     },
+    /// Codec implementation selected by a backend that can expose it without
+    /// leaking a native handle. Backends that cannot prove this leave the
+    /// session identity absent rather than guessing from output residency.
+    DecoderSelected {
+        id: VideoId,
+        decoder: crate::VideoDecoderIdentity,
+    },
     Frame {
         id: VideoId,
         frame: DecodedFrame<F>,
@@ -129,6 +138,7 @@ impl<F> BackendEvent<F> {
     pub(crate) const fn id(&self) -> VideoId {
         match self {
             Self::Opened { id, .. }
+            | Self::DecoderSelected { id, .. }
             | Self::Frame { id, .. }
             | Self::StateChanged { id, .. }
             | Self::Looped { id, .. }
@@ -137,6 +147,11 @@ impl<F> BackendEvent<F> {
             #[cfg(any(target_os = "linux", test))]
             Self::FramesReplaced { id, .. } | Self::OutputReconfigured { id, .. } => *id,
         }
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    pub(crate) const fn is_frame_measurement(&self) -> bool {
+        matches!(self, Self::Frame { .. } | Self::FramesReplaced { .. })
     }
 }
 
@@ -179,12 +194,16 @@ pub(crate) trait DecoderBackend {
     fn surface_pool_diagnostics(&self) -> Option<crate::VideoSurfacePoolDiagnostics> {
         None
     }
+
+    /// Reset observation-only counters at an acknowledged benchmark boundary.
+    fn begin_measurement_epoch(&mut self) {}
 }
 
 #[cfg(target_os = "linux")]
 pub(crate) struct BackendPublisher<F> {
     events: Sender<BackendEvent<F>>,
     latest_frames: Arc<Mutex<HashMap<VideoId, PublishedFrameQueue<F>>>>,
+    measurement_epoch: Arc<AtomicU64>,
     wake: VideoWake,
 }
 
@@ -194,6 +213,7 @@ impl<F> Clone for BackendPublisher<F> {
         Self {
             events: self.events.clone(),
             latest_frames: Arc::clone(&self.latest_frames),
+            measurement_epoch: Arc::clone(&self.measurement_epoch),
             wake: self.wake.clone(),
         }
     }
@@ -203,7 +223,17 @@ impl<F> Clone for BackendPublisher<F> {
 pub(crate) struct BackendInbox<F> {
     events: Receiver<BackendEvent<F>>,
     latest_frames: Arc<Mutex<HashMap<VideoId, PublishedFrameQueue<F>>>>,
+    measurement_epoch: Arc<AtomicU64>,
 }
+
+/// Observation generation captured before a decoder begins pulling a frame.
+///
+/// Unlike playback epochs, this has no media meaning. It makes an acknowledged
+/// benchmark boundary reject work that began before the boundary but reached
+/// the cross-thread publisher afterward.
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct BackendMeasurementEpoch(u64);
 
 #[cfg(target_os = "linux")]
 struct PublishedFrameQueue<F> {
@@ -215,15 +245,18 @@ struct PublishedFrameQueue<F> {
 pub(crate) fn backend_bridge<F>(wake: VideoWake) -> (BackendPublisher<F>, BackendInbox<F>) {
     let (events, incoming) = crossbeam_channel::unbounded();
     let latest_frames = Arc::new(Mutex::new(HashMap::new()));
+    let measurement_epoch = Arc::new(AtomicU64::new(0));
     (
         BackendPublisher {
             events,
             latest_frames: Arc::clone(&latest_frames),
+            measurement_epoch: Arc::clone(&measurement_epoch),
             wake,
         },
         BackendInbox {
             events: incoming,
             latest_frames,
+            measurement_epoch,
         },
     )
 }
@@ -236,8 +269,20 @@ impl<F> BackendPublisher<F> {
         }
     }
 
-    pub(crate) fn frame(&self, id: VideoId, frame: DecodedFrame<F>) {
+    pub(crate) fn measurement_epoch(&self) -> BackendMeasurementEpoch {
+        BackendMeasurementEpoch(self.measurement_epoch.load(Ordering::Acquire))
+    }
+
+    pub(crate) fn frame(
+        &self,
+        epoch: BackendMeasurementEpoch,
+        id: VideoId,
+        frame: DecodedFrame<F>,
+    ) {
         let mut latest = lock_unpoisoned(&self.latest_frames);
+        if epoch.0 != self.measurement_epoch.load(Ordering::Acquire) {
+            return;
+        }
         let published = latest.entry(id).or_insert_with(|| PublishedFrameQueue {
             frames: PresentationFrameQueue::default(),
             replaced: 0,
@@ -271,6 +316,16 @@ impl<F> BackendInbox<F> {
 
     pub(crate) fn remove_frame(&self, id: VideoId) {
         lock_unpoisoned(&self.latest_frames).remove(&id);
+    }
+
+    /// Advance the accepted observation generation and drop frames published
+    /// before the boundary while retaining ordered lifecycle/failure events.
+    /// Holding the frame-map lock across both operations closes the race with
+    /// a producer publishing an old-generation frame.
+    pub(crate) fn begin_measurement_epoch(&self) {
+        let mut frames = lock_unpoisoned(&self.latest_frames);
+        self.measurement_epoch.fetch_add(1, Ordering::AcqRel);
+        frames.clear();
     }
 }
 
@@ -388,6 +443,9 @@ pub(crate) trait FrameImporter<F> {
     fn surface_pool_diagnostics(&self) -> Option<crate::VideoSurfacePoolDiagnostics> {
         None
     }
+
+    /// Reset observation-only counters without discarding reusable surfaces.
+    fn begin_measurement_epoch(&mut self) {}
 }
 
 pub(crate) trait Platform {

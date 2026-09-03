@@ -25,8 +25,9 @@ use crate::{
     MissingVideoPlugin, MissingVideoPlugins, PackedVideoFormat, PixelAspectRatio, PlaybackAction,
     PlaybackEpoch, VideoChromaLocation, VideoColorPrimaries, VideoColorRange, VideoColorimetry,
     VideoCommand, VideoCommandError, VideoCompositorImport, VideoDecodeResidency, VideoFrameFormat,
-    VideoGeometry, VideoInstallerHint, VideoMatrixCoefficients, VideoRotation, VideoSessionState,
-    VideoSource, VideoTransferCharacteristic, VideoWake,
+    VideoDecoderIdentity, VideoDecoderKind, VideoGeometry, VideoInstallerHint,
+    VideoMatrixCoefficients, VideoRotation, VideoSessionState, VideoSource,
+    VideoTransferCharacteristic, VideoWake,
 };
 
 use super::frame::{
@@ -278,6 +279,10 @@ impl DecoderBackend for GstreamerDecoder {
         }
         Ok(transition)
     }
+
+    fn begin_measurement_epoch(&mut self) {
+        self.incoming.begin_measurement_epoch();
+    }
 }
 
 fn request_linear_fallback(
@@ -417,6 +422,7 @@ fn run_worker_inner(
     let mut output_generation = DecoderOutputGeneration::INITIAL;
     let mut fallback_deadline = None;
     let mut fallback_announcement_pending = false;
+    let mut selected_decoder: Option<VideoDecoderIdentity> = None;
     while !closed {
         while let Ok(command) = commands.try_recv() {
             closed = apply_command(
@@ -523,6 +529,10 @@ fn run_worker_inner(
             );
         }
 
+        // Capture the observation generation before potentially blocking in
+        // GStreamer. The publisher rejects this work if an acknowledged
+        // measurement boundary crosses while the pull/decode is in flight.
+        let measurement_epoch = output.measurement_epoch();
         let sample = if need_preroll {
             appsink
                 .try_pull_preroll(gst::ClockTime::from_mseconds(10))
@@ -588,6 +598,14 @@ fn run_worker_inner(
                 });
                 fallback_announcement_pending = false;
             }
+            let decoder = match &selected_decoder {
+                Some(decoder) => decoder.clone(),
+                None => {
+                    let decoder = pipeline_decoder_identity(&pipeline)?;
+                    selected_decoder = Some(decoder.clone());
+                    decoder
+                }
+            };
             let Some(frame) = decode_sample(
                 sample,
                 shutting_down,
@@ -597,11 +615,16 @@ fn run_worker_inner(
                 import_policy,
                 renderer_drm_device,
                 pipeline_drm_identity(&pipeline),
+                decoder.kind,
             )?
             else {
                 continue;
             };
             if !announced {
+                output.event(BackendEvent::DecoderSelected {
+                    id,
+                    decoder: decoder.clone(),
+                });
                 output.event(BackendEvent::Opened {
                     id,
                     width: frame.geometry.display_width,
@@ -614,7 +637,7 @@ fn run_worker_inner(
                 });
                 announced = true;
             }
-            output.frame(id, frame);
+            output.frame(measurement_epoch, id, frame);
         }
         reject_incomplete_fallback_at_eos(reached_eos, fallback_deadline)?;
         if reached_eos {
@@ -952,6 +975,7 @@ fn decode_sample(
     import_policy: FrameImportPolicy,
     renderer_drm_device: Option<LinuxDrmDevice>,
     pipeline_drm_topology: PipelineDrmTopology,
+    decoder_kind: VideoDecoderKind,
 ) -> Result<Option<DecodedFrame<LinuxFrameLease>>, crate::VideoCommandError> {
     let caps = sample
         .caps()
@@ -973,6 +997,20 @@ fn decode_sample(
         let format = frame_format_from_fourcc(dmabuf.fourcc)?;
         let compositor_import =
             dma_buf_compositor_import(renderer_drm_device, pipeline_drm_topology)?;
+        let decode_residency = match (
+            decoder_kind,
+            renderer_drm_device,
+            pipeline_drm_topology.decoder,
+        ) {
+            (
+                VideoDecoderKind::Hardware,
+                Some(renderer),
+                PipelineDrmIdentity::Single(decoder),
+            ) if renderer == decoder => VideoDecodeResidency::HardwareSameDevice,
+            (VideoDecoderKind::Hardware, _, _) => VideoDecodeResidency::HardwareUnverified,
+            (VideoDecoderKind::Software, _, _) => VideoDecodeResidency::Software,
+            (VideoDecoderKind::Unknown, _, _) => VideoDecodeResidency::Unknown,
+        };
         if !import_policy.permits(compositor_import) {
             return Err(format!(
                 "decoded video requires {compositor_import:?}, forbidden by {import_policy:?}"
@@ -988,7 +1026,7 @@ fn decode_sample(
                 _sample: sample,
                 storage: LinuxFrameStorage::DmaBuf(surface),
             },
-            decode_residency: VideoDecodeResidency::Unknown,
+            decode_residency,
             timing,
             geometry,
             format,
@@ -1029,7 +1067,11 @@ fn decode_sample(
             _sample: sample,
             storage: LinuxFrameStorage::CpuPacked(storage),
         },
-        decode_residency: VideoDecodeResidency::Unknown,
+        decode_residency: match decoder_kind {
+            VideoDecoderKind::Hardware => VideoDecodeResidency::HardwareUnverified,
+            VideoDecoderKind::Software => VideoDecodeResidency::Software,
+            VideoDecoderKind::Unknown => VideoDecodeResidency::Unknown,
+        },
         timing,
         geometry,
         format,
@@ -1166,6 +1208,68 @@ struct PipelineDrmTopology {
     /// final DMA-BUF surface.
     surface_path: PipelineDrmIdentity,
     inspection_failed: bool,
+}
+
+fn decoder_kind_from_factory_class(class: &str) -> VideoDecoderKind {
+    let classes: Vec<_> = class.split('/').collect();
+    if classes.contains(&"Hardware") {
+        VideoDecoderKind::Hardware
+    } else if classes.contains(&"Decoder") && classes.contains(&"Video") {
+        VideoDecoderKind::Software
+    } else {
+        VideoDecoderKind::Unknown
+    }
+}
+
+/// Inspect the instantiated pipeline, not registry rank or a desired factory.
+/// Decodebin is free to choose, and only its concrete VideoDecoder child is
+/// evidence of what this session actually uses.
+fn pipeline_decoder_identity(pipeline: &gst::Element) -> Result<VideoDecoderIdentity, String> {
+    let bin = pipeline
+        .downcast_ref::<gst::Bin>()
+        .ok_or_else(|| "GStreamer playback element is not a bin".to_owned())?;
+    let mut elements = bin.iterate_recurse();
+    let mut selected = None;
+    loop {
+        match elements.next() {
+            Ok(Some(element)) if element.is::<gst_video::VideoDecoder>() => {
+                let factory = element.factory().ok_or_else(|| {
+                    format!("selected video decoder {} has no factory", element.name())
+                })?;
+                let identity = VideoDecoderIdentity {
+                    factory: factory.name().to_string(),
+                    plugin: factory
+                        .plugin_name()
+                        .map(|name| name.to_string())
+                        .unwrap_or_else(|| "unknown".to_owned()),
+                    kind: decoder_kind_from_factory_class(factory.klass()),
+                };
+                match &selected {
+                    None => selected = Some(identity),
+                    Some(previous) if previous == &identity => {}
+                    Some(previous) => {
+                        return Err(format!(
+                            "GStreamer selected multiple video decoders: {} and {}",
+                            previous.factory, identity.factory
+                        ));
+                    }
+                }
+            }
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                return selected.ok_or_else(|| {
+                    "GStreamer pipeline contains no selected video decoder".to_owned()
+                });
+            }
+            Err(gst::IteratorError::Error) => {
+                return Err("GStreamer decoder inspection failed".to_owned());
+            }
+            Err(gst::IteratorError::Resync) => {
+                selected = None;
+                elements.resync();
+            }
+        }
+    }
 }
 
 impl PipelineDrmTopology {

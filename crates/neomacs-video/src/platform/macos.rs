@@ -708,6 +708,11 @@ impl DecoderBackend for MacDecoder {
             .any(MacSession::needs_media_poll)
             .then_some(now + MAC_MEDIA_POLL_INTERVAL)
     }
+
+    fn begin_measurement_epoch(&mut self) {
+        self.pending
+            .retain(|event| !event.is_frame_measurement());
+    }
 }
 
 fn source_url(source: VideoSource) -> Result<Retained<NSURL>, String> {
@@ -1323,6 +1328,10 @@ impl FrameImporter<MacFrame> for MacImporter {
             self.surfaces
                 .diagnostics(crate::VideoSurfacePoolRole::CompositorImport),
         )
+    }
+
+    fn begin_measurement_epoch(&mut self) {
+        self.surfaces.begin_measurement_epoch();
     }
 }
 

@@ -1,6 +1,10 @@
 use std::sync::mpsc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use neomacs_display_protocol::VideoId;
 
@@ -8,6 +12,20 @@ const QUERY_COUNT: u32 = 2;
 const QUERY_BUFFER_BYTES: u64 = QUERY_COUNT as u64 * size_of::<u64>() as u64;
 const TIMER_POOL_SIZE: usize = 8;
 const GPU_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
+const GPU_WAIT_QUANTUM: Duration = Duration::from_millis(10);
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct MeasurementEpoch(u64);
+
+impl MeasurementEpoch {
+    fn next(self) -> Self {
+        Self(self.0.wrapping_add(1))
+    }
+
+    fn accepts(self, sample: &CompletedGpuFrameTiming) -> bool {
+        sample.epoch == self
+    }
+}
 
 struct TimerSlot {
     query_set: wgpu::QuerySet,
@@ -17,6 +35,7 @@ struct TimerSlot {
 
 pub(crate) struct PendingGpuFrameTiming {
     slot: TimerSlot,
+    epoch: MeasurementEpoch,
 }
 
 impl PendingGpuFrameTiming {
@@ -43,6 +62,7 @@ impl PendingGpuFrameTiming {
 pub(crate) struct CompletedGpuFrameTiming {
     pub(crate) video_ids: Vec<VideoId>,
     pub(crate) duration_us: u64,
+    epoch: MeasurementEpoch,
 }
 
 struct RetiredTimerSlot {
@@ -55,6 +75,7 @@ enum WorkerCommand {
         submission: wgpu::SubmissionIndex,
         slot: TimerSlot,
         video_ids: Vec<VideoId>,
+        epoch: MeasurementEpoch,
     },
     Shutdown,
 }
@@ -70,6 +91,8 @@ pub(crate) struct GpuFrameTimer {
     worker_tx: Option<mpsc::Sender<WorkerCommand>>,
     completed_rx: mpsc::Receiver<RetiredTimerSlot>,
     worker: Option<JoinHandle<()>>,
+    epoch: MeasurementEpoch,
+    cancelled: Arc<AtomicBool>,
 }
 
 impl GpuFrameTimer {
@@ -84,6 +107,7 @@ impl GpuFrameTimer {
 
     fn with_requested(device: &wgpu::Device, queue: &wgpu::Queue, requested: bool) -> Self {
         let (completed_tx, completed_rx) = mpsc::channel();
+        let cancelled = Arc::new(AtomicBool::new(false));
         if !requested {
             return Self {
                 status: neomacs_video::VideoGpuTimingStatus::Disabled,
@@ -91,6 +115,8 @@ impl GpuFrameTimer {
                 worker_tx: None,
                 completed_rx,
                 worker: None,
+                epoch: MeasurementEpoch::default(),
+                cancelled,
             };
         }
         if !device.features().contains(wgpu::Features::TIMESTAMP_QUERY) {
@@ -100,6 +126,8 @@ impl GpuFrameTimer {
                 worker_tx: None,
                 completed_rx,
                 worker: None,
+                epoch: MeasurementEpoch::default(),
+                cancelled,
             };
         }
 
@@ -130,14 +158,16 @@ impl GpuFrameTimer {
         let timestamp_period_ns = queue.get_timestamp_period();
         let device = device.clone();
         let (worker_tx, worker_rx) = mpsc::channel();
+        let worker_cancelled = Arc::clone(&cancelled);
         let worker = thread::Builder::new()
             .name("neomacs-gpu-frame-timing".to_owned())
             .spawn(move || {
-                while let Ok(command) = worker_rx.recv() {
+                while let Some(command) = receive_until_cancelled(&worker_rx, &worker_cancelled) {
                     let WorkerCommand::Read {
                         submission,
                         slot,
                         video_ids,
+                        epoch,
                     } = command
                     else {
                         break;
@@ -147,10 +177,12 @@ impl GpuFrameTimer {
                         submission,
                         &slot.readback,
                         timestamp_period_ns,
+                        &worker_cancelled,
                     )
                     .map(|duration_us| CompletedGpuFrameTiming {
                         video_ids,
                         duration_us,
+                        epoch,
                     });
                     if completed_tx
                         .send(RetiredTimerSlot { slot, sample })
@@ -168,6 +200,8 @@ impl GpuFrameTimer {
             worker_tx: Some(worker_tx),
             completed_rx,
             worker: Some(worker),
+            epoch: MeasurementEpoch::default(),
+            cancelled,
         }
     }
 
@@ -176,9 +210,10 @@ impl GpuFrameTimer {
     }
 
     pub(crate) fn begin(&mut self) -> Option<PendingGpuFrameTiming> {
-        self.available
-            .pop()
-            .map(|slot| PendingGpuFrameTiming { slot })
+        self.available.pop().map(|slot| PendingGpuFrameTiming {
+            slot,
+            epoch: self.epoch,
+        })
     }
 
     pub(crate) fn submit(
@@ -195,6 +230,7 @@ impl GpuFrameTimer {
             submission,
             slot: pending.slot,
             video_ids,
+            epoch: pending.epoch,
         };
         if let Err(error) = worker_tx.send(command) {
             if let WorkerCommand::Read { slot, .. } = error.0 {
@@ -205,8 +241,17 @@ impl GpuFrameTimer {
 
     pub(crate) fn drain(&mut self) -> Vec<CompletedGpuFrameTiming> {
         let mut samples = Vec::new();
-        self.reclaim_completed(|sample| samples.push(sample));
+        let epoch = self.epoch;
+        self.reclaim_completed(|sample| {
+            if epoch.accepts(&sample) {
+                samples.push(sample);
+            }
+        });
         samples
+    }
+
+    pub(crate) fn begin_measurement_epoch(&mut self) {
+        self.epoch = self.epoch.next();
     }
 
     fn reclaim_completed(&mut self, mut observe: impl FnMut(CompletedGpuFrameTiming)) {
@@ -221,6 +266,7 @@ impl GpuFrameTimer {
 
 impl Drop for GpuFrameTimer {
     fn drop(&mut self) {
+        self.cancelled.store(true, Ordering::Release);
         if let Some(worker_tx) = self.worker_tx.take() {
             let _ = worker_tx.send(WorkerCommand::Shutdown);
         }
@@ -237,20 +283,34 @@ fn read_timestamp_sample(
     submission: wgpu::SubmissionIndex,
     buffer: &wgpu::Buffer,
     timestamp_period_ns: f32,
+    cancelled: &AtomicBool,
 ) -> Option<u64> {
     let (mapped_tx, mapped_rx) = mpsc::sync_channel(1);
     let slice = buffer.slice(..);
     slice.map_async(wgpu::MapMode::Read, move |result| {
         let _ = mapped_tx.send(result);
     });
-    if device
-        .poll(wgpu::PollType::Wait {
-            submission_index: Some(submission),
-            timeout: Some(GPU_WAIT_TIMEOUT),
+    let deadline = Instant::now() + GPU_WAIT_TIMEOUT;
+    let submitted = wait_until(deadline, cancelled, |quantum| {
+        match device.poll(wgpu::PollType::Wait {
+            submission_index: Some(submission.clone()),
+            timeout: Some(quantum),
+        }) {
+            Ok(_) => WaitProgress::Ready(()),
+            Err(wgpu::PollError::Timeout) => WaitProgress::Pending,
+            Err(wgpu::PollError::WrongSubmissionIndex(_, _)) => WaitProgress::Failed,
+        }
+    });
+    let mapped = submitted.and_then(|()| {
+        wait_until(deadline, cancelled, |quantum| {
+            match mapped_rx.recv_timeout(quantum) {
+                Ok(Ok(())) => WaitProgress::Ready(()),
+                Ok(Err(_)) | Err(mpsc::RecvTimeoutError::Disconnected) => WaitProgress::Failed,
+                Err(mpsc::RecvTimeoutError::Timeout) => WaitProgress::Pending,
+            }
         })
-        .is_err()
-        || mapped_rx.recv_timeout(GPU_WAIT_TIMEOUT).ok()?.is_err()
-    {
+    });
+    if mapped.is_none() {
         buffer.unmap();
         return None;
     }
@@ -263,6 +323,36 @@ fn read_timestamp_sample(
     drop(mapped);
     buffer.unmap();
     duration_us
+}
+
+enum WaitProgress<T> {
+    Ready(T),
+    Pending,
+    Failed,
+}
+
+fn wait_until<T>(
+    deadline: Instant,
+    cancelled: &AtomicBool,
+    mut wait_once: impl FnMut(Duration) -> WaitProgress<T>,
+) -> Option<T> {
+    loop {
+        if cancelled.load(Ordering::Acquire) {
+            return None;
+        }
+        let remaining = deadline.checked_duration_since(Instant::now())?;
+        let quantum = remaining.min(GPU_WAIT_QUANTUM);
+        match wait_once(quantum) {
+            WaitProgress::Ready(value) => return Some(value),
+            WaitProgress::Pending => {}
+            WaitProgress::Failed => return None,
+        }
+    }
+}
+
+fn receive_until_cancelled<T>(receiver: &mpsc::Receiver<T>, cancelled: &AtomicBool) -> Option<T> {
+    let value = receiver.recv().ok()?;
+    (!cancelled.load(Ordering::Acquire)).then_some(value)
 }
 
 fn timestamp_delta_us(start: u64, end: u64, timestamp_period_ns: f32) -> Option<u64> {

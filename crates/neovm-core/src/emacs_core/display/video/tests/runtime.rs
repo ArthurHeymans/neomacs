@@ -50,12 +50,14 @@ impl DisplayHost for RecordingVideoDisplayHost {
 
     fn video_diagnostics(&self) -> Result<VideoDiagnostics, String> {
         Ok(VideoDiagnostics {
+            renderer: None,
             sessions: vec![VideoSessionDiagnostics {
                 id: STUB_VIDEO_ID,
                 backend: VideoDecodeBackend::GStreamer,
+                decoder: None,
                 state: VideoSessionState::Playing,
                 frame_path: Some(VideoFramePath::new(
-                    VideoDecodeResidency::HardwareSharedPool,
+                    VideoDecodeResidency::HardwareSameDevice,
                     VideoCompositorImport::BorrowedNativeSurface,
                     VideoPresentationPath::WgpuComposited,
                 )),
@@ -107,6 +109,10 @@ impl DisplayHost for RecordingVideoDisplayHost {
             gpu_memory_bytes: 4096,
         })
     }
+
+    fn begin_video_measurement_epoch(&self) -> Result<VideoDiagnostics, String> {
+        self.video_diagnostics()
+    }
 }
 
 fn video_context() -> (Context, RecordingVideoDisplayHost) {
@@ -134,11 +140,27 @@ fn advertised_video_session_functions_are_bound() {
                      (fboundp 'neomacs-video-stop)
                      (fboundp 'neomacs-video-set-loop)
                      (fboundp 'neomacs-video-destroy)
-                     (fboundp 'neomacs-video-diagnostics))"#,
+                     (fboundp 'neomacs-video-diagnostics)
+                     (fboundp 'neomacs-video-begin-measurement-epoch))"#,
         )
         .expect("video function probe should evaluate");
 
     assert!(available.is_truthy());
+}
+
+#[test]
+fn measurement_boundary_returns_its_coherent_baseline_snapshot() {
+    crate::test_utils::init_test_tracing();
+    let (mut ctx, _) = video_context();
+
+    let decoded = eval(
+        &mut ctx,
+        r#"(plist-get
+             (car (plist-get (neomacs-video-begin-measurement-epoch) :sessions))
+             :decoded-frames)"#,
+    );
+
+    assert_eq!(decoded.as_int(), Some(9));
 }
 
 #[test]
@@ -186,7 +208,7 @@ fn diagnostics_reports_the_observed_end_to_end_path_and_pool_pressure() {
             .as_lisp_string()
             .and_then(|value| value.as_utf8_str()),
         Some(
-            "(42 gstreamer playing hardware-shared-pool borrowed-native-surface \
+            "(42 gstreamer playing hardware-same-device borrowed-native-surface \
              wgpu-composited nv12 9 4 3 2 20000 97 nil 4096 compositor-import 64 3 2 1)"
         )
     );

@@ -313,6 +313,14 @@ impl WgpuRenderer {
         self.caches.video.diagnostics()
     }
 
+    /// Acknowledge a new native-video diagnostics measurement epoch.
+    #[cfg(feature = "video")]
+    pub fn begin_video_measurement_epoch(&mut self) -> Result<(), String> {
+        self.caches.video.begin_measurement_epoch()?;
+        self.gpu_frame_timer.begin_measurement_epoch();
+        Ok(())
+    }
+
     /// Begin evidence collection for one swapchain-bound render transaction.
     #[cfg(feature = "video")]
     pub fn begin_video_surface_render(&mut self) {

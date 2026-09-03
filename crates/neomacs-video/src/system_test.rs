@@ -517,6 +517,7 @@ fn service_preserves_the_next_future_frame_then_imports_the_latest_due_frame() {
         vec![super::VideoSessionDiagnostics {
             id,
             backend: super::VideoDecodeBackend::GStreamer,
+            decoder: None,
             state: VideoSessionState::Playing,
             frame_path: Some(frame_path),
             frame_format: Some(VideoFrameFormat::Packed(PackedVideoFormat::Rgba8)),
@@ -1304,6 +1305,40 @@ fn seek_discards_both_queued_frames_from_the_previous_epoch() {
 
     assert!(after_seek.ready_frames.is_empty());
     assert_eq!(system.sampled(id), None);
+}
+
+#[test]
+fn measurement_boundary_discards_a_frame_already_in_the_common_mailbox() {
+    let id = VideoId::new(95);
+    let (mut system, control) = fake_system();
+    system
+        .command(VideoCommand::Open {
+            id,
+            source: VideoSource::File("movie.mp4".into()),
+            initial_playback: InitialPlayback::Playing,
+            loop_mode: LoopMode::Off,
+        })
+        .unwrap();
+    let now = Instant::now();
+    control.publish(BackendEvent::Opened {
+        id,
+        width: 1,
+        height: 1,
+        initial_state: VideoSessionState::Playing,
+    });
+    system.service(now);
+    control.publish(fake_frame_with_duration(id, 10, 1_000, 10_000));
+
+    let queued = system.service(now);
+    assert!(queued.ready_frames.is_empty());
+    system.begin_measurement_epoch();
+
+    let after_boundary = system.service(now + Duration::from_nanos(2_000));
+    assert!(after_boundary.ready_frames.is_empty());
+    assert_eq!(system.sampled(id), None);
+    let diagnostics = system.session_diagnostics();
+    assert_eq!(diagnostics[0].decoded_frames, 0);
+    assert_eq!(diagnostics[0].imported_frames, 0);
 }
 
 #[test]

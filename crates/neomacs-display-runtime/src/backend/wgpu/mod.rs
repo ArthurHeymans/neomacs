@@ -39,7 +39,4 @@ pub use neomacs_renderer_wgpu::{CachedWebView, WgpuWebViewCache};
 mod drm_device;
 
 #[cfg(target_os = "linux")]
-pub use drm_device::{
-    DrmDeviceInfo, find_drm_render_nodes, find_render_node_for_adapter,
-    get_render_node_from_adapter_info,
-};
+pub use drm_device::render_node_from_device_number;

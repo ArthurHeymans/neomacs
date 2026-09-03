@@ -160,4 +160,8 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
                 .diagnostics(crate::VideoSurfacePoolRole::CompositorImport),
         )
     }
+
+    fn begin_measurement_epoch(&mut self) {
+        self.imported.begin_measurement_epoch();
+    }
 }
