@@ -26,6 +26,7 @@
 
 mod support;
 use neomacs_tui_tests::*;
+use std::fs;
 use std::time::Duration;
 use support::*;
 
@@ -247,29 +248,28 @@ fn keyboard_quit_interrupts_blocking_sleep_for() {
 /// [`accept_process_output_drains_while_command_input_pending`].
 ///
 /// It reproduces the jsonrpc-request shape that hung pre-fix: a child writes a
-/// full reply after a short delay, a filter inserts that reply (plus a sentinel
-/// marker) into `*scratch*`, and a *synchronous* `accept-process-output` loop
-/// blocks until the marker lands (with a generous self-deadline so a starved
-/// neomacs blocks long past the test's read window rather than returning
-/// early).  The test makes command input pending *during* this loop by typing
-/// ahead, so the process fd is readable while keyboard input also waits —
-/// exactly the starvation window fixed in 557701a3e.  Pre-fix neomacs
-/// early-returned on the pending command input before draining the ready fd, so
-/// the filter never ran and the marker never appeared.
-const APO_DRAIN_FORM: &str = concat!(
-    "(let ((p (make-process :name \"apo-probe\"",
-    " :command (list \"sh\" \"-c\" \"sleep 0.5; printf APO-PAYLOAD\")",
-    " :connection-type 'pipe",
-    " :filter (lambda (_p s) (with-current-buffer \"*scratch*\"",
-    " (goto-char (point-max)) (insert s)",
-    " (when (string-search \"APO-PAYLOAD\" s) (insert \" APO-DRAIN-DONE\"))))))",
-    " (d (+ (float-time) 20.0)))",
-    " (while (and (process-live-p p)",
-    " (not (with-current-buffer \"*scratch*\"",
-    " (save-excursion (goto-char (point-min)) (search-forward \"APO-DRAIN-DONE\" nil t))))",
-    " (< (float-time) d))",
-    " (accept-process-output p 0.1)))",
-);
+/// full reply after the harness opens a filesystem gate, a filter inserts that
+/// reply (plus a sentinel marker) into `*scratch*`, and a *synchronous*
+/// `accept-process-output` loop blocks until the marker lands (with a generous
+/// self-deadline so a starved neomacs blocks long past the test's read window
+/// rather than returning early).  The explicit gate proves command input is
+/// pending before the process fd can become readable, independent of host load
+/// and evaluator startup speed.  Pre-fix neomacs early-returned on the pending
+/// command input before draining the ready fd, so the filter never ran and the
+/// marker never appeared.
+const APO_DRAIN_FORM: &str = r##"(let ((p (make-process :name "apo-probe"
+ :command (list "sh" "-c"
+                "while [ ! -e \"$HOME/.neomacs-apo-release\" ]; do sleep 0.01; done; printf APO-PAYLOAD")
+ :connection-type 'pipe
+ :filter (lambda (_p s) (with-current-buffer "*scratch*"
+ (goto-char (point-max)) (insert s)
+ (when (string-search "APO-PAYLOAD" s) (insert " APO-DRAIN-DONE"))))))
+ (d (+ (float-time) 20.0)))
+ (while (and (process-live-p p)
+ (not (with-current-buffer "*scratch*"
+ (save-excursion (goto-char (point-min)) (search-forward "APO-DRAIN-DONE" nil t))))
+ (< (float-time) d))
+ (accept-process-output p 0.1)))"##;
 
 /// Type-ahead bytes sent *while* the synchronous `accept-process-output` loop
 /// is running, so command input is pending the whole time the process fd
@@ -289,11 +289,11 @@ const APO_TYPEAHEAD: &[u8] = b"apotypeahead";
 /// reply waiting.
 ///
 /// Reproduction:
-///   1. `M-:` evaluate [`APO_DRAIN_FORM`] in both engines — it starts a child
-///      that replies after a 0.5 s delay and *synchronously* waits for it.
-///   2. Immediately type ahead ([`APO_TYPEAHEAD`]) so command input is pending
-///      while the wait loop runs; the process fd becomes readable (after the
-///      delay) *while* keyboard input also waits — the starvation window.
+///   1. `M-:` evaluate [`APO_DRAIN_FORM`] in both engines — it starts a gated
+///      child and *synchronously* waits for it.
+///   2. Type ahead ([`APO_TYPEAHEAD`]) while the child cannot write, then open
+///      each child's gate.  The process fd therefore becomes readable only
+///      after keyboard input is known to be pending — the starvation window.
 ///   3. Assert the sentinel `APO-DRAIN-DONE` (inserted only after the payload
 ///      is drained by the filter) appears on BOTH engines.
 ///
@@ -312,21 +312,22 @@ fn accept_process_output_drains_while_command_input_pending() {
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(8), prompt_ready);
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
 
-    gnu.send(APO_DRAIN_FORM.as_bytes());
-    neo.send(APO_DRAIN_FORM.as_bytes());
+    gnu.paste(APO_DRAIN_FORM);
+    neo.paste(APO_DRAIN_FORM);
     // RET submits the eval; the synchronous wait loop starts running now.
     send_both(&mut gnu, &mut neo, "RET");
 
     // Let RET be consumed and the wait loop start spinning while the child is
-    // still in its 0.5 s sleep (its output is NOT yet readable).  Then type
-    // ahead so command input is pending *before* the process fd becomes
-    // readable — and stays pending for the whole remaining loop.  When the
-    // child finally writes, the fd is readable while keyboard input also waits:
-    // the exact starvation window.  Pre-fix neomacs early-returns on the
-    // pending input and never drains the fd.
+    // held behind the filesystem gate (its output cannot yet be readable).
+    // Then type ahead and only afterwards release both children.  This ordering
+    // is a test invariant, rather than a race against a fixed-duration sleep.
     read_both(&mut gnu, &mut neo, Duration::from_millis(200));
     gnu.send(APO_TYPEAHEAD);
     neo.send(APO_TYPEAHEAD);
+    fs::write(gnu.home_dir().join(".neomacs-apo-release"), b"release")
+        .expect("release GNU accept-process-output probe");
+    fs::write(neo.home_dir().join(".neomacs-apo-release"), b"release")
+        .expect("release Neomacs accept-process-output probe");
 
     // The marker is inserted only after the payload is drained by the filter.
     let drained = |grid: &[String]| grid.iter().any(|row| row.contains("APO-DRAIN-DONE"));
