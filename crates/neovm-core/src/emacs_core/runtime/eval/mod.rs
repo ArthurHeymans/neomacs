@@ -11508,8 +11508,12 @@ impl Context {
             }
             return Ok(());
         }
+        // Refresh the cached limit by SYMBOL, not by name: `symbol_value`
+        // interns its `&str` on every call, and this runs whenever the depth
+        // passes the cached limit -- which is every entry once Lisp raises
+        // `max-lisp-eval-depth`, not the rare event the shape suggests.
         if self.depth > self.max_depth
-            && let Some(v) = self.obarray.symbol_value("max-lisp-eval-depth")
+            && let Some(v) = self.obarray.symbol_value_id(max_lisp_eval_depth_symbol())
             && let Some(n) = v.as_fixnum()
         {
             let new_max = n.max(100) as usize;
