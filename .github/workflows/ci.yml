@@ -172,7 +172,7 @@ jobs:
           cache-key: ci-check-${{ matrix.label }}
           cache-shared-key: ${{ matrix.label }}-dev
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-          install-nextest: ${{ matrix.label == 'linux-x86_64' || matrix.label == 'macos-aarch64' || matrix.label == 'windows-msvc-x86_64' }}
+          install-nextest: ${{ matrix.label == 'linux-x86_64' || matrix.label == 'windows-msvc-x86_64' }}
 
       - name: cargo check workspace (Unix)
         if: runner.os != 'Windows'
@@ -191,17 +191,6 @@ jobs:
           cargo nextest run -p neomacs-layout-engine
           font_backend::windows::tests
 
-      # These tests must execute on the host OS: cross-compilation cannot
-      # exercise inotify, kqueue, or ReadDirectoryChangesW.  Keep the filter
-      # on the neovm-core library so this adds one focused native contract to
-      # the existing platform build instead of linking every integration test.
-      - name: Test native file notifications
-        if: matrix.label == 'linux-x86_64' || matrix.label == 'macos-aarch64' || matrix.label == 'windows-msvc-x86_64'
-        shell: bash
-        run: >-
-          cargo nextest run -p neovm-core --lib
-          -E 'test(file_notify)'
-
       - name: cargo check minimal capability build
         if: matrix.label == 'linux-x86_64'
         run: cargo check -p neomacs --no-default-features
@@ -211,6 +200,45 @@ jobs:
         run: >-
           cargo nextest run -p neovm-core --no-default-features
           -E 'test(disabled_build_exposes_only_gnu_capability_probes)'
+
+  # Cross-compilation cannot exercise inotify, kqueue, or
+  # ReadDirectoryChangesW.  Keep this independent from the workspace check so
+  # an unrelated platform-only crate failure cannot skip the native runtime
+  # contract, and build only neovm-core's library test binary.
+  native-file-notify:
+    name: native file notifications (${{ matrix.label }})
+    if: github.event_name != 'schedule'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            label: linux-x86_64
+          - runner: macos-latest
+            label: macos-aarch64
+          - runner: windows-latest
+            label: windows-msvc-x86_64
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+    steps:
+      - *checkout
+
+      - name: Set up Rust tooling
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: ci-file-notify-${{ matrix.label }}
+          cache-shared-key: ${{ matrix.label }}-dev
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+          install-nextest: "true"
+
+      - name: Test native file notifications
+        shell: bash
+        run: >-
+          cargo nextest run -p neovm-core --lib
+          -E 'test(file_notify)'
 
   linux-no-gstreamer-startup:
     name: startup without GStreamer (linux x86_64)
