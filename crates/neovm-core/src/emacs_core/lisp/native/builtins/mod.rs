@@ -641,6 +641,10 @@ mod tests;
 mod replace_region_contents_test;
 
 #[cfg(test)]
+#[path = "tests/obarray_order.rs"]
+mod obarray_order_test;
+
+#[cfg(test)]
 #[path = "tests/lisp_only_predicates_and_aliases.rs"]
 mod lisp_only_predicates_and_aliases_test;
 

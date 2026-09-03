@@ -1443,16 +1443,36 @@ pub(crate) fn global_obarray_symbol_ids_in_bucket_order(
     // (append-only interner) so it only changes on intern/unintern or an
     // obarray resize (the len cache key).
     obarray.completion_bucket_order_cached(len, || {
-        let mut entries: Vec<_> = obarray
+        // The order is a bucket index plus a position inside it, so it is a
+        // counting sort, not a comparison sort: bucket every member once,
+        // prefix-sum the counts, then scatter.  Scattering the members in
+        // REVERSE membership order puts the newest first inside each bucket,
+        // which is what the old `(bucket asc, order desc)` comparison
+        // produced -- with ~18K symbols this replaced 6.2 M instructions of
+        // `ipnsort` with two passes and two allocations.
+        let members: Vec<(u32, crate::emacs_core::intern::SymId)> = obarray
             .global_member_ids()
-            .enumerate()
-            .map(|(order, id)| {
+            .map(|id| {
                 let name = crate::emacs_core::intern::resolve_sym_lisp_string(id);
-                (obarray_hash_lisp_string(name, len), order, id)
+                (obarray_hash_lisp_string(name, len) as u32, id)
             })
             .collect();
-        entries.sort_unstable_by(|a, b| a.0.cmp(&b.0).then_with(|| b.1.cmp(&a.1)));
-        entries.into_iter().map(|(_, _, id)| id).collect()
+        // `starts[b + 1]` counts bucket `b`, so the prefix sum leaves
+        // `starts[b]` at bucket `b`'s first output index.
+        let mut starts = vec![0u32; len + 1];
+        for (bucket, _) in &members {
+            starts[*bucket as usize + 1] += 1;
+        }
+        for index in 1..starts.len() {
+            starts[index] += starts[index - 1];
+        }
+        let mut ordered = vec![crate::emacs_core::intern::NIL_SYM_ID; members.len()];
+        for (bucket, id) in members.iter().rev() {
+            let cursor = &mut starts[*bucket as usize];
+            ordered[*cursor as usize] = *id;
+            *cursor += 1;
+        }
+        ordered
     })
 }
 
