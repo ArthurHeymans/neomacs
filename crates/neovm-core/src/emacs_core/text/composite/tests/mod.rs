@@ -565,6 +565,42 @@ fn automatic_composition_spans_match_gnu_tai_tham_hello_samples() {
     );
 }
 
+/// The loadup image installs the Tai Tham rule through `thai.el`.  Exercise
+/// that real table value, including its reader-produced regexp string, rather
+/// than only an equivalent rule assembled by this test.
+#[test]
+fn automatic_composition_spans_use_loadup_tai_tham_rule() {
+    crate::test_utils::init_test_tracing();
+    let eval = crate::test_utils::runtime_startup_context();
+    let table = eval.visible_variable_value_or_nil("composition-function-table");
+    let buffer = eval.buffers.current_buffer().expect("current buffer");
+
+    let rules = super::super::chartable::ct_lookup(&table, 0x1A23)
+        .ok()
+        .and_then(|value| list_to_vec(&value))
+        .expect("Tai Tham composition rules");
+    let fields = rules[0].as_vector_data().expect("composition rule vector");
+    assert!(
+        fields[0].as_utf8_str().is_none(),
+        "the loadup rule must exercise a valid Lisp regexp that is not UTF-8"
+    );
+
+    let spans = automatic_composition_spans(buffer, table, "ᨣᩣᩴᨾᩮᩬᩥᨦ / ᨽᩣᩈᩣᩃ᩶ᩣ᩠ᨶᨶᩣ");
+
+    assert_eq!(
+        spans,
+        vec![
+            AutomaticCompositionSpan::new(0, 3),
+            AutomaticCompositionSpan::new(3, 7),
+            AutomaticCompositionSpan::new(7, 8),
+            AutomaticCompositionSpan::new(11, 13),
+            AutomaticCompositionSpan::new(13, 15),
+            AutomaticCompositionSpan::new(15, 20),
+            AutomaticCompositionSpan::new(20, 22),
+        ]
+    );
+}
+
 #[test]
 fn terminal_automatic_composition_matches_gnu_gstring_cell_rules() {
     let javanese = automatic_composition_for_terminal("ꦮꦶ");

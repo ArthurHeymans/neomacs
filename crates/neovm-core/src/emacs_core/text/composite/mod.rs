@@ -876,12 +876,12 @@ pub fn automatic_composition_spans(
             let match_len = if fields[0].is_nil() {
                 1
             } else {
-                let Some(pattern) = fields[0].as_utf8_str() else {
+                let Some(pattern) = fields[0].as_lisp_string() else {
                     continue;
                 };
                 let suffix = &text[byte_offsets[start]..];
                 let mut match_data = None;
-                let Ok(true) = super::regex::looking_at_string_with_buffer_tables(
+                let Ok(true) = super::regex::looking_at_lisp_pattern_with_buffer_tables(
                     pattern,
                     suffix,
                     false,

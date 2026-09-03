@@ -3324,19 +3324,51 @@ pub fn looking_at_string(
     looking_at_string_with_syntax(pattern, string, case_fold, &DefaultSyntaxLookup, match_data)
 }
 
-/// Match a Rust-owned string using the syntax and category tables selected by
-/// `buffer`.  GNU's internal `fast_looking_at` always classifies `\s` and `\c`
-/// through the current buffer even when its bytes come from a separate string;
-/// automatic composition needs the same live category-table semantics.
-pub(crate) fn looking_at_string_with_buffer_tables(
-    pattern: &str,
+/// Match a native Lisp regexp against a Rust-owned Unicode string using the
+/// syntax and category tables selected by `buffer`.
+///
+/// The `LispString` pattern preserves Emacs multibyte and raw-byte regexp
+/// characters.  Lisp-generated regexps can be valid Lisp strings without
+/// being valid UTF-8; forcing them through `&str` would either reject or alter
+/// the pattern before the Emacs regexp compiler sees it.  GNU's internal
+/// `fast_looking_at` also classifies `\s` and `\c` through the current buffer
+/// even when its bytes come from a separate string, so the buffer remains an
+/// explicit input.
+pub(crate) fn looking_at_lisp_pattern_with_buffer_tables(
+    pattern: &LispString,
     string: &str,
     case_fold: bool,
     buffer: &Buffer,
     match_data: &mut Option<MatchData>,
 ) -> Result<bool, String> {
     let syntax = buffer_syntax_lookup(buffer);
-    looking_at_string_with_syntax(pattern, string, case_fold, &syntax, match_data)
+    let compiled = compile_lisp_pattern_with_posix_translation(
+        pattern,
+        case_fold,
+        false,
+        true,
+        buffer_search_translation_table(buffer, case_fold),
+        &syntax,
+    )?;
+    let searched = LispString::from_utf8(string);
+    let text_bytes = searched.as_bytes();
+    if let Some((_end, regs)) = regex_emacs::re_match(
+        compiled.as_ref(),
+        text_bytes,
+        0,
+        text_bytes.len(),
+        &syntax,
+        0,
+    ) {
+        let byte_md = engine_match_data_from_registers(&regs, 0);
+        *match_data = Some(string_char_match_data(
+            SearchedString::Owned(searched),
+            byte_md,
+        ));
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }
 
 fn looking_at_string_with_syntax(
