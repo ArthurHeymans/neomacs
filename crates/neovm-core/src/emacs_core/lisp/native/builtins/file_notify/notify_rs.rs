@@ -192,6 +192,17 @@ impl FileNotifyBackend for NotifyRsBackend {
                 Some(Value::string(path.display().to_string())),
             ));
         }
+        if matches!(
+            &request,
+            WatchRequest::Inotify { aspects }
+                if aspects.iter().any(|aspect| aspect == "onlydir") && !path.is_dir()
+        ) {
+            return Err(file_notify_error(
+                "Could not add watch for file",
+                Some("Not a directory".to_owned()),
+                Some(Value::string(path.display().to_string())),
+            ));
+        }
         let path_already_watched = self.watches.iter().any(|watch| watch.path == path);
         if !path_already_watched && let Some(ref mut watcher) = self.watcher {
             watcher
