@@ -172,7 +172,7 @@ jobs:
           cache-key: ci-check-${{ matrix.label }}
           cache-shared-key: ${{ matrix.label }}-dev
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-          install-nextest: ${{ matrix.label == 'linux-x86_64' || matrix.label == 'windows-msvc-x86_64' }}
+          install-nextest: ${{ matrix.label == 'linux-x86_64' || matrix.label == 'macos-aarch64' || matrix.label == 'windows-msvc-x86_64' }}
 
       - name: cargo check workspace (Unix)
         if: runner.os != 'Windows'
@@ -190,6 +190,17 @@ jobs:
         run: >-
           cargo nextest run -p neomacs-layout-engine
           font_backend::windows::tests
+
+      # These tests must execute on the host OS: cross-compilation cannot
+      # exercise inotify, kqueue, or ReadDirectoryChangesW.  Keep the filter
+      # on the neovm-core library so this adds one focused native contract to
+      # the existing platform build instead of linking every integration test.
+      - name: Test native file notifications
+        if: matrix.label == 'linux-x86_64' || matrix.label == 'macos-aarch64' || matrix.label == 'windows-msvc-x86_64'
+        shell: bash
+        run: >-
+          cargo nextest run -p neovm-core --lib
+          -E 'test(file_notify)'
 
       - name: cargo check minimal capability build
         if: matrix.label == 'linux-x86_64'

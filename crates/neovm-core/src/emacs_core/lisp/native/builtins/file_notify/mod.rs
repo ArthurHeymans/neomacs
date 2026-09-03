@@ -42,6 +42,12 @@ std::cfg_select! {
 #[cfg(all(test, target_os = "linux"))]
 mod linux_test;
 
+#[cfg(all(
+    test,
+    any(target_os = "linux", target_os = "macos", target_os = "windows")
+))]
+mod native_runtime_test;
+
 thread_local! {
     static FILE_NOTIFY_STATE: RefCell<FileNotifyState> = RefCell::new(FileNotifyState::default());
 }
