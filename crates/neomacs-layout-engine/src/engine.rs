@@ -693,6 +693,21 @@ pub struct LayoutEngine {
     /// engine still rebuilds every window every cycle. The container a later
     /// phase reuses rows out of.
     retained_window_matrices: rustc_hash::FxHashMap<DisplayWindowId, RetainedWindowMatrix>,
+    /// The window ids each FRAME contributed to the two retained maps above.
+    ///
+    /// One `LayoutEngine` serves every visible frame -- `RedisplayRuntime` owns
+    /// exactly one (`redisplay.rs:106`) and the drivers lay out the root frame
+    /// and then each visible child through it. The retained maps are keyed by
+    /// window alone, so REPLACING them wholesale at the accepted break made
+    /// laying out frame B discard frame A's windows, which nothing had touched:
+    /// with any second frame visible -- a corfu/vertico-posframe popup, a
+    /// tooltip, lsp-ui-doc, a second top-level frame -- every window lost its
+    /// retained matrix on every cycle and all three fast paths died.
+    ///
+    /// Recording the ids per frame keeps the wholesale-replace semantics that
+    /// prune a frame's own deleted windows, while leaving other frames alone.
+    retained_frame_window_ids:
+        rustc_hash::FxHashMap<neovm_core::window::FrameId, Vec<DisplayWindowId>>,
     /// Accepted intrinsic chrome metrics, the Rust equivalent of GNU's
     /// current-matrix tab/header/mode-line heights.  They seed the next
     /// speculative layout and are replaced only by a sealed frame.
@@ -1216,6 +1231,7 @@ impl LayoutEngine {
             last_frame_display_state: None,
             frame_face_arenas: rustc_hash::FxHashMap::default(),
             retained_window_matrices: rustc_hash::FxHashMap::default(),
+            retained_frame_window_ids: rustc_hash::FxHashMap::default(),
             retained_window_chrome_metrics: rustc_hash::FxHashMap::default(),
             cursor_only_window_ids: rustc_hash::FxHashSet::default(),
             scroll_window_ids: rustc_hash::FxHashMap::default(),
@@ -1244,6 +1260,7 @@ impl LayoutEngine {
             last_frame_display_state: None,
             frame_face_arenas: rustc_hash::FxHashMap::default(),
             retained_window_matrices: rustc_hash::FxHashMap::default(),
+            retained_frame_window_ids: rustc_hash::FxHashMap::default(),
             retained_window_chrome_metrics: rustc_hash::FxHashMap::default(),
             cursor_only_window_ids: rustc_hash::FxHashSet::default(),
             scroll_window_ids: rustc_hash::FxHashMap::default(),
@@ -2414,7 +2431,10 @@ impl LayoutEngine {
                 continue 'frame_layout;
             }
 
-            let accepted_window_chrome_metrics = window_params_list
+            let accepted_window_chrome_metrics: rustc_hash::FxHashMap<
+                DisplayWindowId,
+                WindowChromeMetrics,
+            > = window_params_list
                 .iter()
                 .filter_map(|params| {
                     let window = DisplayWindowId::new(params.window_id);
@@ -2802,7 +2822,10 @@ impl LayoutEngine {
         // Commit retained state only after the visual, spatial, and revision
         // invariants have sealed. A rejected presentation cannot acknowledge
         // buffer edits or replace the GNU "current matrix" analogue.
-        self.retained_window_chrome_metrics = accepted_window_chrome_metrics;
+        // Merged, not replaced, for the same reason as the matrices below: the
+        // stale ids this frame previously owned are removed at the commit.
+        self.retained_window_chrome_metrics
+            .extend(accepted_window_chrome_metrics);
         self.layout_stats = next_layout_stats;
         // Per-frame incremental-layout observability: append one line per
         // accepted frame when NEOMACS_LAYOUT_STATS_FILE names a path. This is
@@ -2836,7 +2859,22 @@ impl LayoutEngine {
         // CUMULATIVE counters line per accepted frame; aggregation takes the
         // last line per pid.
         crate::buffer_source::row_route::route_stats_append_report();
-        self.retained_window_matrices = next_retained_window_matrices;
+        // Scope the replacement to THIS frame: drop only the ids this frame
+        // retained last time, then install the new ones. Other frames' windows
+        // survive a cycle that did not lay them out. See
+        // `retained_frame_window_ids`.
+        if let Some(previous) = self.retained_frame_window_ids.get(&frame_id) {
+            for window_id in previous {
+                self.retained_window_matrices.remove(window_id);
+                self.retained_window_chrome_metrics.remove(window_id);
+            }
+        }
+        let this_frame_window_ids: Vec<DisplayWindowId> =
+            next_retained_window_matrices.keys().copied().collect();
+        self.retained_window_matrices
+            .extend(next_retained_window_matrices);
+        self.retained_frame_window_ids
+            .insert(frame_id, this_frame_window_ids);
         self.frame_face_arenas.insert(frame_id, sealed_face_arena);
         for buffer_id in acked_buffer_ids {
             if let Some(buffer) = evaluator

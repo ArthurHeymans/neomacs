@@ -4379,6 +4379,48 @@ fn phase3_fontlocked_first_row_edit_relays_only_the_span() {
     // run shaper when the concrete character advances are already cached.
 }
 
+/// MULTI-FRAME RETENTION. One `LayoutEngine` serves every visible frame --
+/// `RedisplayRuntime` owns exactly one (redisplay.rs:106) and the drivers lay
+/// out the root frame and then each visible child through it. The retained
+/// maps are keyed by window alone, so replacing them wholesale at the accepted
+/// break discarded the windows of every OTHER frame, which nothing had touched.
+/// With any second frame visible -- a corfu/vertico-posframe popup, a tooltip,
+/// lsp-ui-doc, a second top-level frame -- every window lost its retained
+/// matrix on every cycle and all three fast paths died.
+#[test]
+fn laying_out_one_frame_keeps_another_frames_retained_matrices() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_a, buf_id, window_a) = incr_editing_frame(&text, 800, 600);
+    let frame_b = eval
+        .frame_manager_mut()
+        .create_frame("second", 400, 300, buf_id);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_a);
+    let key_a = neomacs_display_protocol::types::DisplayWindowId::new(window_a.0 as i64);
+    assert!(
+        engine.retained_window_matrices.contains_key(&key_a),
+        "frame A must retain its window after its own layout"
+    );
+
+    engine.layout_frame_rust(&mut eval, frame_b);
+    assert!(
+        engine.retained_window_matrices.contains_key(&key_a),
+        "laying out frame B must not discard frame A's retained matrix"
+    );
+
+    // The payoff: frame A's window can still take a fast path instead of
+    // rebuilding. (The frame's minibuffer is a separate matter -- it lays out
+    // one row, which the probe-pass exclusion never retains.)
+    engine.layout_frame_rust(&mut eval, frame_a);
+    assert!(
+        engine.cursor_only_window_ids.contains(&key_a),
+        "frame A's window must still take a fast path after an unrelated frame \
+         was laid out (stats {:?})",
+        engine.layout_stats
+    );
+}
+
 /// MULTI-WINDOW SAME BUFFER. Two windows on one buffer; an edit in the
 /// selected window. This is the case the multi-window race fix (spec §4.2)
 /// must keep sound: each window diffs from its OWN retained tick and its own
