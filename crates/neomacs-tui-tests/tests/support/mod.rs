@@ -187,6 +187,36 @@ pub fn invoke_mx_command(gnu: &mut TuiSession, neo: &mut TuiSession, command: &s
     send_both(gnu, neo, "RET");
 }
 
+/// Wait for GNU's asynchronous `execute-extended-command` binding suggestion.
+///
+/// `execute-extended-command` schedules this message with `run-at-time`, after
+/// the invoked command returns and `real-last-command` is committed.  A screen
+/// comparison that expects the suggestion must therefore synchronize on that
+/// observable state rather than merely on the command's primary effect.
+pub fn wait_for_both_mx_suggestion(
+    gnu: &mut TuiSession,
+    neo: &mut TuiSession,
+    command: &str,
+    timeout: Duration,
+) {
+    let suggestion_ready = |grid: &[String]| {
+        grid.iter().any(|row| {
+            row.contains("You can run the command")
+                && row.contains(command)
+                && row.contains(" with ")
+        })
+    };
+    wait_for_both(gnu, neo, timeout, suggestion_ready);
+
+    for (label, session) in [("GNU", gnu), ("Neomacs", neo)] {
+        assert!(
+            suggestion_ready(&session.text_grid()),
+            "{label} did not display the M-x suggestion for {command:?}:\n{}",
+            session.text_grid().join("\n")
+        );
+    }
+}
+
 pub fn eval_expression(gnu: &mut TuiSession, neo: &mut TuiSession, expression: &str) {
     send_both(gnu, neo, "M-:");
     let prompt_ready = |grid: &[String]| grid.last().is_some_and(|row| row.contains("Eval:"));

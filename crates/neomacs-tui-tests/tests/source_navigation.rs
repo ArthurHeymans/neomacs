@@ -64,5 +64,6 @@ fn find_function_via_mx_opens_lisp_definition() {
         grid.iter().any(|row| row.contains("newcomment.el"))
             && grid.iter().any(|row| row.contains("(defun comment-dwim"))
     });
+    wait_for_both_mx_suggestion(&mut gnu, &mut neo, "find-function", Duration::from_secs(8));
     assert_pair_exact_display("find_function_via_mx_opens_lisp_definition", &gnu, &neo);
 }
