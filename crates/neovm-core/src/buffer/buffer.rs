@@ -2307,6 +2307,10 @@ pub struct Buffer {
     /// GNU `BUF_OVERLAY_MODIFF`: incremented when live overlay ranges or
     /// properties change so redisplay observes overlay-only UI updates.
     pub(crate) overlay_modified_tick: i64,
+    /// Memo for [`Self::overlay_content_digest`], keyed on the overlay tick.
+    /// Not part of the buffer's identity: it is derived state, so clones and
+    /// dumps may leave it empty and it recomputes on demand.
+    pub(crate) overlay_digest_cache: std::cell::Cell<Option<(i64, u64)>>,
     /// Shared undo owner for this text.
     pub(crate) undo_state: SharedUndoState,
     /// Handle on the editor's ONE saved point-before-command-or-undo, GNU's
@@ -2483,6 +2487,7 @@ impl Buffer {
             local_flags: 0,
             overlays: OverlayList::new(),
             overlay_modified_tick: 1,
+            overlay_digest_cache: std::cell::Cell::new(None),
             undo_state: SharedUndoState::new(),
             saved_point_before_command,
         }
@@ -2515,6 +2520,7 @@ impl Buffer {
             local_flags: parts.local_flags,
             overlays: parts.overlays,
             overlay_modified_tick: parts.overlay_modified_tick,
+            overlay_digest_cache: std::cell::Cell::new(None),
             undo_state: parts.undo_state,
             saved_point_before_command: parts.saved_point_before_command,
         }
@@ -4001,6 +4007,26 @@ impl Buffer {
 
     pub fn overlay_modified_tick(&self) -> i64 {
         self.overlay_modified_tick
+    }
+
+    /// The buffer's overlay content digest, recomputed only when the overlay
+    /// tick has moved since the last call.
+    ///
+    /// Redisplay asks for this once per window per frame, so it must not walk
+    /// the overlay set every time: the tick is the cheap "something touched an
+    /// overlay" signal and the digest is only interesting when it moves. See
+    /// `OverlayList::content_digest` for what the digest covers and why it
+    /// exists.
+    pub fn overlay_content_digest(&self) -> u64 {
+        let tick = self.overlay_modified_tick;
+        if let Some((cached_tick, digest)) = self.overlay_digest_cache.get()
+            && cached_tick == tick
+        {
+            return digest;
+        }
+        let digest = self.overlays().content_digest();
+        self.overlay_digest_cache.set(Some((tick, digest)));
+        digest
     }
 
     pub fn increment_overlay_modified_tick(&mut self) {

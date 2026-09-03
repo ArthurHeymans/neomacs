@@ -1486,3 +1486,120 @@ fn property_sweep_restarts_only_when_partition_lookup_moves_backwards() {
         emacs_byte_range(1, 4)
     );
 }
+
+/// The digest is a function of overlay CONTENT, so an LSP-style teardown and
+/// rebuild of the identical diagnostic set leaves it unchanged even though
+/// every overlay object, and the modification tick, is new. This is what lets
+/// the retained matrix keep taking the Edit path while such tooling runs; see
+/// `RetainedWindowKey::edit_eligible`.
+#[test]
+fn content_digest_survives_deleting_and_recreating_the_identical_overlay_set() {
+    crate::test_utils::init_test_tracing();
+    let face = Value::symbol("face");
+    let help = Value::symbol("help-echo");
+
+    // Build the set twice over, from scratch each time, exactly as a
+    // diagnostics refresh does.
+    let build = |list: &mut OverlayList| -> Vec<Value> {
+        let mut made = Vec::new();
+        for (start, end, severity) in [(0, 4, "error"), (4, 9, "warning"), (9, 11, "info")] {
+            let overlay = alloc_overlay(start, end);
+            list.insert_overlay(overlay);
+            list.overlay_put(overlay, face, Value::symbol(severity))
+                .unwrap();
+            list.overlay_put(overlay, help, Value::string(severity))
+                .unwrap();
+            made.push(overlay);
+        }
+        made
+    };
+
+    let mut list = OverlayList::new();
+    let first_generation = build(&mut list);
+    let before = list.content_digest();
+
+    for overlay in &first_generation {
+        assert!(list.delete_overlay(*overlay));
+    }
+    assert_eq!(
+        list.content_digest(),
+        OverlayList::new().content_digest(),
+        "an emptied list must digest as an empty one"
+    );
+
+    let second_generation = build(&mut list);
+    assert!(
+        first_generation
+            .iter()
+            .zip(&second_generation)
+            .all(|(old, new)| old.bits() != new.bits()),
+        "the rebuild must really allocate new overlays, or this pins nothing"
+    );
+    assert_eq!(
+        before,
+        list.content_digest(),
+        "identical content must digest identically"
+    );
+}
+
+/// The other half of the contract: anything redisplay could read differently
+/// has to move the digest. A property EIGHTH in the plist is included on
+/// purpose -- `sxhash`'s `equal` form stops before it (GNU `SXHASH_MAX_LEN`),
+/// which is why the digest does not use it.
+#[test]
+fn content_digest_moves_for_span_property_and_deep_plist_changes() {
+    crate::test_utils::init_test_tracing();
+    let face = Value::symbol("face");
+
+    let baseline = {
+        let mut list = OverlayList::new();
+        let overlay = alloc_overlay(3, 7);
+        list.insert_overlay(overlay);
+        list.overlay_put(overlay, face, Value::symbol("error"))
+            .unwrap();
+        list.content_digest()
+    };
+
+    let moved_end = {
+        let mut list = OverlayList::new();
+        let overlay = alloc_overlay(3, 8);
+        list.insert_overlay(overlay);
+        list.overlay_put(overlay, face, Value::symbol("error"))
+            .unwrap();
+        list.content_digest()
+    };
+    assert_ne!(baseline, moved_end, "a changed end must move the digest");
+
+    let changed_face = {
+        let mut list = OverlayList::new();
+        let overlay = alloc_overlay(3, 7);
+        list.insert_overlay(overlay);
+        list.overlay_put(overlay, face, Value::symbol("warning"))
+            .unwrap();
+        list.content_digest()
+    };
+    assert_ne!(baseline, changed_face, "a changed face must move the digest");
+
+    // Eight properties deep, one string differs by a single character.
+    let deep = |tail: &str| {
+        let mut list = OverlayList::new();
+        let overlay = alloc_overlay(3, 7);
+        list.insert_overlay(overlay);
+        for index in 0..7 {
+            list.overlay_put(
+                overlay,
+                Value::symbol(&format!("filler-{index}")),
+                Value::fixnum(index),
+            )
+            .unwrap();
+        }
+        list.overlay_put(overlay, Value::symbol("before-string"), Value::string(tail))
+            .unwrap();
+        list.content_digest()
+    };
+    assert_ne!(
+        deep("a"),
+        deep("b"),
+        "a change past the eighth property must still move the digest"
+    );
+}

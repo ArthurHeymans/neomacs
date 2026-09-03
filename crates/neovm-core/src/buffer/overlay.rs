@@ -992,6 +992,49 @@ impl OverlayList {
         self.index.all_ascending()
     }
 
+    /// A content digest of every live overlay: its span and its whole
+    /// property list, hashed by VALUE rather than by identity.
+    ///
+    /// Redisplay's coarse signal is the overlay tick, which GNU also uses
+    /// (`xdisp.c:22593` `if (w->last_overlay_modified != OVERLAY_MODIFF)
+    /// GIVE_UP (200)`), and which cannot tell "the overlays changed" from
+    /// "the same overlays were rebuilt".  Tooling rebuilds them constantly:
+    /// an LSP client deletes and re-creates its diagnostic overlays on every
+    /// buffer change, with the same spans and the same faces.  A digest lets
+    /// a retained layout survive that, which GNU's own comment two lines
+    /// below the give-up asks for and cannot have, having no per-window
+    /// retained key to hang it on.
+    ///
+    /// Correctness rules for anyone extending this: it must cover EVERYTHING
+    /// redisplay can read from an overlay, so it hashes the entire plist
+    /// rather than a chosen set of display properties, and it must not use
+    /// `sxhash`, whose `equal` form stops after a bounded depth and length
+    /// (GNU `SXHASH_MAX_LEN`) and would therefore be systematically blind to
+    /// a change in the eighth property.  Values it cannot hash structurally
+    /// are folded in by identity, which can only make the digest differ more
+    /// often -- over-invalidating costs a redisplay, under-invalidating
+    /// leaves a stale frame on screen.
+    pub fn content_digest(&self) -> u64 {
+        use std::hash::Hasher;
+
+        let mut hasher = rustc_hash::FxHasher::default();
+        for overlay in self.index.all_ascending() {
+            hasher.write_u64(
+                self.overlay_start_emacs_byte_pos(overlay)
+                    .map_or(u64::MAX, |p| p.get() as u64),
+            );
+            hasher.write_u64(
+                self.overlay_end_emacs_byte_pos(overlay)
+                    .map_or(u64::MAX, |p| p.get() as u64),
+            );
+            match self.overlay_plist(overlay) {
+                Some(plist) => hash_value_content(plist, 0, &mut hasher),
+                None => hasher.write_u8(0xff),
+            }
+        }
+        hasher.finish()
+    }
+
     pub fn overlays_in_accessible_emacs_byte_range(
         &self,
         range: EmacsByteRange,
@@ -1733,3 +1776,58 @@ impl GcTrace for OverlayList {
 #[cfg(test)]
 #[path = "overlay_test.rs"]
 mod tests;
+
+/// Fold a Lisp value into `hasher` by CONTENT, following conses and strings.
+///
+/// `depth` only bounds pathological self-referential structure; a plist that
+/// deep is folded by identity from there down, which over-invalidates rather
+/// than under-invalidates. Unlike `sxhash`, nothing is skipped for being long.
+fn hash_value_content(value: Value, depth: u32, hasher: &mut rustc_hash::FxHasher) {
+    use crate::emacs_core::value::ValueKind;
+    use std::hash::Hasher;
+
+    const MAX_DEPTH: u32 = 32;
+    if depth > MAX_DEPTH {
+        hasher.write_u64(value.bits() as u64);
+        return;
+    }
+    match value.kind() {
+        ValueKind::Nil => hasher.write_u8(1),
+        ValueKind::T => hasher.write_u8(2),
+        ValueKind::Fixnum(n) => {
+            hasher.write_u8(3);
+            hasher.write_i64(n);
+        }
+        ValueKind::Symbol(id) | ValueKind::Subr(id) => {
+            hasher.write_u8(4);
+            hasher.write_u32(id.0);
+        }
+        ValueKind::String => {
+            hasher.write_u8(5);
+            match value.as_lisp_string() {
+                Some(s) => hasher.write(s.as_bytes()),
+                None => hasher.write_u64(value.bits() as u64),
+            }
+        }
+        ValueKind::Cons => {
+            hasher.write_u8(6);
+            let mut cursor = value;
+            // Iterative along the cdr so a long plist cannot recurse deeply.
+            let mut seen = 0u32;
+            while cursor.is_cons() && seen < 4096 {
+                hash_value_content(cursor.cons_car(), depth + 1, hasher);
+                cursor = cursor.cons_cdr();
+                seen += 1;
+            }
+            if !cursor.is_nil() {
+                hash_value_content(cursor, depth + 1, hasher);
+            }
+        }
+        // Floats, vectors, records, buffers, markers, hash tables and anything
+        // else fold in by identity: a rebuilt one differs, which escalates.
+        _ => {
+            hasher.write_u8(7);
+            hasher.write_u64(value.bits() as u64);
+        }
+    }
+}
