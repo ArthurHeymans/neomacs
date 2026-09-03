@@ -24,6 +24,7 @@ use neomacs_display_protocol::glyph_matrix::{
 };
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::Rect;
+use neovm_core::emacs_core::emacs_char::EmacsChar;
 use neovm_core::emacs_core::{Context, Value};
 
 fn layout() -> DisplayRowLayout {
@@ -854,6 +855,30 @@ fn display_row_builder_emits_space_width_as_primary_face_stretch() {
     assert_eq!(glyphs[1].vertical_offset_px, -1.0);
     assert_eq!(row.height_px, 12.0);
     assert_eq!(row.ascent_px, 9.0);
+}
+
+#[test]
+fn graphical_relative_stretch_measures_the_covered_character() {
+    let face_id = FaceId::new(2);
+    let mut measurer = FixedGlyphAdvance::new('W', face_id, 15.0);
+    let mut builder = DisplayRowBuilder::with_glyph_measurer(layout(), &mut measurer);
+    builder.push_item(DisplayItem::new(
+        SourceSpan::synthetic(1, 0, 1),
+        RenderFaceRef::FaceId(face_id),
+        DisplayItemKind::Stretch(DisplayStretch {
+            width: DisplayStretchWidth::RelativeToSource {
+                factor: 0.5,
+                source: EmacsChar::from_char('W'),
+            },
+            height: None,
+            ascent: None,
+        }),
+    ));
+
+    let row = builder.finish();
+    let glyph = &row.glyphs[GlyphArea::Text.index()][0];
+    assert_eq!(glyph.pixel_width, 7.0);
+    assert_eq!(glyph.glyph_type, GlyphType::Stretch { width_cols: 1 });
 }
 
 #[test]

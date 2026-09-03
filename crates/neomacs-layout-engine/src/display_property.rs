@@ -11,6 +11,7 @@ use neovm_core::emacs_core::display_spec::{
     DisplayMarginLocation, DisplayMediaSpecKind, DisplayPropertySpecs, DisplaySpecKind,
     display_margin_spec, display_spec_kind, display_spec_when_parts,
 };
+use neovm_core::emacs_core::emacs_char::EmacsChar;
 use neovm_core::emacs_core::value::list_to_vec;
 use std::ops::ControlFlow;
 
@@ -78,7 +79,7 @@ impl DisplayPropertyClassification {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum DisplayReplacementProperty {
     String,
-    Stretch(DisplayStretch),
+    Stretch(ParsedDisplaySpace),
     Media(DisplayMediaReplacementProperty),
     /// `(left-fringe BITMAP FACE)` / `(right-fringe BITMAP FACE)`: GNU renders
     /// the bitmap in the fringe and shows nothing inline for the covered text
@@ -113,13 +114,53 @@ pub(crate) enum DisplayMarginContent {
     String(Value),
     Stretch {
         spec: Value,
-        layout: DisplayStretch,
+        layout: ParsedDisplaySpace,
     },
     Media {
         spec: Value,
         replacement: DisplayMediaReplacementProperty,
         image_slice: Option<DisplayImageSliceSpec>,
     },
+}
+
+/// A parsed `(space ...)` replacement before it is bound to the source text.
+///
+/// GNU's `:width` and `:relative-width` share surface syntax but not a basis:
+/// the former uses the canonical frame width while the latter measures the
+/// first covered character.  Keeping that distinction in a closed enum stops
+/// classification from flattening both into an `em` length.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ParsedDisplaySpace {
+    pub(crate) width: ParsedDisplaySpaceWidth,
+    pub(crate) height: Option<DisplayLength>,
+    pub(crate) ascent: Option<DisplayLength>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum ParsedDisplaySpaceWidth {
+    Length(DisplayLength),
+    RelativeToSource { factor: f32 },
+    AlignTo(Value),
+}
+
+impl ParsedDisplaySpace {
+    pub(crate) fn bind_source(&self, source: EmacsChar) -> DisplayStretch {
+        let width = match &self.width {
+            ParsedDisplaySpaceWidth::Length(length) => DisplayStretchWidth::Length(length.clone()),
+            ParsedDisplaySpaceWidth::RelativeToSource { factor } => {
+                DisplayStretchWidth::RelativeToSource {
+                    factor: *factor,
+                    source,
+                }
+            }
+            ParsedDisplaySpaceWidth::AlignTo(value) => DisplayStretchWidth::AlignTo(*value),
+        };
+        DisplayStretch {
+            width,
+            height: self.height.clone(),
+            ascent: self.ascent.clone(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -409,7 +450,7 @@ fn merge_modifiers(
     }
 }
 
-fn parse_display_space(value: Value) -> Option<DisplayStretch> {
+fn parse_display_space(value: Value) -> Option<ParsedDisplaySpace> {
     let items = list_to_vec(&value)?;
     let mut width = None;
     let mut height = None;
@@ -419,8 +460,13 @@ fn parse_display_space(value: Value) -> Option<DisplayStretch> {
         let key = items[i];
         let val = items[i + 1];
         match DisplaySpaceKey::from_lisp_value(key) {
-            Some(DisplaySpaceKey::Width | DisplaySpaceKey::RelativeWidth) => {
-                width = parse_display_length(val).map(DisplayStretchWidth::Length);
+            Some(DisplaySpaceKey::Width) => {
+                width = parse_display_length(val).map(ParsedDisplaySpaceWidth::Length);
+            }
+            Some(DisplaySpaceKey::RelativeWidth) => {
+                width = lisp_number(val)
+                    .filter(|factor| *factor > 0.0)
+                    .map(|factor| ParsedDisplaySpaceWidth::RelativeToSource { factor });
             }
             Some(DisplaySpaceKey::AlignTo) => {
                 // GNU only tests `!NILP (prop)` here (xdisp.c:32837); whether the
@@ -431,7 +477,7 @@ fn parse_display_space(value: Value) -> Option<DisplayStretch> {
                 // form the mirror could not model silently became a 1-column
                 // space — issue #204's left-aligned image.
                 if !val.is_nil() {
-                    width = Some(DisplayStretchWidth::AlignTo(val));
+                    width = Some(ParsedDisplaySpaceWidth::AlignTo(val));
                 }
             }
             Some(DisplaySpaceKey::Height | DisplaySpaceKey::RelativeHeight) => {
@@ -445,8 +491,8 @@ fn parse_display_space(value: Value) -> Option<DisplayStretch> {
         i += 2;
     }
 
-    Some(DisplayStretch {
-        width: width.unwrap_or(DisplayStretchWidth::Length(DisplayLength::Em(1.0))),
+    Some(ParsedDisplaySpace {
+        width: width.unwrap_or(ParsedDisplaySpaceWidth::Length(DisplayLength::Em(1.0))),
         height,
         ascent,
     })

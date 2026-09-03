@@ -516,13 +516,11 @@ pub(crate) trait DisplayGlyphMeasurer {
         None
     }
 
-    /// Whether a `(space-width FACTOR)` display modifier participates in row
-    /// geometry.  GNU accepts it only for window-system frames
-    /// (`handle_single_display_spec`, xdisp.c); terminal rows keep an ordinary
-    /// integral-cell space.  A closed enum keeps that backend distinction out
-    /// of ad-hoc width fallbacks.
-    fn display_space_width_behavior(&self) -> DisplaySpaceWidthBehavior {
-        DisplaySpaceWidthBehavior::Apply
+    /// The coordinate domain GNU uses for display geometry.  This controls
+    /// both which modifiers are meaningful and where integer truncation
+    /// happens; callers must exhaustively choose pixels or terminal cells.
+    fn display_geometry_backend(&self) -> DisplayGeometryBackend {
+        DisplayGeometryBackend::WindowSystemPixels
     }
 
     fn text_run_advances_px(
@@ -536,9 +534,9 @@ pub(crate) trait DisplayGlyphMeasurer {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum DisplaySpaceWidthBehavior {
-    Ignore,
-    Apply,
+pub(crate) enum DisplayGeometryBackend {
+    WindowSystemPixels,
+    TerminalCells,
 }
 
 pub(crate) enum DisplayRowItemMeasurement {
@@ -2163,14 +2161,14 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         face_id: FaceId,
         item_layout: DisplayItemLayout,
     ) {
-        let space_width_behavior = self
+        let geometry_backend = self
             .glyph_measurer
             .as_deref()
-            .map(DisplayGlyphMeasurer::display_space_width_behavior)
-            .unwrap_or(DisplaySpaceWidthBehavior::Apply);
-        let applied_space_width = match space_width_behavior {
-            DisplaySpaceWidthBehavior::Ignore => None,
-            DisplaySpaceWidthBehavior::Apply => item_layout.space_width,
+            .map(DisplayGlyphMeasurer::display_geometry_backend)
+            .unwrap_or(DisplayGeometryBackend::WindowSystemPixels);
+        let applied_space_width = match geometry_backend {
+            DisplayGeometryBackend::TerminalCells => None,
+            DisplayGeometryBackend::WindowSystemPixels => item_layout.space_width,
         };
         let face_space_width = applied_space_width.and_then(|_| {
             self.glyph_measurer
@@ -2226,14 +2224,14 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         natural_advance_px: f32,
         item_layout: DisplayItemLayout,
     ) -> f32 {
-        let space_width_behavior = self
+        let geometry_backend = self
             .glyph_measurer
             .as_deref()
-            .map(DisplayGlyphMeasurer::display_space_width_behavior)
-            .unwrap_or(DisplaySpaceWidthBehavior::Apply);
-        let applied_space_width = match space_width_behavior {
-            DisplaySpaceWidthBehavior::Ignore => None,
-            DisplaySpaceWidthBehavior::Apply => item_layout.space_width,
+            .map(DisplayGlyphMeasurer::display_geometry_backend)
+            .unwrap_or(DisplayGeometryBackend::WindowSystemPixels);
+        let applied_space_width = match geometry_backend {
+            DisplayGeometryBackend::TerminalCells => None,
+            DisplayGeometryBackend::WindowSystemPixels => item_layout.space_width,
         };
         let natural_advance_px = if ch == ' ' && applied_space_width.is_some() {
             self.glyph_measurer
@@ -2342,7 +2340,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn push_stretch(&mut self, stretch: DisplayStretch, face_id: FaceId, charpos: usize) {
-        let Some((width_cols, pixel_width)) = self.stretch_width(&stretch.width) else {
+        let Some((width_cols, pixel_width)) = self.stretch_width(&stretch.width, face_id) else {
             return;
         };
         // GNU `produce_stretch_glyph` accepts zero as the result of valid
@@ -2386,7 +2384,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             return;
         }
         let Some((width_cols, pixel_width)) =
-            self.stretch_width(&media.replacement_stretch().width)
+            self.stretch_width(&media.replacement_stretch().width, face_id)
         else {
             return;
         };
@@ -2543,7 +2541,11 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         }
     }
 
-    fn stretch_width(&self, width: &DisplayStretchWidth) -> Option<(u16, f32)> {
+    fn stretch_width(
+        &mut self,
+        width: &DisplayStretchWidth,
+        face_id: FaceId,
+    ) -> Option<(u16, f32)> {
         match width {
             DisplayStretchWidth::Length(length) => {
                 let pixels = self.length_pixels(
@@ -2555,6 +2557,41 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     .ceil()
                     .max(1.0) as u16;
                 Some((cols, pixels))
+            }
+            DisplayStretchWidth::RelativeToSource { factor, source } => {
+                let source_char = source.as_rust_char().unwrap_or(' ');
+                let source_columns = usize::from(base_width_cols(source_char).max(1));
+                let geometry_backend = self
+                    .glyph_measurer
+                    .as_deref()
+                    .map(DisplayGlyphMeasurer::display_geometry_backend)
+                    .unwrap_or(DisplayGeometryBackend::WindowSystemPixels);
+                match geometry_backend {
+                    // On a TTY GNU's `it2.pixel_width` is a terminal-cell
+                    // count. Assignment to integer `width` truncates the
+                    // factor product before the nonzero fallback, and only
+                    // then do we map those cells into this engine's logical
+                    // pixel coordinates.
+                    DisplayGeometryBackend::TerminalCells => {
+                        let columns = (*factor * source_columns as f32).trunc().max(1.0) as u16;
+                        Some((
+                            columns,
+                            f32::from(columns) * self.layout.char_width_px.max(1.0),
+                        ))
+                    }
+                    // A window-system frame performs the same integer
+                    // assignment in concrete pixels after measuring the
+                    // covered character in its selected font.
+                    DisplayGeometryBackend::WindowSystemPixels => {
+                        let source_advance =
+                            self.glyph_advance_px(source_char, face_id, source_columns);
+                        let pixels = (*factor * source_advance).trunc().max(1.0);
+                        let columns = (pixels / self.layout.char_width_px.max(1.0))
+                            .ceil()
+                            .max(1.0) as u16;
+                        Some((columns, pixels))
+                    }
+                }
             }
             DisplayStretchWidth::AlignTo(prop) => {
                 // GNU `display_line`/`produce_stretch_glyph` (xdisp.c) feeds

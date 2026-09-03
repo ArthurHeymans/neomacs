@@ -35,6 +35,7 @@ use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
+use neovm_core::emacs_core::emacs_char::EmacsChar;
 use neovm_core::emacs_core::eval::{DisplayHost, SurfaceChannelKind};
 use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
 use neovm_core::emacs_core::value::list_to_vec;
@@ -482,7 +483,10 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
             let content = match margin.content() {
                 DisplayMarginContent::String(value) => DisplayMarginEmissionContent::String(*value),
                 DisplayMarginContent::Stretch { layout, .. } => {
-                    DisplayMarginEmissionContent::Item(DisplayItemKind::Stretch(layout.clone()))
+                    let (source_char, _) = decode_utf8(source_text);
+                    DisplayMarginEmissionContent::Item(DisplayItemKind::Stretch(
+                        layout.bind_source(EmacsChar::from_char(source_char)),
+                    ))
                 }
                 DisplayMarginContent::Media {
                     spec,

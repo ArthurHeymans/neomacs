@@ -5,6 +5,7 @@ use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::{WebViewId, XwidgetId};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
 use neovm_core::emacs_core::Value;
+use neovm_core::emacs_core::emacs_char::EmacsChar;
 use neovm_core::face::LispFaceId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -1253,6 +1254,15 @@ pub(crate) enum DisplayLength {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum DisplayStretchWidth {
     Length(DisplayLength),
+    /// GNU's `:relative-width` is relative to the first covered source
+    /// character, not to the canonical `em`.  Carrying that character in the
+    /// render item makes it impossible for row layout to silently substitute
+    /// the frame column width (the lossy behavior that shifted Doom's TTY
+    /// modeline).
+    RelativeToSource {
+        factor: f32,
+        source: EmacsChar,
+    },
     /// `:align-to` operand, kept verbatim as Lisp — see [`DisplayLength::Expr`].
     AlignTo(Value),
 }

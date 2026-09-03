@@ -720,6 +720,7 @@ fn display_property_source_action_classifies_strings_typed_items_and_resolver_fa
             DisplayPropertySourceFaces::Buffer {
                 effective: base_face,
             },
+            EmacsChar::from_char('x'),
         ) {
             DisplayPropertySourceAction::PushReplacement { value, base_face } => {
                 assert_eq!(
@@ -742,6 +743,7 @@ fn display_property_source_action_classifies_strings_typed_items_and_resolver_fa
             DisplayPropertySourceFaces::Buffer {
                 effective: base_face,
             },
+            EmacsChar::from_char(' '),
         ) {
             DisplayPropertySourceAction::Emit {
                 kind:
@@ -761,6 +763,7 @@ fn display_property_source_action_classifies_strings_typed_items_and_resolver_fa
             DisplayPropertySourceFaces::Buffer {
                 effective: base_face,
             },
+            EmacsChar::from_char('x'),
         ) {
             DisplayPropertySourceAction::Emit {
                 kind:
@@ -789,6 +792,7 @@ fn display_property_string_base_face_is_explicit_for_buffer_and_string_sources()
     let buffer_action = plan.source_action(
         &mut context,
         DisplayPropertySourceFaces::Buffer { effective },
+        EmacsChar::from_char('x'),
     );
     assert!(matches!(
         buffer_action,
@@ -804,6 +808,7 @@ fn display_property_string_base_face_is_explicit_for_buffer_and_string_sources()
             effective,
             underlying,
         },
+        EmacsChar::from_char('x'),
     );
     assert!(matches!(
         string_action,
@@ -837,6 +842,7 @@ fn display_property_source_replacement_resolves_direct_media_item() {
         Value::NIL,
         &classification,
         RenderFaceRef::FaceId(FaceId::new(7)),
+        EmacsChar::from_char('x'),
     );
 
     let DisplayPropertySourceReplacement::Item(DisplayItemKind::MediaReplacement(resolved)) =

@@ -1,7 +1,6 @@
 use super::*;
 use crate::display_item::{
-    DisplayImageItem, DisplayLength, DisplayMediaReplacement, DisplayStretch, DisplayStretchWidth,
-    DisplayVideoItem, DisplayXwidgetItem,
+    DisplayImageItem, DisplayLength, DisplayMediaReplacement, DisplayVideoItem, DisplayXwidgetItem,
 };
 use neomacs_display_protocol::VideoId;
 use neovm_core::emacs_core::{Context, Value};
@@ -43,8 +42,8 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
         ]))
         .replacement()
         .cloned(),
-        Some(DisplayReplacementProperty::Stretch(DisplayStretch {
-            width: DisplayStretchWidth::AlignTo(align_expr),
+        Some(DisplayReplacementProperty::Stretch(ParsedDisplaySpace {
+            width: ParsedDisplaySpaceWidth::AlignTo(align_expr),
             height: None,
             ascent: None,
         }))
@@ -145,8 +144,8 @@ fn display_property_classification_names_replacement_accessors() {
 
     assert!(matches!(
         stretch.replacement(),
-        Some(DisplayReplacementProperty::Stretch(DisplayStretch {
-            width: DisplayStretchWidth::Length(DisplayLength::Em(3.0)),
+        Some(DisplayReplacementProperty::Stretch(ParsedDisplaySpace {
+            width: ParsedDisplaySpaceWidth::Length(DisplayLength::Em(3.0)),
             height: None,
             ascent: None,
         }))
@@ -178,10 +177,30 @@ fn classify_display_property_parses_space_width_height_and_ascent() {
         ]))
         .replacement()
         .cloned(),
-        Some(DisplayReplacementProperty::Stretch(DisplayStretch {
-            width: DisplayStretchWidth::Length(DisplayLength::Em(3.0)),
+        Some(DisplayReplacementProperty::Stretch(ParsedDisplaySpace {
+            width: ParsedDisplaySpaceWidth::Length(DisplayLength::Em(3.0)),
             height: Some(DisplayLength::Em(2.0)),
             ascent: Some(DisplayLength::Em(50.0)),
+        }))
+    );
+}
+
+#[test]
+fn classify_display_property_preserves_relative_width_source_basis() {
+    let _eval = Context::new();
+
+    assert_eq!(
+        classify_display_property(Value::list(vec![
+            Value::symbol("space"),
+            Value::keyword(":relative-width"),
+            Value::make_float(0.5),
+        ]))
+        .replacement()
+        .cloned(),
+        Some(DisplayReplacementProperty::Stretch(ParsedDisplaySpace {
+            width: ParsedDisplaySpaceWidth::RelativeToSource { factor: 0.5 },
+            height: None,
+            ascent: None,
         }))
     );
 }
@@ -211,8 +230,8 @@ fn classify_display_property_keeps_space_replacement_without_explicit_width() {
         ]))
         .replacement()
         .cloned(),
-        Some(DisplayReplacementProperty::Stretch(DisplayStretch {
-            width: DisplayStretchWidth::Length(DisplayLength::Em(1.0)),
+        Some(DisplayReplacementProperty::Stretch(ParsedDisplaySpace {
+            width: ParsedDisplaySpaceWidth::Length(DisplayLength::Em(1.0)),
             height: Some(DisplayLength::Em(2.0)),
             ascent: None,
         }))
@@ -325,8 +344,8 @@ fn classify_display_property_keeps_fringe_length_units_in_space_specs() {
         ]))
         .replacement()
         .cloned(),
-        Some(DisplayReplacementProperty::Stretch(DisplayStretch {
-            width: DisplayStretchWidth::AlignTo(Value::symbol("left-fringe")),
+        Some(DisplayReplacementProperty::Stretch(ParsedDisplaySpace {
+            width: ParsedDisplaySpaceWidth::AlignTo(Value::symbol("left-fringe")),
             height: None,
             ascent: None,
         }))
@@ -359,8 +378,8 @@ fn align_to_keeps_fractional_image_width_operand() {
 
     assert_eq!(
         classify_display_property(spec).replacement().cloned(),
-        Some(DisplayReplacementProperty::Stretch(DisplayStretch {
-            width: DisplayStretchWidth::AlignTo(expr),
+        Some(DisplayReplacementProperty::Stretch(ParsedDisplaySpace {
+            width: ParsedDisplaySpaceWidth::AlignTo(expr),
             height: None,
             ascent: None,
         })),

@@ -3309,6 +3309,58 @@ fn tty_mode_line_space_width_does_not_shift_later_align_to() {
     );
 }
 
+/// GNU resolves `(space :relative-width FACTOR)` in terminal-cell units.  The
+/// product is assigned to the integer `width` in `produce_stretch_glyph`; a
+/// half-width ordinary space therefore truncates to zero and is then clamped
+/// to one terminal cell.  Keeping the half-cell as a fractional pixel pen
+/// makes a later `:align-to` land one physical terminal column too far right.
+#[test]
+fn tty_mode_line_relative_space_keeps_cell_and_pixel_pens_together() {
+    let _eval = Context::new();
+    let rendered = Value::string_with_text_properties(
+        "A  R",
+        vec![
+            StringTextPropertyRun {
+                start: 1,
+                end: 2,
+                plist: Value::list(vec![
+                    Value::symbol("display"),
+                    Value::list(vec![Value::list(vec![
+                        Value::symbol("space"),
+                        Value::keyword(":relative-width"),
+                        Value::make_float(0.5),
+                    ])]),
+                ]),
+            },
+            StringTextPropertyRun {
+                start: 2,
+                end: 3,
+                plist: Value::list(vec![
+                    Value::symbol("display"),
+                    Value::list(vec![
+                        Value::symbol("space"),
+                        Value::keyword("align-to"),
+                        Value::list(vec![Value::fixnum(80)]),
+                    ]),
+                ]),
+            },
+        ],
+    );
+
+    let row = render_lisp_display_row(rendered, GlyphRowRole::ModeLine);
+
+    assert_eq!(
+        row_text_expanding_stretches(&row),
+        format!("A{}R", " ".repeat(9)),
+        "a relative stretch and later align-to must share integral TTY cells"
+    );
+    assert_eq!(
+        row.glyphs[GlyphArea::Text.index()][1].pixel_width,
+        8.0,
+        "the half-width request clamps to one complete logical terminal cell"
+    );
+}
+
 /// Buffer-path `(space :align-to N)` must be unchanged by the unification: the
 /// buffer text path already used `calc_pixel_width_or_height`, so this pins
 /// that path's output stays byte-identical. An `:align-to 4` over a single

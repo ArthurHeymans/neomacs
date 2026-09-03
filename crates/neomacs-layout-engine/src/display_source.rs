@@ -2946,6 +2946,9 @@ impl LispStringSourceFrame {
         }
 
         let start = self.char_index;
+        let Some(source_char) = self.char_at(start) else {
+            return LispStringAction::PopFrame;
+        };
         let property_end = self.next_property_change(start).max(start + 1);
         let face = self.face_at(start, context);
         let pointer_appearance = self.pointer_appearance_at(start, property_end, face, context);
@@ -2980,6 +2983,7 @@ impl LispStringSourceFrame {
                         effective: face,
                         underlying: self.base_face,
                     },
+                    source_char,
                 ) {
                     DisplayPropertySourceCursorAction::PushReplacement { value, base_face } => {
                         self.char_index = display_end;
@@ -3425,6 +3429,7 @@ impl DisplayPropertySourcePlan {
         &self,
         context: &mut DisplaySourceContext<'_>,
         faces: DisplayPropertySourceFaces,
+        source_char: EmacsChar,
     ) -> DisplayPropertySourceAction {
         let effective_face = faces.effective();
         match DisplayPropertySourceReplacement::resolve(
@@ -3432,6 +3437,7 @@ impl DisplayPropertySourcePlan {
             self.value,
             &self.classification,
             effective_face,
+            source_char,
         ) {
             DisplayPropertySourceReplacement::String(value) => {
                 DisplayPropertySourceAction::PushReplacement {
@@ -3455,8 +3461,9 @@ impl DisplayPropertySourcePlan {
         context: &mut DisplaySourceContext<'_>,
         span: SourceSpan,
         faces: DisplayPropertySourceFaces,
+        source_char: EmacsChar,
     ) -> DisplayPropertySourceCursorAction {
-        self.source_action(context, faces)
+        self.source_action(context, faces, source_char)
             .into_cursor_action(span, faces.effective())
     }
 }
@@ -3496,6 +3503,7 @@ impl DisplayPropertySourceReplacement {
         display_prop: Value,
         classification: &DisplayPropertyClassification,
         face: RenderFaceRef,
+        source_char: EmacsChar,
     ) -> Self {
         // Typed arms take their Lisp payload from the SPEC that produced the
         // replacement (`["X"]` and `("X")` are not the string they replace with);
@@ -3504,7 +3512,7 @@ impl DisplayPropertySourceReplacement {
         match classification.replacement() {
             Some(DisplayReplacementProperty::String) => Self::String(spec),
             Some(DisplayReplacementProperty::Stretch(stretch)) => {
-                Self::Item(DisplayItemKind::Stretch(stretch.clone()))
+                Self::Item(DisplayItemKind::Stretch(stretch.bind_source(source_char)))
             }
             Some(DisplayReplacementProperty::Fringe(layout)) => {
                 // Collect the fringe layout for the row-render path; the inline
@@ -3519,7 +3527,7 @@ impl DisplayPropertySourceReplacement {
                     }
                     DisplayMarginContent::Stretch { layout, .. } => {
                         Some(DisplayMarginEmissionContent::Item(
-                            DisplayItemKind::Stretch(layout.clone()),
+                            DisplayItemKind::Stretch(layout.bind_source(source_char)),
                         ))
                     }
                     DisplayMarginContent::Media {

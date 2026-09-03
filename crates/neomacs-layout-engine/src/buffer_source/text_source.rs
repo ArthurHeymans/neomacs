@@ -699,11 +699,13 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         display_property: &DisplayPropertySourcePlan,
         face: RenderFaceRef,
         span: SourceSpan,
+        source_char: EmacsChar,
     ) -> DisplayPropertySourceCursorAction {
         display_property.cursor_action(
             context,
             span,
             DisplayPropertySourceFaces::Buffer { effective: face },
+            source_char,
         )
     }
 
@@ -920,6 +922,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             }
 
             let start = self.char_pos;
+            let source_char = self.char_at(start)?;
             if self.overlay_strings_produced_at != Some(start)
                 && let Some(strings) = self.overlay_strings_at(start)
             {
@@ -983,6 +986,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                     &display_property,
                     face,
                     span,
+                    source_char,
                 ) {
                     DisplayPropertySourceCursorAction::PushReplacement { value, base_face } => {
                         if replacement_mode.inlines_replacement_strings() {

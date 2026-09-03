@@ -1,6 +1,4 @@
-use crate::display_row::builder::{
-    DisplayGlyphMeasurer, DisplayRowLayout, DisplaySpaceWidthBehavior,
-};
+use crate::display_row::builder::{DisplayGeometryBackend, DisplayGlyphMeasurer, DisplayRowLayout};
 use crate::display_row::metrics::{DisplayRowFallbackMetrics, DisplayRowMeasuredFaceMetrics};
 use crate::display_row::width::DisplayRowCharWidthPolicy;
 use crate::display_text_run_measurement::{
@@ -749,10 +747,10 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             .then_some(metrics.space_width)
     }
 
-    fn display_space_width_behavior(&self) -> DisplaySpaceWidthBehavior {
+    fn display_geometry_backend(&self) -> DisplayGeometryBackend {
         match self.mode {
-            DisplayRowMeasurementMode::ConcreteFont => DisplaySpaceWidthBehavior::Apply,
-            DisplayRowMeasurementMode::LogicalCells => DisplaySpaceWidthBehavior::Ignore,
+            DisplayRowMeasurementMode::ConcreteFont => DisplayGeometryBackend::WindowSystemPixels,
+            DisplayRowMeasurementMode::LogicalCells => DisplayGeometryBackend::TerminalCells,
         }
     }
 
