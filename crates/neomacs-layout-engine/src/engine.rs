@@ -2949,9 +2949,27 @@ impl LayoutEngine {
         // reuses its body verbatim instead of full-rebuilding when another window
         // is edited.
         let window_id = DisplayWindowId::new(params.window_id);
-        let prev = self.retained_window_matrices.get(&window_id)?;
+        let Some(prev) = self.retained_window_matrices.get(&window_id) else {
+            tracing::debug!(
+                window = params.window_id,
+                "cursor-only declined: no retained matrix for this window yet"
+            );
+            return None;
+        };
         let curr_key = RetainedWindowKey::from_params(params, layout_box, evaluator);
-        let mut replay = prev.cursor_only_replay(&curr_key)?;
+        let Some(mut replay) = prev.cursor_only_replay(&curr_key) else {
+            // The edit path reports why it declined; without the same report
+            // here a window that silently full-rebuilds every frame is
+            // invisible, which is exactly how the LSP fixture hid two of its
+            // three windows.
+            tracing::debug!(
+                window = params.window_id,
+                validity = ?prev.validity,
+                differing = ?prev.key.differing_fields(&curr_key),
+                "cursor-only declined by the retained matrix"
+            );
+            return None;
+        };
         if prev.chrome_reusable_after_cursor_move(&replay, chrome_reuse_context(params, evaluator))
         {
             replay.chrome = prev.retained_chrome();
