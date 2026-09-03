@@ -210,7 +210,8 @@ fn row_text(row: &GlyphRow) -> (String, Vec<FaceRun>) {
                     text.push(*ch);
                     col += 1;
                 }
-                GlyphType::Composite { text: cluster } => {
+                GlyphType::Composite { text: cluster }
+                | GlyphType::AutomaticComposite { text: cluster, .. } => {
                     text.push_str(cluster);
                     col += cluster.chars().count();
                 }

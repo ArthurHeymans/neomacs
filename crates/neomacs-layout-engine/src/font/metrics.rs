@@ -3275,7 +3275,7 @@ fn realize_frame_char_fonts(
                         }
                         *ch
                     }
-                    GlyphType::Composite { text } => {
+                    GlyphType::Composite { text } | GlyphType::AutomaticComposite { text, .. } => {
                         if seen_clusters.insert((glyph.face_id, text.clone())) {
                             wanted_clusters.push((glyph.face_id, text.clone()));
                         }

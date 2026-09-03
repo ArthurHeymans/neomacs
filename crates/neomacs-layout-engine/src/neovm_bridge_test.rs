@@ -615,6 +615,41 @@ fn layout_snapshot_buffer_local_value_falls_back_to_default_values() {
 }
 
 #[test]
+fn layout_snapshot_compiles_live_lisp_automatic_composition_spans() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    eval_lisp(
+        &mut evaluator,
+        r##"(progn
+              (set-default 'auto-composition-mode t)
+              (set-default 'auto-composition-function 'auto-compose-chars)
+              (aset composition-function-table #xA9B6
+                    (list (vector "[ꦏ-ꦲ]ꦶ" 1 'font-shape-gstring))))"##,
+    );
+    let buffer_id = evaluator
+        .buffer_manager_mut()
+        .create_buffer("*automatic-composition*");
+    evaluator
+        .buffer_manager_mut()
+        .get_mut(buffer_id)
+        .expect("buffer")
+        .insert("ꦧꦱꦗꦮꦶ");
+
+    let snapshot = LayoutBufferSnapshot::from_buffer_with_obarray(
+        evaluator.buffer_manager().get(buffer_id).expect("buffer"),
+        evaluator.obarray(),
+    );
+
+    assert_eq!(
+        snapshot.layout_automatic_composition_starting_at(CharPos0::new(3)),
+        Some(CharRange::new(CharPos0::new(3), CharPos0::new(5)))
+    );
+    assert_eq!(
+        snapshot.layout_next_automatic_composition_start(CharPos0::ZERO, CharPos0::new(5)),
+        Some(CharPos0::new(3))
+    );
+}
+
+#[test]
 fn display_line_numbers_symbol_domain_matches_gnu() {
     assert_eq!(
         DisplayLineNumbersSymbol::from_symbol_name("relative"),

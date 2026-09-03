@@ -317,10 +317,24 @@ pub(crate) enum DisplayRowTextNaturalAdvanceKind {
     Tab,
     ClusterContinuation,
     ComplexRunMember,
-    FaceColumns { columns: usize },
+    /// A source character with GNU `CHARACTER_WIDTH` zero that is not a
+    /// member of a selected composition.  It may carry graphical ink, but it
+    /// advances neither pixels nor terminal cells and must not be merged into
+    /// an adjacent glyph.
+    StandaloneZeroWidth,
+    FaceColumns {
+        columns: usize,
+    },
 }
 
 impl DisplayRowTextNaturalAdvanceKind {
+    fn for_face_columns(ch: char) -> Self {
+        match usize::from(base_width_cols(ch)) {
+            0 => Self::StandaloneZeroWidth,
+            columns => Self::FaceColumns { columns },
+        }
+    }
+
     pub(crate) fn for_tail(ch: char, tail: Option<(char, bool)>) -> Self {
         if ch == '\t' {
             Self::Tab
@@ -329,9 +343,7 @@ impl DisplayRowTextNaturalAdvanceKind {
         } else if continues_complex_run(ch, tail) {
             Self::ComplexRunMember
         } else {
-            Self::FaceColumns {
-                columns: usize::from(base_width_cols(ch)),
-            }
+            Self::for_face_columns(ch)
         }
     }
 
@@ -341,9 +353,7 @@ impl DisplayRowTextNaturalAdvanceKind {
         } else if is_cluster_continuation {
             Self::ClusterContinuation
         } else {
-            Self::FaceColumns {
-                columns: usize::from(base_width_cols(ch)),
-            }
+            Self::for_face_columns(ch)
         }
     }
 
@@ -419,6 +429,7 @@ impl DisplayRowTextNaturalAdvancePolicy {
             DisplayRowTextNaturalAdvanceKind::ComplexRunMember => {
                 glyph_advance_px(request.ch, request.face_id, 1)
             }
+            DisplayRowTextNaturalAdvanceKind::StandaloneZeroWidth => 0.0,
             DisplayRowTextNaturalAdvanceKind::FaceColumns { columns } => {
                 glyph_advance_px(request.ch, request.face_id, columns)
             }
@@ -442,6 +453,13 @@ impl DisplayRowTextCharState {
 
     pub(crate) fn for_glyphs(ch: char, glyphs: &[Glyph]) -> Self {
         Self::for_tail(ch, last_text_cluster_tail_in_glyphs(glyphs))
+    }
+
+    pub(crate) fn independent(ch: char) -> Self {
+        Self {
+            ch,
+            kind: DisplayRowTextNaturalAdvanceKind::for_source_char(ch, false),
+        }
     }
 
     pub(crate) fn ch(self) -> char {

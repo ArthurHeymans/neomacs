@@ -57,6 +57,17 @@ fn text_item(text: &str) -> DisplayItem {
     )
 }
 
+fn independent_text_item(text: &str) -> DisplayItem {
+    DisplayItem::new(
+        SourceSpan::new(
+            DisplaySourcePosition::lisp_string(1, 0, 0),
+            DisplaySourcePosition::lisp_string(1, text.chars().count(), text.len()),
+        ),
+        RenderFaceRef::FaceId(FaceId::new(2)),
+        DisplayItemKind::TextRun(DisplayTextRun::independent(text)),
+    )
+}
+
 fn pointer_appearance(source_id: u64) -> GlyphPointerAppearance {
     GlyphPointerAppearance {
         source: GlyphPointerSourceIdentity {
@@ -192,7 +203,8 @@ fn row_text(row: &neomacs_display_protocol::glyph_matrix::GlyphRow) -> String {
     {
         match &glyph.glyph_type {
             GlyphType::Char { ch } | GlyphType::Glyphless { ch, .. } => text.push(*ch),
-            GlyphType::Composite { text: cluster } => text.push_str(cluster),
+            GlyphType::Composite { text: cluster }
+            | GlyphType::AutomaticComposite { text: cluster, .. } => text.push_str(cluster),
             GlyphType::Stretch { width_cols } => {
                 text.push_str(&" ".repeat(usize::from(*width_cols)))
             }
@@ -222,6 +234,38 @@ fn display_row_text_char_state_names_row_tail_policy() {
     assert_eq!(
         DisplayRowTextCharState::for_tail('中', None).kind(),
         DisplayRowTextNaturalAdvanceKind::FaceColumns { columns: 2 }
+    );
+    assert_eq!(
+        DisplayRowTextCharState::independent('ꦧ').kind(),
+        DisplayRowTextNaturalAdvanceKind::StandaloneZeroWidth
+    );
+}
+
+#[test]
+fn independent_text_keeps_zero_width_characters_as_independent_glyphs() {
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let progress = {
+        let mut writer = DisplayRowProgressWriter::new(
+            &row_layout,
+            &mut row,
+            DisplayRowPosition::new(0.0, 0),
+            80.0,
+        );
+        writer.push_item(independent_text_item("ꦧꦱꦗ"))
+    };
+
+    assert_eq!(progress.end().col(), 0);
+    assert_eq!(
+        row.glyphs[GlyphArea::Text.index()]
+            .iter()
+            .map(|glyph| &glyph.glyph_type)
+            .collect::<Vec<_>>(),
+        vec![
+            &GlyphType::Char { ch: 'ꦧ' },
+            &GlyphType::Char { ch: 'ꦱ' },
+            &GlyphType::Char { ch: 'ꦗ' },
+        ]
     );
 }
 

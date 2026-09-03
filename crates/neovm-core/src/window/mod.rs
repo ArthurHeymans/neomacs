@@ -625,6 +625,8 @@ pub struct BufferLayoutInputState {
 #[repr(usize)]
 #[strum(serialize_all = "kebab-case")]
 pub enum WindowLayoutVariable {
+    AutoCompositionFunction,
+    AutoCompositionMode,
     BidiDisplayReordering,
     BidiParagraphDirection,
     BidiParagraphSeparateRe,

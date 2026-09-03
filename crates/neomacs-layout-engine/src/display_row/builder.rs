@@ -6,7 +6,8 @@ use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLength,
     DisplayMediaReplacement, DisplayMediaReplacementKind, DisplaySourcePosition, DisplayStretch,
-    DisplayStretchWidth, GlyphlessMethod, RenderFaceRef, SourceSpan, control_char_caret_char,
+    DisplayStretchWidth, DisplayTextComposition, GlyphlessMethod, RenderFaceRef, SourceSpan,
+    control_char_caret_char,
 };
 use crate::display_pixel_calc::{PixelCalcContext, calc_pixel_width_or_height};
 use crate::display_row::append_context::{
@@ -21,7 +22,7 @@ use crate::output::builder::DisplayOutputBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{
     Glyph, GlyphArea, GlyphProvenance, GlyphRow, GlyphStringSource, GlyphType,
-    NO_BUFFER_POSITION_CHARPOS,
+    NO_BUFFER_POSITION_CHARPOS, TerminalComposition,
 };
 use neomacs_display_protocol::types::FaceId;
 
@@ -278,7 +279,8 @@ impl<'a> DisplayRowTextCharAdvanceRequest<'a> {
     ) -> f32 {
         let measured = match self.kind() {
             DisplayRowTextNaturalAdvanceKind::Tab
-            | DisplayRowTextNaturalAdvanceKind::ClusterContinuation => None,
+            | DisplayRowTextNaturalAdvanceKind::ClusterContinuation
+            | DisplayRowTextNaturalAdvanceKind::StandaloneZeroWidth => None,
             DisplayRowTextNaturalAdvanceKind::ComplexRunMember
             | DisplayRowTextNaturalAdvanceKind::FaceColumns { .. } => self.measured_advance(),
         };
@@ -652,6 +654,7 @@ impl DisplayRowWriteMetrics {
             }
             let width_cols = match &glyph.glyph_type {
                 GlyphType::Stretch { width_cols } => usize::from((*width_cols).max(1)),
+                GlyphType::AutomaticComposite { terminal, .. } => usize::from(terminal.width_cols),
                 GlyphType::Image { width_cols, .. }
                 | GlyphType::Video { width_cols, .. }
                 | GlyphType::Xwidget { width_cols, .. } => usize::from((*width_cols).max(1)),
@@ -662,6 +665,7 @@ impl DisplayRowWriteMetrics {
                 // `cmp->width` (= `string-width` of the cluster), not a single
                 // cell — combining marks within it contribute 0.
                 GlyphType::Composite { text } => crate::composition::composed_cluster_cols(text),
+                GlyphType::Char { ch } if base_width_cols(*ch) == 0 => 0,
                 _ if glyph.padding && glyph.pixel_width <= 0.0 => 0,
                 _ if glyph.wide => 2,
                 _ => 1,
@@ -1217,6 +1221,12 @@ impl DisplayRowAppendProgress {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DisplayTextClustering {
+    UnicodeFallback,
+    Independent,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DisplayTextSourceMapping<'a> {
     NaturalText,
     SourceMapped {
@@ -1636,21 +1646,46 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         let item_glyph_start = self.area_len();
         let status = match kind {
             DisplayItemKind::RowBreak(_) => DisplayRowAppendStatus::RowBreak,
-            DisplayItemKind::TextRun(run) => self.push_text_item(
-                &span,
-                face,
-                item_layout,
-                run.text.as_ref(),
-                DisplayTextSourceMapping::NaturalText,
-                pointer_appearance.as_ref(),
-                &mut metrics,
-                &mut slots,
-            ),
+            DisplayItemKind::TextRun(run) => match run.composition {
+                DisplayTextComposition::UnicodeFallback => self.push_text_item(
+                    &span,
+                    face,
+                    item_layout,
+                    run.text.as_ref(),
+                    DisplayTextClustering::UnicodeFallback,
+                    DisplayTextSourceMapping::NaturalText,
+                    pointer_appearance.as_ref(),
+                    &mut metrics,
+                    &mut slots,
+                ),
+                DisplayTextComposition::Independent => self.push_text_item(
+                    &span,
+                    face,
+                    item_layout,
+                    run.text.as_ref(),
+                    DisplayTextClustering::Independent,
+                    DisplayTextSourceMapping::NaturalText,
+                    pointer_appearance.as_ref(),
+                    &mut metrics,
+                    &mut slots,
+                ),
+                DisplayTextComposition::Automatic(terminal) => self.push_automatic_text_item(
+                    &span,
+                    face,
+                    item_layout,
+                    run.text.as_ref(),
+                    terminal,
+                    pointer_appearance.as_ref(),
+                    &mut metrics,
+                    &mut slots,
+                ),
+            },
             DisplayItemKind::SourceMappedText(text) => self.push_text_item(
                 &span,
                 face,
                 item_layout,
                 text.text.as_ref(),
+                DisplayTextClustering::UnicodeFallback,
                 DisplayTextSourceMapping::SourceMapped {
                     glyph_string_start: text.glyph_string_start.as_ref(),
                 },
@@ -1749,6 +1784,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         face: RenderFaceRef,
         item_layout: DisplayItemLayout,
         text: &str,
+        clustering: DisplayTextClustering,
         source_mapping: DisplayTextSourceMapping<'_>,
         pointer_appearance: Option<&crate::display_item::DisplayPointerAppearance>,
         metrics: &mut DisplayRowWriteMetrics,
@@ -1763,7 +1799,10 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         let mut status = DisplayRowAppendStatus::Complete;
         let mut byte_offset = 0usize;
         for (char_offset, ch) in text.chars().enumerate() {
-            let char_state = self.writer.text_char_state(ch);
+            let char_state = match clustering {
+                DisplayTextClustering::UnicodeFallback => self.writer.text_char_state(ch),
+                DisplayTextClustering::Independent => DisplayRowTextCharState::independent(ch),
+            };
             let advance_request = DisplayRowTextCharAdvanceRequest::new(
                 char_state,
                 face_id,
@@ -1839,6 +1878,73 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             }
         }
         status
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn push_automatic_text_item(
+        &mut self,
+        span: &SourceSpan,
+        face: RenderFaceRef,
+        item_layout: DisplayItemLayout,
+        text: &str,
+        terminal: TerminalComposition,
+        pointer_appearance: Option<&crate::display_item::DisplayPointerAppearance>,
+        metrics: &mut DisplayRowWriteMetrics,
+        slots: &mut Vec<DisplayRowGlyphSlot>,
+    ) -> DisplayRowAppendStatus {
+        let face_id = self.writer.face_id(face);
+        let advance = self
+            .writer
+            .automatic_composition_advance_px(text, face_id, &terminal);
+        if advance > 0.0 && self.position.x_px() + advance > self.max_x_px {
+            return DisplayRowAppendStatus::Clipped;
+        }
+
+        let slot_start = self.position;
+        let source_mapping = DisplayTextSourceMapping::NaturalText;
+        let resolved = source_mapping.resolve(span, self.writer.row);
+        let before_len = self.area_len();
+        self.writer
+            .push_automatic_composition(text, terminal, face_id, resolved, advance);
+        self.writer
+            .apply_item_layout_since(before_len, face_id, item_layout);
+
+        let glyph_pointer_appearance =
+            pointer_appearance.and_then(|appearance| appearance.glyph_metadata());
+        let pointer_metadata = glyph_pointer_appearance
+            .and_then(|appearance| self.writer.row.intern_pointer_appearance(appearance));
+        let area_index = self.writer.area_index();
+        for glyph in &mut self.writer.row.glyphs[area_index][before_len..] {
+            glyph.pointer_appearance = pointer_metadata;
+        }
+
+        let written = DisplayRowWriteMetrics::from_glyphs(
+            &self.writer.row.glyphs[area_index][before_len..],
+            self.writer.layout.char_width_px,
+        );
+        let mut byte_offset = 0usize;
+        for (char_offset, ch) in text.chars().enumerate() {
+            slots.push(DisplayRowGlyphSlot::with_pointer_appearance(
+                source_mapping.slot_source(&span.start, char_offset, byte_offset),
+                slot_start.x_px(),
+                slot_start.col(),
+                if char_offset == 0 {
+                    written.width_px()
+                } else {
+                    0.0
+                },
+                if char_offset == 0 {
+                    written.width_cols()
+                } else {
+                    0
+                },
+                pointer_appearance.cloned(),
+            ));
+            byte_offset += ch.len_utf8();
+        }
+        self.advance(written);
+        metrics.add(written);
+        DisplayRowAppendStatus::Complete
     }
 
     /// Constrain newly appended structural glyphs to their lane's remaining
@@ -1963,19 +2069,35 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         let box_vertical_edges = item.box_vertical_edges;
         let box_run_membership = item.box_run_membership;
         match item.kind {
-            DisplayItemKind::TextRun(run) => {
-                self.push_text_item(
+            DisplayItemKind::TextRun(run) => match run.composition {
+                DisplayTextComposition::UnicodeFallback => self.push_text_item(
                     run.text.as_ref(),
                     face_id,
                     &item.span,
+                    DisplayTextClustering::UnicodeFallback,
                     DisplayTextSourceMapping::NaturalText,
-                );
-            }
+                ),
+                DisplayTextComposition::Independent => self.push_text_item(
+                    run.text.as_ref(),
+                    face_id,
+                    &item.span,
+                    DisplayTextClustering::Independent,
+                    DisplayTextSourceMapping::NaturalText,
+                ),
+                DisplayTextComposition::Automatic(terminal) => {
+                    let mapping =
+                        DisplayTextSourceMapping::NaturalText.resolve(&item.span, self.row);
+                    let advance =
+                        self.automatic_composition_advance_px(&run.text, face_id, &terminal);
+                    self.push_automatic_composition(&run.text, terminal, face_id, mapping, advance);
+                }
+            },
             DisplayItemKind::SourceMappedText(text) => {
                 self.push_text_item(
                     text.text.as_ref(),
                     face_id,
                     &item.span,
+                    DisplayTextClustering::UnicodeFallback,
                     DisplayTextSourceMapping::SourceMapped {
                         glyph_string_start: text.glyph_string_start.as_ref(),
                     },
@@ -2032,6 +2154,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         text: &str,
         face_id: FaceId,
         span: &SourceSpan,
+        clustering: DisplayTextClustering,
         source_mapping: DisplayTextSourceMapping<'_>,
     ) {
         if text.is_empty() {
@@ -2041,7 +2164,10 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         let measurement = self.text_run_measurement(text, face_id);
         let mut byte_offset = 0usize;
         for (char_offset, ch) in text.chars().enumerate() {
-            let char_state = self.text_char_state(ch);
+            let char_state = match clustering {
+                DisplayTextClustering::UnicodeFallback => self.text_char_state(ch),
+                DisplayTextClustering::Independent => DisplayRowTextCharState::independent(ch),
+            };
             self.push_text_char_with_measurement(
                 char_state,
                 face_id,
@@ -2051,6 +2177,66 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 &measurement,
             );
             byte_offset += ch.len_utf8();
+        }
+    }
+
+    fn automatic_composition_advance_px(
+        &mut self,
+        text: &str,
+        face_id: FaceId,
+        terminal: &TerminalComposition,
+    ) -> f32 {
+        let backend = self
+            .glyph_measurer
+            .as_deref()
+            .map(DisplayGlyphMeasurer::display_geometry_backend)
+            .unwrap_or(DisplayGeometryBackend::WindowSystemPixels);
+        if backend == DisplayGeometryBackend::TerminalCells {
+            return f32::from(terminal.width_cols) * self.layout.char_width_px.max(1.0);
+        }
+
+        self.text_run_measurement(text, face_id)
+            .measured_advances()
+            .map(|advances| advances.iter().map(|advance| advance.advance_px).sum())
+            .filter(|width: &f32| width.is_finite() && *width > 0.0)
+            .unwrap_or_else(|| f32::from(terminal.width_cols) * self.layout.char_width_px.max(1.0))
+    }
+
+    fn push_automatic_composition(
+        &mut self,
+        text: &str,
+        terminal: TerminalComposition,
+        face_id: FaceId,
+        source_mapping: ResolvedDisplayTextSourceMapping,
+        pixel_width: f32,
+    ) {
+        let Some(first) = text.chars().next() else {
+            return;
+        };
+        let area_index = self.area_index();
+        let mut base = Glyph::char_with_provenance(first, face_id, source_mapping.provenance(0));
+        base.glyph_type = GlyphType::AutomaticComposite {
+            text: text.into(),
+            terminal,
+        };
+        base.pixel_width = pixel_width.max(0.0);
+        if let Some(vertical) = self
+            .glyph_measurer
+            .as_deref_mut()
+            .and_then(|measurer| measurer.glyph_vertical_metrics_px(first, face_id))
+        {
+            base.pixel_height = vertical.height_px;
+            base.pixel_ascent = vertical.ascent_px;
+        }
+        self.row.glyphs[area_index].push(base);
+        for (char_offset, ch) in text.chars().enumerate().skip(1) {
+            let mut padding =
+                Glyph::padding_with_provenance(face_id, source_mapping.provenance(char_offset));
+            padding.glyph_type = GlyphType::Char { ch };
+            self.row.glyphs[area_index].push(padding);
+        }
+        if area_index == GlyphArea::Text.index() {
+            self.row.displays_text = true;
         }
     }
 
@@ -2146,6 +2332,15 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     advance_request.face_id,
                     provenance,
                     advance,
+                );
+            }
+            DisplayRowTextNaturalAdvanceKind::StandaloneZeroWidth => {
+                glyph_row_writer::push_standalone_zero_width_char_to_area(
+                    self.row,
+                    area_index,
+                    ch,
+                    advance_request.face_id,
+                    provenance,
                 );
             }
             DisplayRowTextNaturalAdvanceKind::FaceColumns { .. } => {

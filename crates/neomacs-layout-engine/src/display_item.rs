@@ -1,6 +1,7 @@
 use crate::buffer_source::producer::frame::ReplacementCoveredSpan;
 use crate::display_property::DisplayPropertyClassification;
 use neomacs_display_protocol::face::{BoxRunMembership, BoxVerticalEdges};
+use neomacs_display_protocol::glyph_matrix::TerminalComposition;
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::{WebViewId, XwidgetId};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
@@ -863,7 +864,7 @@ impl BufferDisplayPropertyReplacementItem {
                 ),
             ),
             face,
-            DisplayItemKind::TextRun(DisplayTextRun::new(source_text.to_owned())),
+            DisplayItemKind::TextRun(DisplayTextRun::independent(source_text.to_owned())),
         )
         .with_box_vertical_edges(self.descriptor.box_vertical_edges())
         .with_pointer_appearance(self.descriptor.pointer_appearance().cloned());
@@ -896,11 +897,46 @@ impl BufferDisplayPropertyReplacementAnchor {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DisplayTextRun {
     pub(crate) text: Box<str>,
+    pub(crate) composition: DisplayTextComposition,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) enum DisplayTextComposition {
+    #[default]
+    UnicodeFallback,
+    /// Buffer text known not to be inside a Lisp-selected automatic
+    /// composition.  Zero-width characters remain independent display
+    /// elements instead of being heuristically merged by Unicode width.
+    Independent,
+    Automatic(TerminalComposition),
 }
 
 impl DisplayTextRun {
+    pub(crate) fn with_composition(
+        text: impl Into<Box<str>>,
+        composition: DisplayTextComposition,
+    ) -> Self {
+        Self {
+            text: text.into(),
+            composition,
+        }
+    }
+
     pub(crate) fn new(text: impl Into<Box<str>>) -> Self {
-        Self { text: text.into() }
+        Self::with_composition(text, DisplayTextComposition::UnicodeFallback)
+    }
+
+    pub(crate) fn independent(text: impl Into<Box<str>>) -> Self {
+        Self::with_composition(text, DisplayTextComposition::Independent)
+    }
+
+    pub(crate) fn automatic(text: impl Into<Box<str>>) -> Self {
+        let text = text.into();
+        let terminal = neovm_core::emacs_core::composite::automatic_composition_for_terminal(&text);
+        Self {
+            text,
+            composition: DisplayTextComposition::Automatic(terminal),
+        }
     }
 }
 

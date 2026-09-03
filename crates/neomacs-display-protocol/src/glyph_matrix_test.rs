@@ -741,6 +741,65 @@ fn row_hash_differs_for_different_chars() {
 }
 
 #[test]
+fn automatic_composition_plan_is_part_of_row_identity() {
+    let automatic_row = |base: char, extenders: &str, width_cols: u8| {
+        let terminal = TerminalComposition {
+            cells: vec![TerminalCompositionCell {
+                base,
+                extenders: extenders.into(),
+                width_cols,
+                source_char_len: 2,
+            }]
+            .into_boxed_slice(),
+            width_cols: u16::from(width_cols),
+        };
+        let mut glyph = Glyph::char(base, FaceId::new(0), 0);
+        glyph.glyph_type = GlyphType::AutomaticComposite {
+            text: "ab".into(),
+            terminal,
+        };
+        let mut row = GlyphRow::new(GlyphRowRole::Text);
+        row.glyphs[GlyphArea::Text.index()].push(glyph);
+        row
+    };
+
+    let one_cell = automatic_row('a', "b", 1);
+    let two_cells = automatic_row('a', "b", 2);
+    let different_cell_text = automatic_row('a', "c", 1);
+
+    assert_ne!(one_cell.compute_hash(), two_cells.compute_hash());
+    assert_ne!(one_cell.compute_hash(), different_cell_text.compute_hash());
+}
+
+#[test]
+fn automatic_composition_materialized_span_comes_from_terminal_plan() {
+    let mut glyph = Glyph::char('a', FaceId::new(0), 0);
+    glyph.glyph_type = GlyphType::AutomaticComposite {
+        text: "ab".into(),
+        terminal: TerminalComposition {
+            cells: vec![
+                TerminalCompositionCell {
+                    base: 'a',
+                    extenders: "".into(),
+                    width_cols: 1,
+                    source_char_len: 1,
+                },
+                TerminalCompositionCell {
+                    base: 'b',
+                    extenders: "".into(),
+                    width_cols: 1,
+                    source_char_len: 1,
+                },
+            ]
+            .into_boxed_slice(),
+            width_cols: 2,
+        },
+    };
+
+    assert_eq!(glyph.materialized_slot_span(), 2);
+}
+
+#[test]
 fn row_hash_differs_for_different_faces() {
     let mut row_a = GlyphRow::new(GlyphRowRole::Text);
     row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0));

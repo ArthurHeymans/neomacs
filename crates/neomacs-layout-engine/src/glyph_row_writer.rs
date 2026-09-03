@@ -102,7 +102,9 @@ fn bidi_char_for_glyph(glyph: &Glyph) -> Option<char> {
 
     match &glyph.glyph_type {
         GlyphType::Char { ch } | GlyphType::Glyphless { ch, .. } => Some(*ch),
-        GlyphType::Composite { text } => text.chars().next(),
+        GlyphType::Composite { text } | GlyphType::AutomaticComposite { text, .. } => {
+            text.chars().next()
+        }
         GlyphType::Stretch { .. } => Some(' '),
         GlyphType::Image { .. }
         | GlyphType::Video { .. }
@@ -123,6 +125,7 @@ fn apply_bidi_mirroring(glyph: &mut Glyph, level: u8) {
             }
         }
         GlyphType::Composite { .. }
+        | GlyphType::AutomaticComposite { .. }
         | GlyphType::Stretch { .. }
         | GlyphType::Image { .. }
         | GlyphType::Video { .. }
@@ -251,7 +254,8 @@ fn merge_extender_into_last_glyph(area: &mut [Glyph], ch: char) -> bool {
                 };
                 return true;
             }
-            GlyphType::Glyphless { .. }
+            GlyphType::AutomaticComposite { .. }
+            | GlyphType::Glyphless { .. }
             | GlyphType::Stretch { .. }
             | GlyphType::Image { .. }
             | GlyphType::Video { .. }
@@ -301,7 +305,7 @@ pub(crate) fn is_run_member_padding(glyph: &Glyph) -> bool {
     glyph.padding
         && match &glyph.glyph_type {
             GlyphType::Char { ch } => *ch != ' ',
-            GlyphType::Composite { .. } => true,
+            GlyphType::Composite { .. } | GlyphType::AutomaticComposite { .. } => true,
             _ => false,
         }
 }
@@ -343,6 +347,22 @@ pub(crate) fn push_char_to_area(
         return;
     }
     area.push(Glyph::char_with_provenance(ch, face_id, provenance).with_pixel_width(pixel_width));
+    mark_displays_text_if_text_area(row, area_index);
+}
+
+/// Append a character whose source semantics explicitly forbid Unicode
+/// clustering.  In particular, a zero-width buffer character outside a
+/// Lisp-selected automatic composition remains an independent glyph: GNU's
+/// graphical redisplay may draw its ink at the current pen, while terminal
+/// redisplay omits it without consuming a cell.
+pub(crate) fn push_standalone_zero_width_char_to_area(
+    row: &mut GlyphRow,
+    area_index: usize,
+    ch: char,
+    face_id: FaceId,
+    provenance: GlyphProvenance,
+) {
+    row.glyphs[area_index].push(Glyph::char_with_provenance(ch, face_id, provenance));
     mark_displays_text_if_text_area(row, area_index);
 }
 

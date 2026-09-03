@@ -16,6 +16,8 @@ use crate::buffer::{CharLen, CharPos0, CharRange, EmacsByteRange};
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_args_range, expect_max_args};
 use crate::emacs_core::value::ValueKind;
+use neomacs_display_protocol::glyph_matrix::{TerminalComposition, TerminalCompositionCell};
+use unicode_general_category::GeneralCategory;
 
 // ---------------------------------------------------------------------------
 // Argument helpers
@@ -785,6 +787,186 @@ enum LocatedComposition {
         end: i64,
         gstring: Value,
     },
+}
+
+/// A half-open character range selected by GNU's automatic-composition rule
+/// table.
+///
+/// This is deliberately distinct from a Unicode grapheme range: the Lisp
+/// `composition-function-table` may compose spacing characters, look behind
+/// the trigger character, or leave zero-width characters uncomposed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AutomaticCompositionSpan {
+    range: CharRange,
+}
+
+impl AutomaticCompositionSpan {
+    pub const fn new(start: usize, end: usize) -> Self {
+        Self {
+            range: CharRange::new(CharPos0::new(start), CharPos0::new(end)),
+        }
+    }
+
+    pub const fn start(self) -> usize {
+        self.range.start().get()
+    }
+
+    pub const fn end(self) -> usize {
+        self.range.end().get()
+    }
+}
+
+/// Select the non-overlapping automatic-composition spans in `text` from the
+/// live Lisp rule table.
+///
+/// This is the forward-search core of GNU `find_automatic_composition`
+/// (`src/composite.c`).  Rules are attached to a trigger character, carry an
+/// explicit lookback, and are tried in list order.  Once a rule matches, the
+/// next search begins after the complete match so a later rule cannot form the
+/// partially overlapping composition GNU rejects.
+pub fn automatic_composition_spans(
+    buffer: &crate::buffer::Buffer,
+    composition_function_table: Value,
+    text: &str,
+) -> Vec<AutomaticCompositionSpan> {
+    if !super::chartable::is_char_table(&composition_function_table) || text.is_empty() {
+        return Vec::new();
+    }
+
+    let chars = text.chars().collect::<Vec<_>>();
+    let mut byte_offsets = text
+        .char_indices()
+        .map(|(offset, _)| offset)
+        .collect::<Vec<_>>();
+    byte_offsets.push(text.len());
+
+    let mut spans = Vec::new();
+    let mut committed_end = 0usize;
+    let mut trigger = 0usize;
+    while trigger < chars.len() {
+        let rules = super::chartable::ct_lookup(
+            &composition_function_table,
+            i64::from(chars[trigger] as u32),
+        )
+        .ok()
+        .and_then(|value| list_to_vec(&value))
+        .unwrap_or_default();
+
+        let mut matched = None;
+        for rule in rules {
+            let Some(fields) = rule.as_vector_data() else {
+                continue;
+            };
+            if fields.len() != 3 {
+                continue;
+            }
+            let Some(lookback) = fields[1]
+                .as_fixnum()
+                .and_then(|value| usize::try_from(value).ok())
+            else {
+                continue;
+            };
+            let Some(start) = trigger.checked_sub(lookback) else {
+                continue;
+            };
+            if start < committed_end {
+                continue;
+            }
+
+            let match_len = if fields[0].is_nil() {
+                1
+            } else {
+                let Some(pattern) = fields[0].as_utf8_str() else {
+                    continue;
+                };
+                let suffix = &text[byte_offsets[start]..];
+                let mut match_data = None;
+                let Ok(true) = super::regex::looking_at_string_with_buffer_tables(
+                    pattern,
+                    suffix,
+                    false,
+                    buffer,
+                    &mut match_data,
+                ) else {
+                    continue;
+                };
+                let Some(group) = match_data.and_then(|data| data.group(0)) else {
+                    continue;
+                };
+                group.end()
+            };
+            let end = start.saturating_add(match_len).min(chars.len());
+            if start < end && trigger < end {
+                matched = Some(AutomaticCompositionSpan::new(start, end));
+                break;
+            }
+        }
+
+        if let Some(span) = matched {
+            committed_end = span.end();
+            trigger = committed_end;
+            spans.push(span);
+        } else {
+            trigger += 1;
+        }
+    }
+    spans
+}
+
+/// Lower one automatic composition exactly as GNU's terminal composer does.
+///
+/// `compose-gstring-for-terminal` (`lisp/composite.el`) gives every orphan
+/// zero-width non-format character a space cell, replaces an orphan `Cf` with
+/// a space, and attaches zero-width characters following a positive-width
+/// character to that character's cell.  Neomacs terminals are UTF-8, so the
+/// coding-system-unrepresentable branch of GNU's function is not applicable.
+pub fn automatic_composition_for_terminal(text: &str) -> TerminalComposition {
+    let chars = text.chars().collect::<Vec<_>>();
+    let mut cells = Vec::new();
+    let mut index = 0;
+    let mut total_width = 0u16;
+
+    while index < chars.len() {
+        let ch = chars[index];
+        let width = crate::encoding::char_width(ch);
+        if width == 0 {
+            let extenders =
+                if unicode_general_category::get_general_category(ch) == GeneralCategory::Format {
+                    Box::<str>::from("")
+                } else {
+                    Box::<str>::from(ch.to_string())
+                };
+            cells.push(TerminalCompositionCell {
+                base: ' ',
+                extenders,
+                width_cols: 1,
+                source_char_len: 1,
+            });
+            total_width = total_width.saturating_add(1);
+            index += 1;
+            continue;
+        }
+
+        let mut following = index + 1;
+        while following < chars.len() && crate::encoding::char_width(chars[following]) == 0 {
+            following += 1;
+        }
+        let extenders = chars[index + 1..following].iter().collect::<String>();
+        let width_cols = u8::try_from(width).unwrap_or(u8::MAX);
+        cells.push(TerminalCompositionCell {
+            base: ch,
+            extenders: extenders.into(),
+            width_cols,
+            source_char_len: u16::try_from(following - index).unwrap_or(u16::MAX),
+        });
+        total_width = total_width.saturating_add(u16::from(width_cols));
+        index = following;
+    }
+
+    TerminalComposition {
+        cells: cells.into_boxed_slice(),
+        width_cols: total_width,
+    }
 }
 
 fn is_unicode_combining_mark(code: u32) -> bool {

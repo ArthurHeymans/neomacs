@@ -2518,6 +2518,54 @@ fn run_composite(text: &str, bidi_level: u8) -> Glyph {
     }
 }
 
+fn automatic_composite(text: &str, width_cols: u16) -> Glyph {
+    let terminal = neovm_core::emacs_core::composite::automatic_composition_for_terminal(text);
+    assert_eq!(terminal.width_cols, width_cols);
+    Glyph {
+        glyph_type: GlyphType::AutomaticComposite {
+            text: text.into(),
+            terminal,
+        },
+        face_id: FaceId::new(0),
+        box_vertical_edges: Default::default(),
+        provenance: GlyphProvenance::buffer(0),
+        bidi_level: 0,
+        wide: false,
+        pixel_width: f32::from(width_cols),
+        pixel_height: 0.0,
+        pixel_ascent: 0.0,
+        vertical_offset_px: 0.0,
+        padding: false,
+        pointer_appearance: None,
+    }
+}
+
+#[test]
+fn automatic_composite_uses_gnu_terminal_gstring_cells() {
+    let glyphs = vec![
+        // Both Javanese glyphs have GNU char-width 0.  Since neither follows a
+        // positive-width glyph in the gstring, each is displayed as a mark on
+        // a prepended space.
+        automatic_composite("ꦮꦶ", 2),
+        // A zero-width Rejang mark after a positive-width base shares its cell.
+        automatic_composite("ꤸꥉ", 1),
+        // A trailing format control is retained when it shares the preceding
+        // positive-width base's cluster; GNU only replaces an orphan Cf.
+        automatic_composite("ᠨ\u{180E}", 1),
+    ];
+    let mut rif = TtyRif::new(10, 5);
+    rif.rasterize(&state_with_text_glyphs(10, glyphs));
+
+    assert_eq!(desired_char(&rif, 0, 0), ' ');
+    assert_eq!(rif.desired.cells[0].extenders.as_deref(), Some("ꦮ"));
+    assert_eq!(desired_char(&rif, 0, 1), ' ');
+    assert_eq!(rif.desired.cells[1].extenders.as_deref(), Some("ꦶ"));
+    assert_eq!(desired_char(&rif, 0, 2), 'ꤸ');
+    assert_eq!(rif.desired.cells[2].extenders.as_deref(), Some("ꥉ"));
+    assert_eq!(desired_char(&rif, 0, 3), 'ᠨ');
+    assert_eq!(rif.desired.cells[3].extenders.as_deref(), Some("\u{180E}"));
+}
+
 fn run_member_padding(ch: char, charpos: usize) -> Glyph {
     let mut g = Glyph::char(ch, FaceId::new(0), charpos);
     g.padding = true;

@@ -1,5 +1,5 @@
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
+    DisplayItem, DisplayItemKind, DisplayTextComposition, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 #[cfg(test)]
 use crate::display_item::{DisplaySourceMappedText, DisplaySourcePosition};
@@ -71,11 +71,18 @@ fn clipped_display_item_remainder_after_chars(
     );
     match kind {
         DisplayItemKind::TextRun(run) => {
+            if emitted_chars > 0 && matches!(&run.composition, DisplayTextComposition::Automatic(_))
+            {
+                return None;
+            }
             let (split_byte, remaining) = clipped_text_remainder(run.text.as_ref(), emitted_chars)?;
             Some(DisplayItem {
                 span: SourceSpan::new(span.start.advanced_by(emitted_chars, split_byte), span.end),
                 face,
-                kind: DisplayItemKind::TextRun(DisplayTextRun::new(remaining)),
+                kind: DisplayItemKind::TextRun(DisplayTextRun::with_composition(
+                    remaining,
+                    run.composition,
+                )),
                 layout,
                 pointer_appearance,
                 box_vertical_edges: remainder_edges,

@@ -64,16 +64,24 @@ pub(crate) fn plan_plain_row_classified<B: LayoutBufferView>(
     //   cursor on that row (xdisp.c:26811, first ends_at_zv row wins).
     let line_byte_len =
         memchr::memchr(b'\n', &row.text[row.byte_idx..]).unwrap_or(row.text.len() - row.byte_idx);
+    let line_char_len = row.text[row.byte_idx..row.byte_idx + line_byte_len]
+        .iter()
+        .filter(|&&byte| (byte & 0xC0) != 0x80)
+        .count();
     if policy.point_charpos >= row.charpos
         && policy.point_charpos <= row.charpos + line_byte_len as i64
     {
-        let line_char_len = row.text[row.byte_idx..row.byte_idx + line_byte_len]
-            .iter()
-            .filter(|&&byte| (byte & 0xC0) != 0x80)
-            .count();
         if policy.point_charpos <= row.charpos + line_char_len as i64 {
             return Err(RouteRefusal::PointInRow);
         }
+    }
+    let row_char_start = CharPos0::new(row.charpos.max(0) as usize);
+    let row_char_end = row_char_start.add_len(neovm_core::buffer::CharLen::new(line_char_len));
+    if buffer
+        .layout_next_automatic_composition_start(row_char_start, row_char_end)
+        .is_some()
+    {
+        return Err(RouteRefusal::ScanCompose);
     }
     // P4.8(b): an active display table can remap any char (including the
     // newline), and it is a property of the BUFFER, not of this row — so it

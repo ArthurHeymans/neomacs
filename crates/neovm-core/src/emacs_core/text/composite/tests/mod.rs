@@ -397,6 +397,194 @@ fn find_composition_internal_finds_automatic_combining_sequence_in_string() {
     );
 }
 
+/// GNU `find_automatic_composition` consults the rule attached to the trigger
+/// character and applies its lookback before matching.  Javanese therefore
+/// composes only the final consonant-plus-vowel syllable here; the preceding
+/// zero-width consonants are not one whole script run.
+#[test]
+fn automatic_composition_spans_honor_rule_lookback_and_match_extent() {
+    crate::test_utils::init_test_tracing();
+    let eval = super::super::eval::Context::new();
+    let table = eval.visible_variable_value_or_nil("composition-function-table");
+    let rule = Value::vector(vec![
+        Value::string(r##"[ꦏ-ꦲ]ꦶ"##),
+        Value::fixnum(1),
+        Value::symbol("font-shape-gstring"),
+    ]);
+    crate::emacs_core::chartable::builtin_set_char_table_range(
+        vec![table, Value::fixnum(0xA9B6), Value::list(vec![rule])],
+        Some(&eval.obarray),
+    )
+    .expect("install Javanese composition rule");
+
+    let buffer = eval.buffers.current_buffer().expect("current buffer");
+    let spans = automatic_composition_spans(buffer, table, "ꦧꦱꦗꦮꦶ");
+
+    assert_eq!(spans, vec![AutomaticCompositionSpan::new(3, 5)]);
+}
+
+/// GNU's default composition rule uses syntax-category escapes rather than a
+/// literal Unicode range.  The first rule must win for a base followed by a
+/// combining mark; falling through to the nil-pattern rule incorrectly treats
+/// the mark as an orphan and makes terminal composition prepend a space.
+#[test]
+fn automatic_composition_spans_match_default_base_mark_category_rule() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    let table = eval.visible_variable_value_or_nil("composition-function-table");
+    let base_and_marks = Value::vector(vec![
+        Value::string(r##"\c.\c^+"##),
+        Value::fixnum(1),
+        Value::symbol("compose-gstring-for-graphic"),
+    ]);
+    let orphan_mark = Value::vector(vec![
+        Value::NIL,
+        Value::fixnum(0),
+        Value::symbol("compose-gstring-for-graphic"),
+    ]);
+    crate::emacs_core::chartable::builtin_set_char_table_range(
+        vec![
+            table,
+            Value::fixnum(0x1733),
+            Value::list(vec![base_and_marks, orphan_mark]),
+        ],
+        Some(&eval.obarray),
+    )
+    .expect("install GNU's default combining-mark rules");
+    let category_table = crate::emacs_core::category::builtin_make_category_table(vec![])
+        .expect("make category table");
+    for category in ['.', '^'] {
+        crate::emacs_core::category::builtin_define_category(
+            &mut eval,
+            vec![
+                Value::char(category),
+                Value::string("automatic-composition test category"),
+                category_table,
+            ],
+        )
+        .expect("define category");
+    }
+    for (ch, category) in [('ᜨ', '.'), ('ᜳ', '^')] {
+        crate::emacs_core::category::builtin_modify_category_entry(
+            &mut eval,
+            vec![Value::char(ch), Value::char(category), category_table],
+        )
+        .expect("classify automatic-composition character");
+    }
+    crate::emacs_core::category::builtin_set_category_table(&mut eval, vec![category_table])
+        .expect("select category table");
+
+    let buffer = eval.buffers.current_buffer().expect("current buffer");
+    let spans = automatic_composition_spans(buffer, table, "ᜨᜳ");
+
+    assert_eq!(spans, vec![AutomaticCompositionSpan::new(0, 2)]);
+}
+
+/// GNU's Tai Tham rule treats a SAKOT-plus-consonant sequence as part of the
+/// same automatic composition as its leading consonant.  This exercises the
+/// nested repetition shape used by `tai-tham-composable-pattern`; stopping at
+/// the SAKOT produces a second composition and changes terminal cell layout.
+#[test]
+fn automatic_composition_spans_keep_tai_tham_syllable_whole() {
+    crate::test_utils::init_test_tracing();
+    let eval = super::super::eval::Context::new();
+    let table = eval.visible_variable_value_or_nil("composition-function-table");
+    let rule = Value::vector(vec![
+        Value::string(r##"[ᩈᩅ]\(\(ᩢ\|᩠ᩅ\)\)*᩠?"##),
+        Value::fixnum(0),
+        Value::symbol("font-shape-gstring"),
+    ]);
+    crate::emacs_core::chartable::builtin_set_char_table_range(
+        vec![table, Value::char('ᩈ'), Value::list(vec![rule])],
+        Some(&eval.obarray),
+    )
+    .expect("install reduced GNU Tai Tham composition rule");
+
+    let buffer = eval.buffers.current_buffer().expect("current buffer");
+    let spans = automatic_composition_spans(buffer, table, "ᩈ᩠ᩅᩢ");
+
+    assert_eq!(spans, vec![AutomaticCompositionSpan::new(0, 4)]);
+}
+
+/// Exact span boundaries selected by GNU Emacs 31 for the two Tai Tham
+/// samples in etc/HELLO.  Keep the rule construction parallel to
+/// `lisp/language/thai.el` so nested alternatives and repetitions cannot be
+/// replaced by a Unicode-grapheme approximation.
+#[test]
+fn automatic_composition_spans_match_gnu_tai_tham_hello_samples() {
+    crate::test_utils::init_test_tracing();
+    let eval = super::super::eval::Context::new();
+    let table = eval.visible_variable_value_or_nil("composition-function-table");
+    let consonant = r##"[ᨠ-ᩔ᪀-᪉᪐-᪙᪠-᪭]"##;
+    let mark = r##"[̤͏้๊๋ᩕ-ᩗᩙ-ᩞᩡ-᩿᩼‌‍]"##;
+    let sakot = "\u{1A60}";
+    let commuting_mark = r##"[้-๋້໋᩵-᩼]"##;
+    let mai_kang_lai = "\u{1A58}";
+    let basic = format!(
+        r##"{consonant}\({mai_kang_lai}*\({mark}\|{sakot}{commuting_mark}*{consonant}\)\)*"##
+    );
+    let pattern = format!(r##"{basic}\({mai_kang_lai}\({basic}\)?\)*{sakot}?"##);
+    let rule = Value::vector(vec![
+        Value::string(pattern),
+        Value::fixnum(0),
+        Value::symbol("font-shape-gstring"),
+    ]);
+    crate::emacs_core::chartable::builtin_set_char_table_range(
+        vec![
+            table,
+            Value::cons(Value::fixnum(0x1A20), Value::fixnum(0x1A54)),
+            Value::list(vec![rule]),
+        ],
+        Some(&eval.obarray),
+    )
+    .expect("install GNU Tai Tham composition rule");
+
+    let buffer = eval.buffers.current_buffer().expect("current buffer");
+    let left = automatic_composition_spans(buffer, table, "ᨣᩣᩴᨾᩮᩬᩥᨦ / ᨽᩣᩈᩣᩃ᩶ᩣ᩠ᨶᨶᩣ");
+    let right = automatic_composition_spans(buffer, table, "ᩈ᩠ᩅᩢᩔ᩠ᨯᩦᨣᩕᩢ᩠ᨸ");
+
+    assert_eq!(
+        left,
+        vec![
+            AutomaticCompositionSpan::new(0, 3),
+            AutomaticCompositionSpan::new(3, 7),
+            AutomaticCompositionSpan::new(7, 8),
+            AutomaticCompositionSpan::new(11, 13),
+            AutomaticCompositionSpan::new(13, 15),
+            AutomaticCompositionSpan::new(15, 20),
+            AutomaticCompositionSpan::new(20, 22),
+        ]
+    );
+    assert_eq!(
+        right,
+        vec![
+            AutomaticCompositionSpan::new(0, 4),
+            AutomaticCompositionSpan::new(4, 8),
+            AutomaticCompositionSpan::new(8, 13),
+        ]
+    );
+}
+
+#[test]
+fn terminal_automatic_composition_matches_gnu_gstring_cell_rules() {
+    let javanese = automatic_composition_for_terminal("ꦮꦶ");
+    assert_eq!(javanese.width_cols, 2);
+    assert_eq!(javanese.cells[0].base, ' ');
+    assert_eq!(javanese.cells[0].extenders.as_ref(), "ꦮ");
+    assert_eq!(javanese.cells[1].base, ' ');
+    assert_eq!(javanese.cells[1].extenders.as_ref(), "ꦶ");
+
+    let rejang = automatic_composition_for_terminal("ꤸꥉ");
+    assert_eq!(rejang.width_cols, 1);
+    assert_eq!(rejang.cells[0].base, 'ꤸ');
+    assert_eq!(rejang.cells[0].extenders.as_ref(), "ꥉ");
+
+    let mongolian = automatic_composition_for_terminal("ᠨ\u{180E}");
+    assert_eq!(mongolian.width_cols, 1);
+    assert_eq!(mongolian.cells[0].base, 'ᠨ');
+    assert_eq!(mongolian.cells[0].extenders.as_ref(), "\u{180E}");
+}
+
 #[test]
 fn find_composition_internal_reports_composed_region() {
     crate::test_utils::init_test_tracing();

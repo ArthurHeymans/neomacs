@@ -135,7 +135,7 @@ impl BufferPlainItemSource {
                 DisplayItem::new(
                     span(segment.start, segment.end),
                     segment.face,
-                    DisplayItemKind::TextRun(DisplayTextRun::new(text)),
+                    DisplayItemKind::TextRun(DisplayTextRun::independent(text)),
                 )
                 .with_layout(DisplayItemLayout::default())
                 .with_pointer_appearance(None)

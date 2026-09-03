@@ -24,6 +24,30 @@ use super::types::{
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::HashMap;
 
+/// One terminal cell produced by GNU's `compose-gstring-for-terminal`.
+///
+/// The layout boundary resolves automatic-composition semantics while it has
+/// access to Lisp's live rule table and GNU character widths.  The TTY backend
+/// therefore receives a closed presentation plan instead of reinterpreting a
+/// Unicode string with a second, inevitably divergent heuristic.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct TerminalCompositionCell {
+    pub base: char,
+    pub extenders: Box<str>,
+    pub width_cols: u8,
+    /// Number of source characters represented by this cell.  Keeping the
+    /// range length beside the cell preserves cursor/source ownership without
+    /// reverse-engineering it from `extenders`.
+    pub source_char_len: u16,
+}
+
+/// Complete terminal lowering of one automatic composition.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct TerminalComposition {
+    pub cells: Box<[TerminalCompositionCell]>,
+    pub width_cols: u16,
+}
+
 /// What kind of content this glyph represents.
 /// Matches GNU's `enum glyph_type` in `dispextern.h`.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -32,6 +56,14 @@ pub enum GlyphType {
     Char { ch: char },
     /// Composed grapheme cluster (ligatures, emoji ZWJ, combining marks).
     Composite { text: Box<str> },
+    /// A composition selected by the live Lisp
+    /// `composition-function-table`.  Its terminal width comes from GNU's
+    /// `compose-gstring-for-terminal`, not from Unicode grapheme width or the
+    /// graphical shaper.
+    AutomaticComposite {
+        text: Box<str>,
+        terminal: TerminalComposition,
+    },
     /// Whitespace/filler — occupies `width_cols` character cells.
     Stretch { width_cols: u16 },
     /// Inline image.  Layout geometry and drawable identity travel together so
@@ -120,7 +152,9 @@ impl GlyphType {
     pub fn gnu_kind(&self) -> GlyphTypeKind {
         match self {
             GlyphType::Char { .. } => GlyphTypeKind::Char,
-            GlyphType::Composite { .. } => GlyphTypeKind::Composite,
+            GlyphType::Composite { .. } | GlyphType::AutomaticComposite { .. } => {
+                GlyphTypeKind::Composite
+            }
             GlyphType::Glyphless { .. } => GlyphTypeKind::Glyphless,
             GlyphType::Image { .. } => GlyphTypeKind::Image,
             GlyphType::Video { .. } => GlyphTypeKind::Video,
@@ -817,6 +851,7 @@ impl Glyph {
             return 0;
         }
         match self.glyph_type {
+            GlyphType::AutomaticComposite { ref terminal, .. } => terminal.width_cols.max(1),
             GlyphType::Stretch { width_cols } => width_cols.max(1),
             GlyphType::Image { width_cols, .. }
             | GlyphType::Video { width_cols, .. }
@@ -838,6 +873,9 @@ impl Glyph {
         } else {
             match &self.glyph_type {
                 GlyphType::Stretch { width_cols } => *width_cols as f32 * char_width,
+                GlyphType::AutomaticComposite { terminal, .. } => {
+                    terminal.width_cols as f32 * char_width
+                }
                 _ if self.wide => char_width * 2.0,
                 _ => char_width,
             }
@@ -854,6 +892,7 @@ impl Glyph {
         match self.glyph_type {
             GlyphType::Char { .. }
             | GlyphType::Composite { .. }
+            | GlyphType::AutomaticComposite { .. }
             | GlyphType::Stretch { .. }
             | GlyphType::Glyphless { .. } => Some(PresentedPrimitiveKind::Glyph),
             GlyphType::Image { .. } => Some(PresentedPrimitiveKind::Image),
@@ -1018,9 +1057,29 @@ impl GlyphRow {
                 let ch_val = match &glyph.glyph_type {
                     GlyphType::Char { ch } => *ch as u64,
                     GlyphType::Composite { text } => {
-                        let mut h = 0u64;
+                        let mut h = 0x1000_0000u64;
                         for b in text.bytes() {
                             h = h.wrapping_mul(31).wrapping_add(b as u64);
+                        }
+                        h
+                    }
+                    GlyphType::AutomaticComposite { text, terminal } => {
+                        let mut h = 0x3000_0000u64;
+                        for b in text.bytes() {
+                            h = h.wrapping_mul(31).wrapping_add(u64::from(b));
+                        }
+                        h = h
+                            .wrapping_mul(31)
+                            .wrapping_add(u64::from(terminal.width_cols));
+                        for cell in &terminal.cells {
+                            h = h.wrapping_mul(31).wrapping_add(cell.base as u64);
+                            for b in cell.extenders.bytes() {
+                                h = h.wrapping_mul(31).wrapping_add(u64::from(b));
+                            }
+                            h = h.wrapping_mul(31).wrapping_add(u64::from(cell.width_cols));
+                            h = h
+                                .wrapping_mul(31)
+                                .wrapping_add(u64::from(cell.source_char_len));
                         }
                         h
                     }
@@ -2929,6 +2988,9 @@ impl FrameDisplayState {
                     | GlyphType::Xwidget { .. }
                     | GlyphType::Surface { .. }
                     | GlyphType::Glyphless { .. } => char_w,
+                    GlyphType::AutomaticComposite { terminal, .. } => {
+                        f32::from(terminal.width_cols) * char_w
+                    }
                     GlyphType::Char { .. } | GlyphType::Composite { .. } => {
                         if glyph.wide {
                             char_w * 2.0
@@ -2991,7 +3053,7 @@ impl FrameDisplayState {
                             box_vertical_edges: glyph.box_vertical_edges,
                         });
                     }
-                    GlyphType::Composite { text } => {
+                    GlyphType::Composite { text } | GlyphType::AutomaticComposite { text, .. } => {
                         let font_ascent =
                             self.resolve_face_for_materialize(glyph.face_id).font_ascent;
                         let row_ascent = if glyph_row.ascent_px > 0.0 {

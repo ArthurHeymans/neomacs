@@ -6,7 +6,8 @@
 use std::cmp::Ordering;
 
 use neovm_core::buffer::{
-    Buffer, BufferTextSnapshot, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1,
+    Buffer, BufferTextSnapshot, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, EmacsByteRange,
+    LispCharPos1,
     buffer::{BUFFER_SLOT_COUNT, BufferSlotInfo, lookup_buffer_slot_by_sym_id},
     overlay::{OverlayList, OverlayPropertyAtPoint, OverlayPropertyFilter},
 };
@@ -137,6 +138,21 @@ pub(crate) trait LayoutBufferView {
         name: Value,
     ) -> Option<EmacsBytePos>;
     fn layout_overlays(&self) -> &OverlayList;
+    /// Automatic-composition span whose first character is `pos`.
+    ///
+    /// These spans are compiled from the live Lisp rule table when the
+    /// immutable layout snapshot is built.  A live-buffer adapter deliberately
+    /// has none: it lacks the evaluator environment needed to resolve rules.
+    fn layout_automatic_composition_starting_at(&self, _pos: CharPos0) -> Option<CharRange> {
+        None
+    }
+    fn layout_next_automatic_composition_start(
+        &self,
+        _pos: CharPos0,
+        _limit: CharPos0,
+    ) -> Option<CharPos0> {
+        None
+    }
 }
 
 /// The buffer-owned input needed while resolving named faces on display
@@ -185,6 +201,9 @@ pub(crate) struct LayoutBufferSnapshot {
     /// the buffer's local-var alist every time and measured 3.15% of GUI
     /// typing even with pre-interned symbols.
     vars: [Option<Value>; <LayoutVar as strum::EnumCount>::COUNT],
+    /// Non-overlapping ranges compiled from Lisp's live
+    /// `composition-function-table`, in ascending buffer-character order.
+    automatic_composition_spans: Vec<CharRange>,
 }
 
 impl LayoutBufferSnapshot {
@@ -202,6 +221,7 @@ impl LayoutBufferSnapshot {
             slots,
             overlays: buffer.overlays().snapshot_clone(),
             category_symbol_plists: FxHashMap::default(),
+            automatic_composition_spans: Vec::new(),
         }
     }
 
@@ -210,12 +230,48 @@ impl LayoutBufferSnapshot {
         snapshot.vars =
             resolve_layout_vars(snapshot.local_var_alist, &snapshot.slots, Some(obarray));
         snapshot.category_symbol_plists = capture_layout_category_symbol_plists(buffer, obarray);
+        snapshot.automatic_composition_spans =
+            capture_automatic_composition_spans(buffer, obarray, &snapshot.vars);
         snapshot
     }
 
     pub(crate) fn name(&self) -> &str {
         &self.name
     }
+}
+
+fn capture_automatic_composition_spans(
+    buffer: &Buffer,
+    obarray: &Obarray,
+    vars: &[Option<Value>; <LayoutVar as strum::EnumCount>::COUNT],
+) -> Vec<CharRange> {
+    if !buffer.get_multibyte()
+        || vars[LayoutVar::AutoCompositionMode as usize].is_none_or(Value::is_nil)
+        || !vars[LayoutVar::AutoCompositionFunction as usize]
+            .is_some_and(|value| value.is_symbol_named("auto-compose-chars"))
+    {
+        return Vec::new();
+    }
+
+    let table_id = Value::symbol("composition-function-table")
+        .as_symbol_id()
+        .expect("interned symbol has an id");
+    let Some(table) = obarray.symbol_value_id(table_id).copied() else {
+        return Vec::new();
+    };
+    let text = buffer.buffer_string();
+    let offset = buffer.point_min_char_pos().get();
+    let spans =
+        neovm_core::emacs_core::composite::automatic_composition_spans(buffer, table, &text);
+    spans
+        .into_iter()
+        .map(|span| {
+            CharRange::new(
+                CharPos0::new(offset.saturating_add(span.start())),
+                CharPos0::new(offset.saturating_add(span.end())),
+            )
+        })
+        .collect()
 }
 
 fn capture_layout_category_symbol_plists(
@@ -366,7 +422,9 @@ fn layout_var_info(var: LayoutVar) -> &'static LayoutVarInfo {
                     slot: lookup_buffer_slot_by_sym_id(sym_id),
                     captures_default: matches!(
                         var,
-                        LayoutVar::CharPropertyAliasAlist
+                        LayoutVar::AutoCompositionFunction
+                            | LayoutVar::AutoCompositionMode
+                            | LayoutVar::CharPropertyAliasAlist
                             | LayoutVar::DefaultTextProperties
                             | LayoutVar::DisplayFillColumnIndicator
                             | LayoutVar::DisplayFillColumnIndicatorCharacter
@@ -584,6 +642,30 @@ impl LayoutBufferView for LayoutBufferSnapshot {
 
     fn layout_overlays(&self) -> &OverlayList {
         &self.overlays
+    }
+
+    fn layout_automatic_composition_starting_at(&self, pos: CharPos0) -> Option<CharRange> {
+        let index = self
+            .automatic_composition_spans
+            .partition_point(|range| range.start() < pos);
+        self.automatic_composition_spans
+            .get(index)
+            .copied()
+            .filter(|range| range.start() == pos)
+    }
+
+    fn layout_next_automatic_composition_start(
+        &self,
+        pos: CharPos0,
+        limit: CharPos0,
+    ) -> Option<CharPos0> {
+        let index = self
+            .automatic_composition_spans
+            .partition_point(|range| range.start() < pos);
+        self.automatic_composition_spans
+            .get(index)
+            .map(|range| range.start())
+            .filter(|start| *start < limit)
     }
 }
 

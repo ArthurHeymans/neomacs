@@ -4,8 +4,8 @@ use crate::display_item::{
     DisplayMediaReplacement, DisplayPointerAppearance, DisplayPointerOccurrence,
     DisplayPointerSourceRange, DisplayRowBreak, DisplayRowBreakReason, DisplaySourceMappedText,
     DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayStringBoxBoundaries,
-    DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef, SourceSpan,
-    glyphless_method_for_char,
+    DisplayTextComposition, DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef,
+    SourceSpan, glyphless_method_for_char,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{
@@ -714,6 +714,9 @@ impl DisplaySourceStepItem {
         let DisplayItemKind::TextRun(run) = &self.item.kind else {
             return false;
         };
+        if matches!(&run.composition, DisplayTextComposition::Automatic(_)) {
+            return false;
+        }
         let mut chars = run.text.chars();
         chars.next().is_some() && chars.next().is_some()
     }
@@ -722,6 +725,9 @@ impl DisplaySourceStepItem {
         let DisplayItemKind::TextRun(run) = &self.item.kind else {
             return None;
         };
+        if matches!(&run.composition, DisplayTextComposition::Automatic(_)) {
+            return None;
+        }
         let text = &*run.text;
         let mut chars = text.chars();
         chars.next()?;
@@ -945,6 +951,9 @@ impl DisplaySourceItem {
         let DisplayItemKind::TextRun(run) = &self.item.kind else {
             return false;
         };
+        if matches!(&run.composition, DisplayTextComposition::Automatic(_)) {
+            return false;
+        }
         let mut chars = run.text.chars();
         chars.next().is_some() && chars.next().is_some()
     }
@@ -983,6 +992,7 @@ impl DisplaySourceItem {
             self.start_byte_idx,
             self.start_charpos,
             ch,
+            run.composition,
         );
         Some(DisplaySourceItem::new(
             item.with_pointer_appearance(pointer_appearance)
@@ -1021,6 +1031,7 @@ impl DisplaySourceItem {
         let mut byte_idx = self.start_byte_idx;
         let mut charpos = self.start_charpos;
         let mut items = Vec::new();
+        let composition = run.composition;
         let chars = run.text.chars().collect::<Vec<_>>();
         let last_index = chars.len().saturating_sub(1);
         for (index, ch) in chars.into_iter().enumerate() {
@@ -1033,6 +1044,7 @@ impl DisplaySourceItem {
                 byte_idx,
                 charpos,
                 ch,
+                composition.clone(),
             );
             items.push(DisplaySourceItem::new(
                 item.with_pointer_appearance(pointer_appearance.clone())
@@ -1112,6 +1124,7 @@ impl DisplaySourceItem {
         let split_char_pos = CharPos0::new(split_charpos as usize);
         let prefix_text = run.text.get(..split_text_byte_offset)?.to_owned();
         let suffix_text = run.text.get(split_text_byte_offset..)?.to_owned();
+        let composition = run.composition;
 
         let prefix = DisplayItem::new(
             SourceSpan::new(
@@ -1119,7 +1132,10 @@ impl DisplaySourceItem {
                 DisplaySourcePosition::buffer(buffer_id, split_char_pos, split_byte_pos),
             ),
             face,
-            DisplayItemKind::TextRun(DisplayTextRun::new(prefix_text)),
+            DisplayItemKind::TextRun(DisplayTextRun::with_composition(
+                prefix_text,
+                composition.clone(),
+            )),
         )
         .with_layout(layout)
         .with_box_run_topology(
@@ -1133,7 +1149,7 @@ impl DisplaySourceItem {
                 DisplaySourcePosition::buffer(buffer_id, end_char_pos, end_byte_pos),
             ),
             face,
-            DisplayItemKind::TextRun(DisplayTextRun::new(suffix_text)),
+            DisplayItemKind::TextRun(DisplayTextRun::with_composition(suffix_text, composition)),
         )
         .with_layout(layout)
         .with_box_run_topology(
@@ -1184,6 +1200,7 @@ fn direct_text_run_char_item(
     start_byte_idx: usize,
     start_charpos: i64,
     ch: char,
+    composition: DisplayTextComposition,
 ) -> DisplayItem {
     let end_byte_idx = start_byte_idx.saturating_add(ch.len_utf8());
     let end_charpos = start_charpos.saturating_add(1);
@@ -1201,7 +1218,10 @@ fn direct_text_run_char_item(
             ),
         ),
         face,
-        DisplayItemKind::TextRun(DisplayTextRun::new(ch.to_string())),
+        DisplayItemKind::TextRun(DisplayTextRun::with_composition(
+            ch.to_string(),
+            composition,
+        )),
     )
     .with_layout(layout)
 }
@@ -3131,7 +3151,7 @@ impl LispStringSourceFrame {
             DisplayItem::new(
                 self.span(start, end),
                 face,
-                DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
+                DisplayItemKind::TextRun(DisplayTextRun::independent(self.text_slice(start, end))),
             )
             .with_layout(item_layout)
             .with_pointer_appearance(pointer_appearance)

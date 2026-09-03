@@ -657,6 +657,10 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
     }
 
     fn next_text_run_end(&self, start: CharPos0, limit: CharPos0) -> CharPos0 {
+        let limit = self
+            .buffer
+            .layout_next_automatic_composition_start(start, limit)
+            .unwrap_or(limit);
         let mut end = start;
         while end < limit {
             let Some(ch) = self.char_at(end) else {
@@ -750,6 +754,29 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                             face,
                             DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(
                                 composition.text().to_owned(),
+                            )),
+                        )
+                        .with_layout(layout),
+                        start,
+                        end,
+                        face,
+                        context,
+                    ),
+                );
+            }
+        }
+
+        if let Some(composition) = self.buffer.layout_automatic_composition_starting_at(start) {
+            let end = composition.end();
+            if end <= property_end && end <= self.end {
+                self.char_pos = end;
+                return Some(
+                    self.bind_box_run_topology(
+                        DisplayItem::new(
+                            self.span(start, end),
+                            face,
+                            DisplayItemKind::TextRun(DisplayTextRun::automatic(
+                                self.text_slice(start, end),
                             )),
                         )
                         .with_layout(layout),
@@ -872,7 +899,9 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                 DisplayItem::new(
                     self.span(start, end),
                     face,
-                    DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
+                    DisplayItemKind::TextRun(DisplayTextRun::independent(
+                        self.text_slice(start, end),
+                    )),
                 )
                 .with_layout(layout),
                 start,

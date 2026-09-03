@@ -2053,6 +2053,52 @@ impl TtyRif {
                 // extenders) occupy one cell whose content is the full
                 // cluster string, mirroring GNU's COMPOSITE_GLYPH.
                 match &glyph.glyph_type {
+                    GlyphType::AutomaticComposite { text, terminal } => {
+                        for cell in &terminal.cells {
+                            if col >= screen_width {
+                                break;
+                            }
+                            let base_col = col;
+                            if let Some(visible_col) = visible_cell(col, self.desired.width) {
+                                self.desired.set_cluster(
+                                    screen_row,
+                                    visible_col,
+                                    cell.base,
+                                    &cell.extenders,
+                                    attrs,
+                                    false,
+                                );
+                            }
+                            col = col.saturating_add(1);
+                            for _ in 1..cell.width_cols {
+                                if col >= screen_width {
+                                    break;
+                                }
+                                if let Some(visible_col) = visible_cell(col, self.desired.width) {
+                                    self.set_desired_glyph_cell(
+                                        screen_row,
+                                        visible_col,
+                                        ' ',
+                                        attrs,
+                                        visible_cell(base_col, self.desired.width).is_some(),
+                                        BlankErase::Explicit,
+                                    );
+                                }
+                                col = col.saturating_add(1);
+                            }
+                        }
+
+                        // Layout retains one source-position padding glyph per
+                        // remaining character.  The terminal plan above owns
+                        // their cells, so consume those metadata-only members.
+                        let source_paddings = text.chars().count().saturating_sub(1);
+                        let present_paddings = glyphs[glyph_idx + 1..]
+                            .iter()
+                            .take(source_paddings)
+                            .take_while(|next| is_run_member_padding_cell(next))
+                            .count();
+                        glyph_idx += present_paddings;
+                    }
                     GlyphType::Composite { text } => {
                         // A contextual-shaping run (Arabic, Indic) is the base
                         // Composite followed by one per-letter grapheme padding
@@ -2174,6 +2220,12 @@ impl TtyRif {
                                 col = col.saturating_add(1);
                             }
                         }
+                    }
+                    GlyphType::Char { ch } if neovm_core::encoding::char_width(*ch) == 0 => {
+                        // GNU `append_glyph` appends no terminal glyph for an
+                        // ordinary zero-width character.  Only a character
+                        // captured inside an automatic composition can acquire
+                        // a base cell or extend the previous composed cell.
                     }
                     _ => {
                         // A wide base in the final screen column has no room
@@ -3019,7 +3071,7 @@ fn is_run_member_padding_cell(glyph: &Glyph) -> bool {
     glyph.padding
         && match &glyph.glyph_type {
             GlyphType::Char { ch } => *ch != ' ',
-            GlyphType::Composite { .. } => true,
+            GlyphType::Composite { .. } | GlyphType::AutomaticComposite { .. } => true,
             _ => false,
         }
 }
@@ -3028,7 +3080,9 @@ fn is_run_member_padding_cell(glyph: &Glyph) -> bool {
 fn cell_grapheme_string(glyph: &Glyph) -> String {
     match &glyph.glyph_type {
         GlyphType::Char { ch } => ch.to_string(),
-        GlyphType::Composite { text } => text.to_string(),
+        GlyphType::Composite { text } | GlyphType::AutomaticComposite { text, .. } => {
+            text.to_string()
+        }
         _ => String::new(),
     }
 }
@@ -3045,7 +3099,9 @@ fn is_tty_skippable_format(ch: char) -> bool {
 fn glyph_to_char(glyph: &Glyph) -> char {
     match &glyph.glyph_type {
         GlyphType::Char { ch } => *ch,
-        GlyphType::Composite { text } => text.chars().next().unwrap_or(' '),
+        GlyphType::Composite { text } | GlyphType::AutomaticComposite { text, .. } => {
+            text.chars().next().unwrap_or(' ')
+        }
         GlyphType::Stretch { .. } => ' ',
         GlyphType::Image { .. }
         | GlyphType::Video { .. }
@@ -3185,7 +3241,8 @@ fn glyph_row_debug_text(row: &GlyphRow) -> String {
     for area in &row.glyphs {
         for glyph in area {
             match &glyph.glyph_type {
-                GlyphType::Composite { text: cluster } => text.push_str(cluster),
+                GlyphType::Composite { text: cluster }
+                | GlyphType::AutomaticComposite { text: cluster, .. } => text.push_str(cluster),
                 GlyphType::Stretch { width_cols } => {
                     text.extend(std::iter::repeat_n(' ', usize::from((*width_cols).max(1))));
                 }

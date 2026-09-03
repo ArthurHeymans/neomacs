@@ -49,7 +49,7 @@ use neomacs_display_protocol::frame_chrome::{FrameChromeContent, FrameChromeKind
 use neomacs_display_protocol::frame_glyphs::{CursorKind, DisplaySlotId, FrameGlyph, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::{
     Glyph, GlyphArea, GlyphProvenance, GlyphRow, GlyphStringBufferRange, GlyphType, MatrixRow,
-    NO_BUFFER_POSITION_CHARPOS,
+    NO_BUFFER_POSITION_CHARPOS, TerminalComposition,
 };
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{
@@ -2825,6 +2825,7 @@ fn insert_fragmented_current_buffer_text(eval: &mut Context, text: &str) {
 enum GlyphKindTrace {
     Char(char),
     Composite(String),
+    AutomaticComposite(String, TerminalComposition),
     Stretch(u16),
     Image(i32),
     Surface(i32),
@@ -2858,6 +2859,9 @@ impl GlyphTrace {
         let kind = match &glyph.glyph_type {
             GlyphType::Char { ch } => GlyphKindTrace::Char(*ch),
             GlyphType::Composite { text } => GlyphKindTrace::Composite(text.to_string()),
+            GlyphType::AutomaticComposite { text, terminal } => {
+                GlyphKindTrace::AutomaticComposite(text.to_string(), terminal.clone())
+            }
             GlyphType::Stretch { width_cols } => GlyphKindTrace::Stretch(*width_cols),
             GlyphType::Image { image_id, .. } => GlyphKindTrace::Image(*image_id),
             GlyphType::Surface { surface_id, .. } => GlyphKindTrace::Surface(*surface_id),
@@ -8542,6 +8546,7 @@ fn glyph_trace_text(glyph: &GlyphTrace) -> String {
     match &glyph.kind {
         GlyphKindTrace::Char(ch) => ch.to_string(),
         GlyphKindTrace::Composite(text) => text.clone(),
+        GlyphKindTrace::AutomaticComposite(text, _) => text.clone(),
         GlyphKindTrace::Stretch(width) => " ".repeat(usize::from(*width)),
         GlyphKindTrace::Image(_) | GlyphKindTrace::Surface(_) | GlyphKindTrace::Glyphless(_) => {
             String::new()

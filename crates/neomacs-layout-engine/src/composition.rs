@@ -12,7 +12,7 @@
 //! composes by default. Contextual-shaping scripts (Arabic, Indic) and the
 //! glyph-id gstring arrive in a later phase.
 
-use crate::unicode::{is_cluster_extender, is_regional_indicator, is_wide_char};
+use crate::unicode::{is_cluster_extender, is_regional_indicator};
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 
 /// Display columns occupied by a base character before clustering.
@@ -22,10 +22,10 @@ use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphTy
 /// else defers to the shared char-width table (GNU's default
 /// `char-width-table`).
 pub(crate) fn base_width_cols(ch: char) -> u8 {
-    if is_wide_char(ch) || is_regional_indicator(ch as u32) {
+    if is_regional_indicator(ch as u32) {
         2
     } else {
-        1
+        u8::try_from(neovm_core::encoding::char_width(ch)).unwrap_or(u8::MAX)
     }
 }
 

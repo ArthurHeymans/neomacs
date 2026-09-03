@@ -3321,9 +3321,36 @@ pub fn looking_at_string(
     case_fold: bool,
     match_data: &mut Option<MatchData>,
 ) -> Result<bool, String> {
-    match compile_search_pattern(
+    looking_at_string_with_syntax(pattern, string, case_fold, &DefaultSyntaxLookup, match_data)
+}
+
+/// Match a Rust-owned string using the syntax and category tables selected by
+/// `buffer`.  GNU's internal `fast_looking_at` always classifies `\s` and `\c`
+/// through the current buffer even when its bytes come from a separate string;
+/// automatic composition needs the same live category-table semantics.
+pub(crate) fn looking_at_string_with_buffer_tables(
+    pattern: &str,
+    string: &str,
+    case_fold: bool,
+    buffer: &Buffer,
+    match_data: &mut Option<MatchData>,
+) -> Result<bool, String> {
+    let syntax = buffer_syntax_lookup(buffer);
+    looking_at_string_with_syntax(pattern, string, case_fold, &syntax, match_data)
+}
+
+fn looking_at_string_with_syntax(
+    pattern: &str,
+    string: &str,
+    case_fold: bool,
+    syntax: &dyn SyntaxLookup,
+    match_data: &mut Option<MatchData>,
+) -> Result<bool, String> {
+    match compile_search_pattern_with_posix(
         &crate::heap_types::LispString::from_utf8(pattern),
         case_fold,
+        false,
+        syntax,
     )? {
         CompiledSearchPattern::Literal(literal) => {
             let matched = literal_find_emacs_bytes(string.as_bytes(), &literal, true, case_fold)
@@ -3338,10 +3365,9 @@ pub fn looking_at_string(
             Ok(true)
         }
         CompiledSearchPattern::Emacs(cp) => {
-            let syn = DefaultSyntaxLookup;
             let text_bytes = string.as_bytes();
             if let Some((_end, regs)) =
-                regex_emacs::re_match(cp.as_ref(), text_bytes, 0, text_bytes.len(), &syn, 0)
+                regex_emacs::re_match(cp.as_ref(), text_bytes, 0, text_bytes.len(), syntax, 0)
             {
                 let byte_md = engine_match_data_from_registers(&regs, 0);
                 *match_data = Some(string_char_match_data(
