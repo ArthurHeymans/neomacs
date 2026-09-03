@@ -12158,10 +12158,9 @@ impl Context {
                 // the common read one compare + one cdr.
                 crate::emacs_core::symbol::SymbolRedirect::Localized => {
                     if let Some(buf) = self.buffers.current_buffer() {
-                        let target_buf = Value::make_buffer(buf.id);
-                        if let Some(value) = self.obarray.read_localized(
+                        if let Some(value) = self.obarray.read_localized_for_buffer(
                             sym_id,
-                            target_buf,
+                            buf.id,
                             buf.local_var_alist_value(),
                         ) {
                             if value.is_unbound() {
@@ -12209,10 +12208,9 @@ impl Context {
                 // `SYMBOL_LOCALIZED`.
                 SymbolRedirect::Localized => {
                     if let Some(buf) = self.buffers.current_buffer() {
-                        let target_buf = Value::make_buffer(buf.id);
-                        if let Some(value) = self.obarray.read_localized(
+                        if let Some(value) = self.obarray.read_localized_for_buffer(
                             resolved,
-                            target_buf,
+                            buf.id,
                             buf.local_var_alist_value(),
                         ) {
                             if value.is_unbound() {
@@ -19195,10 +19193,9 @@ impl Context {
             match sym.redirect() {
                 SymbolRedirect::Localized => {
                     if let Some(buf) = self.buffers.current_buffer() {
-                        let target_buf = Value::make_buffer(buf.id);
-                        if let Some(value) = self.obarray.read_localized(
+                        if let Some(value) = self.obarray.read_localized_for_buffer(
                             resolved,
-                            target_buf,
+                            buf.id,
                             buf.local_var_alist_value(),
                         ) {
                             if value.is_unbound() {

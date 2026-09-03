@@ -2347,6 +2347,36 @@ impl Obarray {
     /// Read-only — safe for `&self` callers like `eval_symbol_by_id`
     /// where the borrow checker can't accommodate the mutable
     /// `swap_in_blv` path that vm.rs `lookup_var_id` uses.
+    /// [`Self::read_localized`] for a caller that holds the buffer's ID.
+    ///
+    /// GNU's `swap_in_symval_forwarding` (`data.c:1574-1604`) decides the
+    /// same-buffer question with a pointer compare against the last-swapped
+    /// buffer.  Ours compared two `Value`s, so every read first built one
+    /// with `Value::make_buffer`, and that goes through the thread-local heap
+    /// and a registry lookup -- 52 instructions to answer a question the
+    /// caller already had the ID for.  The miss path still needs the `Value`
+    /// and constructs it there.
+    pub fn read_localized_for_buffer(
+        &self,
+        id: SymId,
+        target_buf_id: crate::buffer::BufferId,
+        target_alist: Value,
+    ) -> Option<Value> {
+        let blv_ptr = self.blv_ptr(id)?;
+        let epoch = blv_alist_epoch();
+        // SAFETY: identical to `read_localized` -- the BLV record is reached
+        // only through the symbol's raw pointer and the evaluator thread is
+        // its only writer; no reference is held across a write.
+        unsafe {
+            if (*blv_ptr).alist_epoch == epoch
+                && (*blv_ptr).where_buf.as_buffer_id() == Some(target_buf_id)
+            {
+                return Some((*blv_ptr).valcell.cons_cdr());
+            }
+        }
+        self.read_localized(id, Value::make_buffer(target_buf_id), target_alist)
+    }
+
     pub fn read_localized(
         &self,
         id: SymId,
