@@ -56,15 +56,17 @@ fn terminal_watch_without_a_visible_event_releases_its_callback_root() {
     let mut registry = WatchRegistry::default();
     registry.register(watch_id.clone(), Value::fixnum(42));
 
-    let deliveries = prepare_deliveries(
+    let (deliveries, failure) = prepare_deliveries(
         &mut registry,
         DrainBatch::<LifecycleTestEvent> {
             events: Vec::new(),
             terminated: vec![watch_id],
+            failure: None,
         },
     );
 
     assert!(deliveries.is_empty());
+    assert!(failure.is_none());
     let mut roots = Vec::new();
     registry.collect_gc_roots(&mut roots);
     assert!(roots.is_empty(), "terminated callback remained GC-rooted");
@@ -129,8 +131,8 @@ fn filesystem_changes_reach_the_lisp_callback_through_the_special_event_queue() 
     inotify_rm_watch(vec![descriptor]).expect("remove watch");
 }
 
-/// GNU `Fkqueue_add_watch` (src/kqueue.c:338) returns a bare fixnum
-/// descriptor -- the open fd -- where inotify descriptors are conses, and a
+/// GNU `Fkqueue_add_watch` (src/kqueue.c:338) returns a bare opaque fixnum
+/// descriptor where inotify descriptors are conses, and a
 /// kqueue event is `(DESCRIPTOR ACTIONS FILE [FILE1])` with NO trailing
 /// cookie (`kqueue_generate_event`, src/kqueue.c:71-105).  For a plain file
 /// watch the reported FILE is the watched file's own name, and ACTIONS is

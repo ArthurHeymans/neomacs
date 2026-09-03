@@ -1,14 +1,22 @@
 #[cfg(target_os = "windows")]
-use super::super::{DrainBatch, FileNotifyBackend, FileWatch, file_notify_error};
+use super::super::{DrainBatch, FileNotifyBackend, FileWatch, WatchActivity, file_notify_error};
 use super::super::{FileNotifyEvent, WatchId};
 #[cfg(target_os = "windows")]
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::value::Value;
 use enumflags2::BitFlags;
-use notify::event::{AccessKind, ModifyKind, RenameMode};
 #[cfg(target_os = "windows")]
 use std::path::Path;
 use std::path::PathBuf;
+
+mod codec;
+#[cfg(target_os = "windows")]
+mod lisp;
+#[cfg(target_os = "windows")]
+mod worker;
+
+#[cfg(target_os = "windows")]
+pub(crate) use lisp::{w32notify_add_watch, w32notify_rm_watch, w32notify_valid_p};
 
 #[enumflags2::bitflags]
 #[repr(u16)]
@@ -56,48 +64,24 @@ impl W32Request {
         self.filters.contains(W32Filter::Subtree)
     }
 
-    fn accepts_names(&self) -> bool {
-        self.filters
-            .intersects(W32Filter::FileName | W32Filter::DirectoryName)
-    }
-
-    fn accepts_modification(&self) -> bool {
-        self.filters.intersects(
-            W32Filter::Attributes
-                | W32Filter::Size
-                | W32Filter::LastWriteTime
-                | W32Filter::LastAccessTime
-                | W32Filter::CreationTime
-                | W32Filter::SecurityDescriptor,
-        )
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum WatchMode {
-    Direct,
-    Recursive,
-}
-
-impl WatchMode {
-    fn from_recursive(recursive: bool) -> Self {
-        if recursive {
-            Self::Recursive
-        } else {
-            Self::Direct
+    /// Exact `ReadDirectoryChangesW` filter bits used by GNU w32notify.
+    fn native_filter_bits(&self) -> u32 {
+        let mut bits = 0;
+        for (filter, native) in [
+            (W32Filter::FileName, 0x0000_0001),
+            (W32Filter::DirectoryName, 0x0000_0002),
+            (W32Filter::Attributes, 0x0000_0004),
+            (W32Filter::Size, 0x0000_0008),
+            (W32Filter::LastWriteTime, 0x0000_0010),
+            (W32Filter::LastAccessTime, 0x0000_0020),
+            (W32Filter::CreationTime, 0x0000_0040),
+            (W32Filter::SecurityDescriptor, 0x0000_0100),
+        ] {
+            if self.filters.contains(filter) {
+                bits |= native;
+            }
         }
-    }
-
-    fn covers(self, requested: Self) -> bool {
-        self == Self::Recursive || self == requested
-    }
-
-    #[cfg(target_os = "windows")]
-    fn into_notify(self) -> notify::RecursiveMode {
-        match self {
-            Self::Direct => notify::RecursiveMode::NonRecursive,
-            Self::Recursive => notify::RecursiveMode::Recursive,
-        }
+        bits
     }
 }
 
@@ -145,65 +129,24 @@ impl FileNotifyEvent for W32Event {
     }
 }
 
-fn event_actions(event: &notify::Event, request: &W32Request) -> Vec<(usize, W32Action)> {
-    match event.kind {
-        notify::EventKind::Create(_) if request.accepts_names() => vec![(0, W32Action::Added)],
-        notify::EventKind::Remove(_) if request.accepts_names() => vec![(0, W32Action::Removed)],
-        notify::EventKind::Modify(ModifyKind::Name(RenameMode::From))
-            if request.accepts_names() =>
-        {
-            vec![(0, W32Action::RenamedFrom)]
-        }
-        notify::EventKind::Modify(ModifyKind::Name(RenameMode::To)) if request.accepts_names() => {
-            vec![(0, W32Action::RenamedTo)]
-        }
-        notify::EventKind::Modify(ModifyKind::Name(RenameMode::Both))
-            if request.accepts_names() =>
-        {
-            vec![(0, W32Action::RenamedFrom), (1, W32Action::RenamedTo)]
-        }
-        notify::EventKind::Modify(ModifyKind::Name(_)) if request.accepts_names() => event
-            .paths
-            .iter()
-            .enumerate()
-            .map(|(index, _)| (index, W32Action::Modified))
-            .collect(),
-        notify::EventKind::Modify(_) if request.accepts_modification() => {
-            vec![(0, W32Action::Modified)]
-        }
-        notify::EventKind::Access(AccessKind::Any | AccessKind::Other)
-            if request.filters.contains(W32Filter::LastAccessTime) =>
-        {
-            vec![(0, W32Action::Modified)]
-        }
-        _ => Vec::new(),
-    }
-}
-
 #[cfg(target_os = "windows")]
 mod native {
     use super::super::super::delivery::{self, DeliveryReceiver, DeliverySender, EVENT_CAPACITY};
     use super::*;
     use crate::emacs_core::process::WaitNotifier;
-    use notify::Watcher;
-    use std::collections::HashMap;
+    use worker::{Worker, WorkerMessage};
 
     struct W32Watch {
         common: FileWatch<W32Request>,
-        is_directory: bool,
-    }
-
-    struct PhysicalWatch {
-        _watcher: notify::ReadDirectoryChangesWatcher,
-        mode: WatchMode,
+        activity: WatchActivity,
+        _worker: Worker,
     }
 
     #[derive(Default)]
     pub(crate) struct W32NotifyBackend {
-        tx: Option<DeliverySender<Result<notify::Event, notify::Error>>>,
-        rx: Option<DeliveryReceiver<Result<notify::Event, notify::Error>>>,
+        tx: Option<DeliverySender<WorkerMessage>>,
+        rx: Option<DeliveryReceiver<WorkerMessage>>,
         watches: Vec<W32Watch>,
-        physical_watches: HashMap<PathBuf, PhysicalWatch>,
         next_id: i64,
     }
 
@@ -225,100 +168,6 @@ mod native {
                 .expect("file notification descriptor space exhausted");
             id
         }
-
-        fn configure_path(&mut self, path: &Path, requested: WatchMode) -> Result<(), Flow> {
-            if self
-                .physical_watches
-                .get(path)
-                .is_some_and(|watch| watch.mode.covers(requested))
-            {
-                return Ok(());
-            }
-
-            // Construct and arm the replacement before dropping the old
-            // watcher. A failed recursive upgrade therefore leaves every
-            // existing logical watch physically active.
-            let tx = self.tx.as_ref().expect("delivery was initialized").clone();
-            let mut watcher = notify::ReadDirectoryChangesWatcher::new(
-                move |result| {
-                    tx.publish(result);
-                },
-                notify::Config::default(),
-            )
-            .map_err(|error| {
-                file_notify_error(
-                    "Watching filesystem events is not supported",
-                    Some(error.to_string()),
-                    None,
-                )
-            })?;
-            watcher
-                .watch(path, requested.into_notify())
-                .map_err(|error| {
-                    file_notify_error(
-                        "Cannot watch file",
-                        Some(error.to_string()),
-                        Some(Value::string(path.display().to_string())),
-                    )
-                })?;
-            self.physical_watches.insert(
-                path.to_path_buf(),
-                PhysicalWatch {
-                    _watcher: watcher,
-                    mode: requested,
-                },
-            );
-            Ok(())
-        }
-
-        fn watch_matches_path(watch: &W32Watch, event_path: &Path) -> bool {
-            if watch.is_directory {
-                if watch.common.request.recursive() {
-                    event_path.starts_with(&watch.common.path)
-                } else {
-                    event_path == watch.common.path
-                        || event_path.parent() == Some(watch.common.path.as_path())
-                }
-            } else {
-                event_path == watch.common.path
-            }
-        }
-
-        fn reported_path(watch: &W32Watch, event_path: &Path) -> PathBuf {
-            if watch.is_directory {
-                event_path
-                    .strip_prefix(&watch.common.path)
-                    .ok()
-                    .filter(|path| !path.as_os_str().is_empty())
-                    .map(Path::to_path_buf)
-                    .unwrap_or_else(|| event_path.to_path_buf())
-            } else {
-                event_path
-                    .file_name()
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|| event_path.to_path_buf())
-            }
-        }
-
-        fn translate_event(&self, event: notify::Event) -> Vec<W32Event> {
-            let mut translated = Vec::new();
-            for watch in &self.watches {
-                for (path_index, action) in event_actions(&event, &watch.common.request) {
-                    let Some(path) = event.paths.get(path_index) else {
-                        continue;
-                    };
-                    if !Self::watch_matches_path(watch, path) {
-                        continue;
-                    }
-                    translated.push(W32Event {
-                        watch_id: watch.common.id.clone(),
-                        action,
-                        path: Self::reported_path(watch, path),
-                    });
-                }
-            }
-            translated
-        }
     }
 
     impl FileNotifyBackend for W32NotifyBackend {
@@ -339,15 +188,31 @@ mod native {
                     Some(Value::string(path.display().to_string())),
                 ));
             }
-            self.configure_path(path, WatchMode::from_recursive(request.recursive()))?;
             let descriptor = WatchId::new(self.allocate_id(), 0);
+            let activity = WatchActivity::active();
+            let worker = Worker::start(
+                path,
+                request.recursive(),
+                request.native_filter_bits(),
+                descriptor.clone(),
+                activity.clone(),
+                self.tx.as_ref().expect("delivery was initialized").clone(),
+            )
+            .map_err(|error| {
+                file_notify_error(
+                    "Cannot watch file",
+                    Some(error),
+                    Some(Value::string(path.display().to_string())),
+                )
+            })?;
             self.watches.push(W32Watch {
                 common: FileWatch {
                     id: descriptor.clone(),
                     path: path.to_path_buf(),
                     request,
                 },
-                is_directory: path.is_dir(),
+                activity,
+                _worker: worker,
             });
             Ok(descriptor)
         }
@@ -360,18 +225,10 @@ mod native {
             else {
                 return Ok(false);
             };
-            let removed = self.watches.remove(index);
-            if !self
-                .watches
-                .iter()
-                .any(|watch| watch.common.path == removed.common.path)
-            {
-                self.physical_watches.remove(&removed.common.path);
-            }
+            self.watches.remove(index);
             if self.watches.is_empty() {
                 self.tx = None;
                 self.rx = None;
-                self.physical_watches.clear();
             }
             Ok(true)
         }
@@ -379,53 +236,72 @@ mod native {
         fn valid_p(&self, descriptor: &WatchId) -> bool {
             self.watches
                 .iter()
-                .any(|watch| watch.common.id == *descriptor)
+                .any(|watch| watch.common.id == *descriptor && watch.activity.is_active())
         }
 
         fn drain_events(&mut self) -> Result<DrainBatch<Self::Event>, Flow> {
-            let mut raw_events = Vec::new();
+            let mut events = Vec::new();
+            let mut rescans = Vec::new();
+            let mut failure = None;
+            let mut delivery_overflow = false;
             if let Some(rx) = self.rx.as_ref() {
-                let overflowed = rx.take_overflow();
+                delivery_overflow = rx.take_overflow();
                 loop {
                     match rx.try_recv() {
-                        Ok(Ok(event)) => raw_events.push(event),
-                        Ok(Err(error)) => {
-                            tracing::warn!(%error, "w32 file notification event was lost");
+                        Ok(WorkerMessage::Event(event)) => events.push(event),
+                        Ok(WorkerMessage::Overflow(watch_id)) => rescans.push(watch_id),
+                        Ok(WorkerMessage::Failed(error)) => {
+                            if failure.is_none() {
+                                failure = Some(file_notify_error(
+                                    "Error while retrieving file system events",
+                                    Some(error),
+                                    None,
+                                ));
+                            }
                         }
                         Err(crossbeam_channel::TryRecvError::Empty) => break,
                         Err(crossbeam_channel::TryRecvError::Disconnected) => break,
                     }
                 }
-                if overflowed {
-                    tracing::warn!(
-                        capacity = EVENT_CAPACITY,
-                        "Windows file-notification queue overflowed; emitting conservative changes"
-                    );
-                    return Ok(DrainBatch {
-                        events: self
-                            .watches
+            }
+            let terminated = self
+                .watches
+                .iter()
+                .filter(|watch| !watch.activity.is_active())
+                .map(|watch| watch.common.id.clone())
+                .collect::<Vec<_>>();
+            self.watches.retain(|watch| watch.activity.is_active());
+            if delivery_overflow {
+                tracing::warn!(
+                    capacity = EVENT_CAPACITY,
+                    "Windows file-notification queue overflowed; emitting conservative changes"
+                );
+                rescans.extend(self.watches.iter().map(|watch| watch.common.id.clone()));
+            }
+            rescans.sort_by_key(WatchId::slot);
+            rescans.dedup();
+            events.extend(
+                rescans
+                    .into_iter()
+                    .filter_map(|watch_id| {
+                        self.watches
                             .iter()
-                            .map(|watch| W32Event {
-                                watch_id: watch.common.id.clone(),
-                                action: W32Action::Modified,
-                                path: watch.common.path.clone(),
-                            })
-                            .chain(
-                                raw_events
-                                    .into_iter()
-                                    .flat_map(|event| self.translate_event(event)),
-                            )
-                            .collect(),
-                        terminated: Vec::new(),
-                    });
-                }
+                            .find(|watch| watch.common.id == watch_id)
+                    })
+                    .map(|watch| W32Event {
+                        watch_id: watch.common.id.clone(),
+                        action: W32Action::Modified,
+                        path: watch.common.path.clone(),
+                    }),
+            );
+            if self.watches.is_empty() {
+                self.tx = None;
+                self.rx = None;
             }
             Ok(DrainBatch {
-                events: raw_events
-                    .into_iter()
-                    .flat_map(|event| self.translate_event(event))
-                    .collect(),
-                terminated: Vec::new(),
+                events,
+                terminated,
+                failure,
             })
         }
 

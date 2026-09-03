@@ -95,9 +95,6 @@ windows-sys.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 inotify.workspace = true
 
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-notify.workspace = true
-
 [features]
 default = ["jit", "sqlite"]
 sqlite = ["dep:rusqlite"]

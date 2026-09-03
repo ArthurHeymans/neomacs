@@ -4,6 +4,7 @@
 //! descriptors.  The evaluator sends typed commands and receives owned event
 //! records; neither side shares kernel handles or Lisp values.
 
+use super::super::super::WatchActivity;
 use super::super::super::delivery::{self, DeliveryReceiver, DeliverySender};
 use crate::emacs_core::process::WaitNotifier;
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
@@ -30,7 +31,7 @@ enum Command {
     Add {
         path: PathBuf,
         mask: WatchMask,
-        reply: Sender<Result<i32, String>>,
+        reply: Sender<Result<(i32, WatchActivity), String>>,
     },
     Remove {
         descriptor: i32,
@@ -78,7 +79,11 @@ impl Worker {
         self.poller.notify().map_err(|error| error.to_string())
     }
 
-    pub(super) fn add(&self, path: PathBuf, mask: WatchMask) -> Result<i32, String> {
+    pub(super) fn add(
+        &self,
+        path: PathBuf,
+        mask: WatchMask,
+    ) -> Result<(i32, WatchActivity), String> {
         let (reply_tx, reply_rx) = crossbeam_channel::bounded(1);
         self.send_command(Command::Add {
             path,
@@ -125,7 +130,7 @@ fn worker_loop(
     commands: Receiver<Command>,
     events: DeliverySender<Result<NativeEvent, String>>,
 ) {
-    let mut descriptors = HashMap::<i32, WatchDescriptor>::new();
+    let mut descriptors = HashMap::<i32, (WatchDescriptor, WatchActivity)>::new();
     let mut poll_events = Events::new();
     let mut buffer = vec![0; 64 * 1024];
     let mut running = true;
@@ -138,6 +143,7 @@ fn worker_loop(
 
         poll_events.clear();
         if let Err(error) = poller.wait(&mut poll_events, None) {
+            terminate_all(&descriptors);
             events.publish(Err(error.to_string()));
             break;
         }
@@ -161,15 +167,15 @@ fn worker_loop(
                         any = true;
                         let descriptor = event.wd.get_watch_descriptor_id();
                         let terminal = event.mask.contains(EventMask::IGNORED);
+                        if terminal && let Some((_, activity)) = descriptors.remove(&descriptor) {
+                            activity.terminate();
+                        }
                         events.publish(Ok(NativeEvent {
                             descriptor,
                             mask: event.mask,
                             cookie: event.cookie,
                             name: event.name.map(ToOwned::to_owned),
                         }));
-                        if terminal {
-                            descriptors.remove(&descriptor);
-                        }
                     }
                     if !any {
                         break;
@@ -177,6 +183,7 @@ fn worker_loop(
                 }
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
                 Err(error) => {
+                    terminate_all(&descriptors);
                     events.publish(Err(error.to_string()));
                     running = false;
                     break;
@@ -191,7 +198,7 @@ fn worker_loop(
 fn apply_commands(
     inotify: &mut Inotify,
     commands: &Receiver<Command>,
-    descriptors: &mut HashMap<i32, WatchDescriptor>,
+    descriptors: &mut HashMap<i32, (WatchDescriptor, WatchActivity)>,
 ) -> bool {
     loop {
         match commands.try_recv() {
@@ -201,18 +208,30 @@ fn apply_commands(
                     .add(path, mask)
                     .map(|descriptor| {
                         let id = descriptor.get_watch_descriptor_id();
-                        descriptors.insert(id, descriptor);
-                        id
+                        let activity = match descriptors.entry(id) {
+                            std::collections::hash_map::Entry::Occupied(entry) => {
+                                entry.get().1.clone()
+                            }
+                            std::collections::hash_map::Entry::Vacant(entry) => {
+                                let activity = WatchActivity::active();
+                                entry.insert((descriptor, activity.clone()));
+                                activity
+                            }
+                        };
+                        (id, activity)
                     })
                     .map_err(|error| error.to_string());
                 let _ = reply.send(result);
             }
             Ok(Command::Remove { descriptor, reply }) => {
                 let result = match descriptors.remove(&descriptor) {
-                    Some(watch_descriptor) => inotify
+                    Some((watch_descriptor, activity)) => inotify
                         .watches()
                         .remove(watch_descriptor)
-                        .map(|()| true)
+                        .map(|()| {
+                            activity.terminate();
+                            true
+                        })
                         .map_err(|error| error.to_string()),
                     None => Ok(false),
                 };
@@ -222,5 +241,11 @@ fn apply_commands(
             Err(TryRecvError::Empty) => return true,
             Err(TryRecvError::Disconnected) => return false,
         }
+    }
+}
+
+fn terminate_all(descriptors: &HashMap<i32, (WatchDescriptor, WatchActivity)>) {
+    for (_, activity) in descriptors.values() {
+        activity.terminate();
     }
 }

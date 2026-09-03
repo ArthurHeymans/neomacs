@@ -18,15 +18,12 @@ pub(super) mod windows;
 std::cfg_select! {
     target_os = "linux" => {
         pub(super) type Backend = linux::InotifyBackend;
-        pub(super) type Request = linux::InotifyRequest;
     }
     target_os = "macos" => {
         pub(super) type Backend = macos::KqueueBackend;
-        pub(super) type Request = macos::KqueueRequest;
     }
     target_os = "windows" => {
         pub(super) type Backend = windows::W32NotifyBackend;
-        pub(super) type Request = windows::W32Request;
     }
     _ => {
         compile_error!("file notification has no backend for this target");

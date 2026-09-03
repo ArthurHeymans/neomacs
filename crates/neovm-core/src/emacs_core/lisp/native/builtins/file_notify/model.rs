@@ -8,6 +8,8 @@ use crate::emacs_core::error::Flow;
 use crate::emacs_core::process::WaitNotifier;
 use crate::emacs_core::value::Value;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Stable identity for one native watch registration.
 ///
@@ -40,6 +42,28 @@ impl WatchId {
     }
 }
 
+/// Shared monotonic native-watch lifecycle.
+///
+/// A worker flips this token before publishing a terminal event. The
+/// evaluator can therefore reconcile validity even when bounded event
+/// delivery overflows and drops the corresponding data-plane record.
+#[derive(Clone, Debug)]
+pub(super) struct WatchActivity(Arc<AtomicBool>);
+
+impl WatchActivity {
+    pub(super) fn active() -> Self {
+        Self(Arc::new(AtomicBool::new(true)))
+    }
+
+    pub(super) fn terminate(&self) {
+        self.0.store(false, Ordering::Release);
+    }
+
+    pub(super) fn is_active(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct FileWatch<Request> {
     pub(super) id: WatchId,
@@ -61,6 +85,10 @@ pub(super) trait BackendEvent {
 pub(super) struct DrainBatch<Event> {
     pub(super) events: Vec<Event>,
     pub(super) terminated: Vec<WatchId>,
+    /// An asynchronous backend failure observed in the same drain.
+    /// Lifecycle reconciliation and already-published events still happen
+    /// before this error is returned to the evaluator.
+    pub(super) failure: Option<Flow>,
 }
 
 pub(super) trait Backend {

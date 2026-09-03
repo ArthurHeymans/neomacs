@@ -48,7 +48,8 @@ mod native {
         self, DeliveryReceiver, DeliverySender, EVENT_CAPACITY, PublishOutcome,
     };
     use super::super::super::{
-        DrainBatch, FileNotifyBackend, FileNotifyEvent, FileWatch, WatchId, file_notify_error,
+        DrainBatch, FileNotifyBackend, FileNotifyEvent, FileWatch, WatchActivity, WatchId,
+        file_notify_error,
     };
     use super::*;
     use crate::emacs_core::error::Flow;
@@ -112,13 +113,21 @@ mod native {
 
     #[derive(Debug)]
     struct NativeEvent {
-        descriptor: i64,
+        watch_id: WatchId,
         actions: BitFlags<KqueueVnodeAction>,
+    }
+
+    struct NativeWatch {
+        _fd: OwnedFd,
+        watch_id: WatchId,
+        activity: WatchActivity,
     }
 
     enum Command {
         Add {
             fd: OwnedFd,
+            watch_id: WatchId,
+            activity: WatchActivity,
             actions: BitFlags<KqueueVnodeAction>,
             reply: SyncSender<Result<RawFd, String>>,
         },
@@ -183,10 +192,18 @@ mod native {
             trigger_command_event(&self.control_kqueue)
         }
 
-        fn add(&self, fd: OwnedFd, actions: BitFlags<KqueueVnodeAction>) -> Result<RawFd, String> {
+        fn add(
+            &self,
+            fd: OwnedFd,
+            watch_id: WatchId,
+            activity: WatchActivity,
+            actions: BitFlags<KqueueVnodeAction>,
+        ) -> Result<RawFd, String> {
             let (reply_tx, reply_rx) = mpsc::sync_channel(1);
             self.send_command(Command::Add {
                 fd,
+                watch_id,
+                activity,
                 actions,
                 reply: reply_tx,
             })?;
@@ -312,7 +329,7 @@ mod native {
         commands: Receiver<Command>,
         events: DeliverySender<Result<NativeEvent, String>>,
     ) {
-        let mut watches = HashMap::<RawFd, OwnedFd>::new();
+        let mut watches = HashMap::<RawFd, NativeWatch>::new();
         loop {
             let mut ready = Vec::<Event>::with_capacity(32);
             // SAFETY: every vnode fd registered in this kqueue is owned by
@@ -327,6 +344,9 @@ mod native {
                 )
             };
             if let Err(error) = wait_result {
+                for watch in watches.values() {
+                    watch.activity.terminate();
+                }
                 events.publish(Err(error.to_string()));
                 return;
             }
@@ -343,10 +363,23 @@ mod native {
             if command_ready {
                 loop {
                     match commands.try_recv() {
-                        Ok(Command::Add { fd, actions, reply }) => {
+                        Ok(Command::Add {
+                            fd,
+                            watch_id,
+                            activity,
+                            actions,
+                            reply,
+                        }) => {
                             let raw_fd = fd.as_raw_fd();
                             let result = register_vnode(&kqueue_fd, raw_fd, actions).map(|()| {
-                                watches.insert(raw_fd, fd);
+                                watches.insert(
+                                    raw_fd,
+                                    NativeWatch {
+                                        _fd: fd,
+                                        watch_id,
+                                        activity,
+                                    },
+                                );
                                 raw_fd
                             });
                             let _ = reply.send(result);
@@ -354,8 +387,11 @@ mod native {
                         Ok(Command::Remove { descriptor, reply }) => {
                             let removed = i32::try_from(descriptor)
                                 .ok()
-                                .and_then(|fd| watches.remove(&fd))
-                                .is_some();
+                                .and_then(|fd| watches.remove(&fd));
+                            if let Some(watch) = removed.as_ref() {
+                                watch.activity.terminate();
+                            }
+                            let removed = removed.is_some();
                             let _ = reply.send(removed);
                         }
                         Ok(Command::Shutdown) => return,
@@ -369,9 +405,10 @@ mod native {
                 let EventFilter::Vnode { vnode, flags } = event.filter() else {
                     continue;
                 };
-                if !watches.contains_key(&vnode) {
+                let Some(watch) = watches.get(&vnode) else {
                     continue;
-                }
+                };
+                let watch_id = watch.watch_id.clone();
                 let actions = from_rustix_vnode_events(flags);
                 if actions.is_empty() {
                     continue;
@@ -381,13 +418,13 @@ mod native {
                         | KqueueVnodeAction::Rename
                         | KqueueVnodeAction::Revoke,
                 );
-                let published = events.publish(Ok(NativeEvent {
-                    descriptor: i64::from(vnode),
-                    actions,
-                }));
                 if terminal {
-                    watches.remove(&vnode);
+                    let watch = watches
+                        .remove(&vnode)
+                        .expect("ready vnode remained registered");
+                    watch.activity.terminate();
                 }
+                let published = events.publish(Ok(NativeEvent { watch_id, actions }));
                 if published == PublishOutcome::Closed {
                     return;
                 }
@@ -397,16 +434,90 @@ mod native {
 
     struct KqueueWatch {
         common: FileWatch<KqueueRequest>,
+        native_descriptor: i64,
+        activity: WatchActivity,
         directory: Option<DirectorySnapshot>,
+    }
+
+    impl KqueueWatch {
+        fn translate(
+            &mut self,
+            mut native_actions: BitFlags<KqueueVnodeAction>,
+        ) -> Result<Vec<KqueueEvent>, Flow> {
+            let requested = self.common.request.actions;
+            let watch_id = self.common.id.clone();
+            let mut translated = Vec::new();
+
+            if native_actions.contains(KqueueVnodeAction::Write)
+                && let Some(old_snapshot) = self.directory.as_ref()
+            {
+                native_actions.remove(KqueueVnodeAction::Write);
+                if self.common.path.is_dir() {
+                    let new_snapshot =
+                        DirectorySnapshot::read(&self.common.path).map_err(|error| {
+                            file_notify_error(
+                                "Error while reading watched directory",
+                                Some(error.to_string()),
+                                Some(Value::string(self.common.path.display().to_string())),
+                            )
+                        })?;
+                    for change in old_snapshot.diff(&new_snapshot) {
+                        let (action, path, file1) = match change {
+                            DirectoryChange::Action { action, path } => (action, path, None),
+                            DirectoryChange::Rename { from, to } => {
+                                (KqueueAction::Rename, from, Some(to))
+                            }
+                        };
+                        if requested.contains(action) {
+                            translated.push(KqueueEvent {
+                                watch_id: watch_id.clone(),
+                                actions: vec![action],
+                                path,
+                                file1,
+                            });
+                        }
+                    }
+                    self.directory = Some(new_snapshot);
+                } else if requested.contains(KqueueAction::Delete) {
+                    translated.push(KqueueEvent {
+                        watch_id: watch_id.clone(),
+                        actions: vec![KqueueAction::Delete],
+                        path: self.common.path.clone(),
+                        file1: None,
+                    });
+                }
+            }
+
+            let actions = requested_vnode_actions(native_actions, requested);
+            if !actions.is_empty() {
+                translated.push(KqueueEvent {
+                    watch_id,
+                    actions,
+                    path: self.common.path.clone(),
+                    file1: None,
+                });
+            }
+            Ok(translated)
+        }
     }
 
     #[derive(Default)]
     pub(crate) struct KqueueBackend {
         worker: Option<Worker>,
         watches: Vec<KqueueWatch>,
+        next_id: i64,
     }
 
     impl KqueueBackend {
+        fn allocate_id(&mut self) -> i64 {
+            let id = self.next_id;
+            self.next_id = self
+                .next_id
+                .checked_add(1)
+                .expect("file notification descriptor space exhausted");
+            id
+        }
+
         fn ensure_worker(&mut self, notifier: Option<WaitNotifier>) -> Result<&mut Worker, Flow> {
             if self.worker.is_none() {
                 self.worker = Some(Worker::start(notifier)?);
@@ -437,9 +548,8 @@ mod native {
         fn open_watch(path: &Path) -> Result<OwnedFd, Flow> {
             use rustix::fs::{Mode, OFlags};
 
-            let flags = OFlags::from_bits_retain(libc::O_EVTONLY as u32)
-                | OFlags::NONBLOCK
-                | OFlags::NOFOLLOW;
+            let flags = OFlags::from_bits_retain((libc::O_EVTONLY | libc::O_SYMLINK) as u32)
+                | OFlags::NONBLOCK;
             rustix::fs::open(path, flags, Mode::empty()).map_err(|error| {
                 file_notify_error(
                     "File cannot be opened",
@@ -447,66 +557,6 @@ mod native {
                     Some(Value::string(path.display().to_string())),
                 )
             })
-        }
-
-        fn translate_event(
-            watch: &mut KqueueWatch,
-            mut native_actions: BitFlags<KqueueVnodeAction>,
-        ) -> Result<Vec<KqueueEvent>, Flow> {
-            let requested = watch.common.request.actions;
-            let watch_id = watch.common.id.clone();
-            let mut translated = Vec::new();
-
-            if native_actions.contains(KqueueVnodeAction::Write)
-                && let Some(old_snapshot) = watch.directory.as_ref()
-            {
-                native_actions.remove(KqueueVnodeAction::Write);
-                if watch.common.path.is_dir() {
-                    let new_snapshot =
-                        DirectorySnapshot::read(&watch.common.path).map_err(|error| {
-                            file_notify_error(
-                                "Error while reading watched directory",
-                                Some(error.to_string()),
-                                Some(Value::string(watch.common.path.display().to_string())),
-                            )
-                        })?;
-                    for change in old_snapshot.diff(&new_snapshot) {
-                        let (action, path, file1) = match change {
-                            DirectoryChange::Action { action, path } => (action, path, None),
-                            DirectoryChange::Rename { from, to } => {
-                                (KqueueAction::Rename, from, Some(to))
-                            }
-                        };
-                        if requested.contains(action) {
-                            translated.push(KqueueEvent {
-                                watch_id: watch_id.clone(),
-                                actions: vec![action],
-                                path,
-                                file1,
-                            });
-                        }
-                    }
-                    watch.directory = Some(new_snapshot);
-                } else if requested.contains(KqueueAction::Delete) {
-                    translated.push(KqueueEvent {
-                        watch_id: watch_id.clone(),
-                        actions: vec![KqueueAction::Delete],
-                        path: watch.common.path.clone(),
-                        file1: None,
-                    });
-                }
-            }
-
-            let actions = requested_vnode_actions(native_actions, requested);
-            if !actions.is_empty() {
-                translated.push(KqueueEvent {
-                    watch_id,
-                    actions,
-                    path: watch.common.path.clone(),
-                    file1: None,
-                });
-            }
-            Ok(translated)
         }
     }
 
@@ -523,9 +573,16 @@ mod native {
             let actions = request.actions;
             let is_directory = path.is_dir();
             let fd = Self::open_watch(path)?;
-            let descriptor = self
+            let watch_id = WatchId::new(self.allocate_id(), 0);
+            let activity = WatchActivity::active();
+            let native_descriptor = self
                 .ensure_worker(notifier)?
-                .add(fd, Self::requested_native_actions(actions))
+                .add(
+                    fd,
+                    watch_id.clone(),
+                    activity.clone(),
+                    Self::requested_native_actions(actions),
+                )
                 .map_err(|error| {
                     file_notify_error(
                         "Cannot watch file",
@@ -541,7 +598,7 @@ mod native {
                             .worker
                             .as_ref()
                             .expect("worker exists")
-                            .remove(i64::from(descriptor));
+                            .remove(i64::from(native_descriptor));
                         return Err(file_notify_error(
                             "Cannot read watched directory",
                             Some(error.to_string()),
@@ -552,16 +609,17 @@ mod native {
             } else {
                 None
             };
-            let descriptor = WatchId::new(i64::from(descriptor), 0);
             self.watches.push(KqueueWatch {
                 common: FileWatch {
-                    id: descriptor.clone(),
+                    id: watch_id.clone(),
                     path: path.to_path_buf(),
                     request,
                 },
+                native_descriptor: i64::from(native_descriptor),
+                activity,
                 directory,
             });
-            Ok(descriptor)
+            Ok(watch_id)
         }
 
         fn remove_watch(&mut self, descriptor: &WatchId) -> Result<bool, Flow> {
@@ -572,12 +630,12 @@ mod native {
             else {
                 return Ok(false);
             };
-            self.watches.remove(index);
+            let removed = self.watches.remove(index);
             let _worker_had_watch = self
                 .worker
                 .as_ref()
                 .expect("a live watch has a worker")
-                .remove(descriptor.slot())
+                .remove(removed.native_descriptor)
                 .map_err(|error| file_notify_error("Cannot remove watch", Some(error), None))?;
             if self.watches.is_empty() {
                 self.worker = None;
@@ -592,23 +650,25 @@ mod native {
         fn valid_p(&self, descriptor: &WatchId) -> bool {
             self.watches
                 .iter()
-                .any(|watch| watch.common.id == *descriptor)
+                .any(|watch| watch.common.id == *descriptor && watch.activity.is_active())
         }
 
         fn drain_events(&mut self) -> Result<DrainBatch<Self::Event>, Flow> {
             let mut raw_events = Vec::new();
             let mut overflowed = false;
+            let mut failure = None;
             if let Some(worker) = self.worker.as_ref() {
                 overflowed = worker.events.take_overflow();
                 loop {
                     match worker.events.try_recv() {
                         Ok(Ok(event)) => raw_events.push(event),
                         Ok(Err(error)) => {
-                            return Err(file_notify_error(
+                            failure = Some(file_notify_error(
                                 "Error while retrieving file system events",
                                 Some(error),
                                 None,
                             ));
+                            break;
                         }
                         Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
                     }
@@ -616,38 +676,38 @@ mod native {
             }
 
             let mut translated = Vec::new();
-            let mut terminated = Vec::new();
+            for event in raw_events {
+                let Some(index) = self
+                    .watches
+                    .iter()
+                    .position(|watch| watch.common.id == event.watch_id)
+                else {
+                    continue;
+                };
+                match self.watches[index].translate(event.actions) {
+                    Ok(events) => translated.extend(events),
+                    Err(error) if failure.is_none() => failure = Some(error),
+                    Err(_) => {}
+                }
+            }
+            let terminated = self
+                .watches
+                .iter()
+                .filter(|watch| !watch.activity.is_active())
+                .map(|watch| watch.common.id.clone())
+                .collect::<Vec<_>>();
+            self.watches.retain(|watch| watch.activity.is_active());
             if overflowed {
                 tracing::warn!(
                     capacity = EVENT_CAPACITY,
                     "kqueue delivery queue overflowed; diffing watched directories conservatively"
                 );
                 for watch in &mut self.watches {
-                    translated.extend(Self::translate_event(
-                        watch,
-                        KqueueVnodeAction::Write.into(),
-                    )?);
-                }
-            }
-            for event in raw_events {
-                let Some(index) = self
-                    .watches
-                    .iter()
-                    .position(|watch| watch.common.id.slot() == event.descriptor)
-                else {
-                    continue;
-                };
-                let terminal = event.actions.intersects(
-                    KqueueVnodeAction::Delete
-                        | KqueueVnodeAction::Rename
-                        | KqueueVnodeAction::Revoke,
-                );
-                translated.extend(Self::translate_event(
-                    &mut self.watches[index],
-                    event.actions,
-                )?);
-                if terminal {
-                    terminated.push(self.watches.remove(index).common.id);
+                    match watch.translate(KqueueVnodeAction::Write.into()) {
+                        Ok(events) => translated.extend(events),
+                        Err(error) if failure.is_none() => failure = Some(error),
+                        Err(_) => {}
+                    }
                 }
             }
             if self.watches.is_empty() {
@@ -656,6 +716,7 @@ mod native {
             Ok(DrainBatch {
                 events: translated,
                 terminated,
+                failure,
             })
         }
 
@@ -667,6 +728,11 @@ mod native {
 
 #[cfg(target_os = "macos")]
 pub(super) use native::{KqueueBackend, KqueueRequest};
+
+#[cfg(target_os = "macos")]
+mod lisp;
+#[cfg(target_os = "macos")]
+pub(crate) use lisp::{kqueue_add_watch, kqueue_rm_watch, kqueue_valid_p};
 
 #[cfg(test)]
 mod macos_test;

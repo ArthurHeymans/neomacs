@@ -9,19 +9,20 @@ mod registry;
 
 pub(super) use lisp::file_notify_error;
 use model::{
-    Backend as FileNotifyBackend, BackendEvent as FileNotifyEvent, DrainBatch, FileWatch, WatchId,
+    Backend as FileNotifyBackend, BackendEvent as FileNotifyEvent, DrainBatch, FileWatch,
+    WatchActivity, WatchId,
 };
 use registry::WatchRegistry;
 
 std::cfg_select! {
     target_os = "linux" => {
-        pub(crate) use lisp::{inotify_add_watch, inotify_rm_watch, inotify_valid_p};
+        pub(crate) use platform::linux::{inotify_add_watch, inotify_rm_watch, inotify_valid_p};
     }
     target_os = "macos" => {
-        pub(crate) use lisp::{kqueue_add_watch, kqueue_rm_watch, kqueue_valid_p};
+        pub(crate) use platform::macos::{kqueue_add_watch, kqueue_rm_watch, kqueue_valid_p};
     }
     target_os = "windows" => {
-        pub(crate) use lisp::{w32notify_add_watch, w32notify_rm_watch, w32notify_valid_p};
+        pub(crate) use platform::windows::{w32notify_add_watch, w32notify_rm_watch, w32notify_valid_p};
     }
     _ => {}
 }
@@ -77,7 +78,7 @@ pub(crate) fn has_active_file_notify_watches() -> bool {
 fn prepare_deliveries<Event: FileNotifyEvent>(
     registry: &mut WatchRegistry,
     batch: DrainBatch<Event>,
-) -> Vec<(Event, Value)> {
+) -> (Vec<(Event, Value)>, Option<Flow>) {
     // Capture callbacks before unregistering terminal watches so the final
     // event, when present, is still delivered exactly once.
     let deliverable = batch
@@ -92,13 +93,13 @@ fn prepare_deliveries<Event: FileNotifyEvent>(
     for watch_id in batch.terminated {
         registry.unregister(&watch_id);
     }
-    deliverable
+    (deliverable, batch.failure)
 }
 
 pub(crate) fn drain_file_notify_events(
     ctx: &mut crate::emacs_core::eval::Context,
 ) -> Result<usize, Flow> {
-    let events = FILE_NOTIFY_STATE.with(|slot| {
+    let (events, failure) = FILE_NOTIFY_STATE.with(|slot| {
         let mut state = slot.borrow_mut();
         let batch = state.backend.drain_events()?;
         Ok::<_, Flow>(prepare_deliveries(&mut state.registry, batch))
@@ -114,7 +115,10 @@ pub(crate) fn drain_file_notify_events(
         ]));
     }
 
-    Ok(count)
+    match failure {
+        Some(error) => Err(error),
+        None => Ok(count),
+    }
 }
 
 #[cfg(test)]

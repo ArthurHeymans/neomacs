@@ -6,7 +6,8 @@
 //! bits, `isdir`, `unmount`, and terminal `ignored`).
 
 use super::super::{
-    DrainBatch, FileNotifyBackend, FileNotifyEvent, FileWatch, WatchId, file_notify_error,
+    DrainBatch, FileNotifyBackend, FileNotifyEvent, FileWatch, WatchActivity, WatchId,
+    file_notify_error,
 };
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::process::WaitNotifier;
@@ -14,7 +15,10 @@ use crate::emacs_core::value::Value;
 use inotify::{EventMask, WatchMask};
 use std::path::{Path, PathBuf};
 
+mod lisp;
 mod worker;
+
+pub(crate) use lisp::{inotify_add_watch, inotify_rm_watch, inotify_valid_p};
 
 #[cfg(test)]
 mod linux_test;
@@ -143,6 +147,7 @@ impl FileNotifyEvent for InotifyEvent {
 struct InotifyWatch {
     common: FileWatch<InotifyRequest>,
     native_descriptor: i32,
+    activity: WatchActivity,
 }
 
 #[derive(Default)]
@@ -242,8 +247,8 @@ impl FileNotifyBackend for InotifyBackend {
         let add_result = self
             .ensure_worker(notifier)?
             .add(path.to_path_buf(), request.watch_mask);
-        let native_descriptor = match add_result {
-            Ok(descriptor) => descriptor,
+        let (native_descriptor, activity) = match add_result {
+            Ok((descriptor, activity)) => (descriptor, activity),
             Err(error) => {
                 if self.watches.is_empty() {
                     self.worker = None;
@@ -263,6 +268,7 @@ impl FileNotifyBackend for InotifyBackend {
                 request,
             },
             native_descriptor,
+            activity,
         });
         Ok(descriptor)
     }
@@ -296,34 +302,33 @@ impl FileNotifyBackend for InotifyBackend {
     fn valid_p(&self, descriptor: &WatchId) -> bool {
         self.watches
             .iter()
-            .any(|watch| watch.common.id == *descriptor)
+            .any(|watch| watch.common.id == *descriptor && watch.activity.is_active())
     }
 
     fn drain_events(&mut self) -> Result<DrainBatch<Self::Event>, Flow> {
         let mut events = Vec::new();
-        let mut terminal_descriptors = Vec::new();
+        let mut overflowed = false;
+        let mut failure = None;
         if let Some(worker) = self.worker.as_ref() {
             if worker.take_overflow() {
+                overflowed = true;
                 tracing::warn!(
-                    capacity = 4096,
+                    capacity = super::super::delivery::EVENT_CAPACITY,
                     "inotify delivery queue overflowed; requesting conservative rescan"
                 );
-                events.extend(self.overflow_events());
             }
             loop {
                 match worker.try_recv() {
                     Ok(Ok(event)) => {
-                        if event.mask.contains(EventMask::IGNORED) {
-                            terminal_descriptors.push(event.descriptor);
-                        }
                         events.extend(self.translate_event(event));
                     }
                     Ok(Err(error)) => {
-                        return Err(file_notify_error(
+                        failure = Some(file_notify_error(
                             "Error while retrieving file system events",
                             Some(error),
                             None,
                         ));
+                        break;
                     }
                     Err(crossbeam_channel::TryRecvError::Empty) => break,
                     Err(crossbeam_channel::TryRecvError::Disconnected) => break,
@@ -333,17 +338,21 @@ impl FileNotifyBackend for InotifyBackend {
         let terminated = self
             .watches
             .iter()
-            .filter(|watch| terminal_descriptors.contains(&watch.native_descriptor))
+            .filter(|watch| !watch.activity.is_active())
             .map(|watch| watch.common.id.clone())
-            .collect();
-        if !terminal_descriptors.is_empty() {
-            self.watches
-                .retain(|watch| !terminal_descriptors.contains(&watch.native_descriptor));
+            .collect::<Vec<_>>();
+        self.watches.retain(|watch| watch.activity.is_active());
+        if overflowed {
+            events.extend(self.overflow_events());
         }
         if self.watches.is_empty() {
             self.worker = None;
         }
-        Ok(DrainBatch { events, terminated })
+        Ok(DrainBatch {
+            events,
+            terminated,
+            failure,
+        })
     }
 
     fn has_watches(&self) -> bool {
