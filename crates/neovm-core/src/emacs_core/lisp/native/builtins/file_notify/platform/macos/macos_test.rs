@@ -106,6 +106,33 @@ fn directory_diff_treats_same_name_new_inode_as_pending_write_like_gnu() {
 }
 
 #[test]
+fn directory_diff_preserves_snapshot_order_for_shared_inodes() {
+    let old = DirectorySnapshot::from_entries(vec![
+        entry(50, "first-old-link", 1, 1, 1),
+        entry(50, "second-old-link", 1, 1, 1),
+    ]);
+    let new = DirectorySnapshot::from_entries(vec![
+        entry(50, "first-new-link", 1, 1, 1),
+        entry(50, "second-new-link", 1, 1, 1),
+    ]);
+
+    assert_eq!(
+        old.diff(&new),
+        [
+            DirectoryChange::Rename {
+                from: PathBuf::from("first-old-link"),
+                to: PathBuf::from("first-new-link"),
+            },
+            DirectoryChange::Rename {
+                from: PathBuf::from("second-old-link"),
+                to: PathBuf::from("second-new-link"),
+            },
+        ],
+        "hard-link rename pairing follows GNU's snapshot order"
+    );
+}
+
+#[test]
 fn action_sets_cannot_contain_duplicates() {
     let mut actions = BitFlags::<KqueueAction>::empty();
     actions.insert(KqueueAction::Write);

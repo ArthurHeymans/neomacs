@@ -5,6 +5,8 @@
 //! lets us test it without a macOS kernel or a live worker thread.
 
 use super::KqueueAction;
+use hashbrown::HashMap;
+use std::collections::VecDeque;
 #[cfg(target_os = "macos")]
 use std::path::Path;
 use std::path::PathBuf;
@@ -27,6 +29,69 @@ pub(super) struct DirectorySnapshot {
 pub(super) enum DirectoryChange {
     Action { action: KqueueAction, path: PathBuf },
     Rename { from: PathBuf, to: PathBuf },
+}
+
+/// Ordered multimap over a snapshot.
+///
+/// Multiple names can share an inode (hard links), and snapshot order affects
+/// GNU's rename pairing.  Queues preserve that order while lazy removal keeps
+/// each slot/index entry O(1) amortized instead of repeatedly scanning and
+/// shifting a Vec.
+struct EntryIndex {
+    entries: Vec<Option<DirectoryEntrySnapshot>>,
+    by_inode: HashMap<u64, VecDeque<usize>>,
+    by_name: HashMap<PathBuf, VecDeque<usize>>,
+}
+
+impl EntryIndex {
+    fn new(entries: Vec<DirectoryEntrySnapshot>) -> Self {
+        let mut index = Self {
+            entries: Vec::with_capacity(entries.len()),
+            by_inode: HashMap::with_capacity(entries.len()),
+            by_name: HashMap::with_capacity(entries.len()),
+        };
+        for entry in entries {
+            index.push(entry);
+        }
+        index
+    }
+
+    fn push(&mut self, entry: DirectoryEntrySnapshot) {
+        let index = self.entries.len();
+        self.by_inode
+            .entry(entry.inode)
+            .or_default()
+            .push_back(index);
+        self.by_name
+            .entry(entry.name.clone())
+            .or_default()
+            .push_back(index);
+        self.entries.push(Some(entry));
+    }
+
+    fn take_inode(&mut self, inode: u64) -> Option<DirectoryEntrySnapshot> {
+        Self::take_from(&mut self.entries, self.by_inode.get_mut(&inode)?)
+    }
+
+    fn take_name(&mut self, name: &PathBuf) -> Option<DirectoryEntrySnapshot> {
+        Self::take_from(&mut self.entries, self.by_name.get_mut(name)?)
+    }
+
+    fn take_from(
+        entries: &mut [Option<DirectoryEntrySnapshot>],
+        indexes: &mut VecDeque<usize>,
+    ) -> Option<DirectoryEntrySnapshot> {
+        while let Some(index) = indexes.pop_front() {
+            if let Some(entry) = entries[index].take() {
+                return Some(entry);
+            }
+        }
+        None
+    }
+
+    fn remaining(self) -> impl Iterator<Item = DirectoryEntrySnapshot> {
+        self.entries.into_iter().flatten()
+    }
 }
 
 impl DirectorySnapshot {
@@ -58,17 +123,13 @@ impl DirectorySnapshot {
     /// the old and new snapshots explicit makes rename pairing, replacement,
     /// and metadata classification independently testable from kqueue I/O.
     pub(super) fn diff(&self, new: &Self) -> Vec<DirectoryChange> {
-        let mut available_new = new.entries.clone();
-        let mut pending = Vec::<DirectoryEntrySnapshot>::new();
-        let mut renamed_destinations = Vec::<DirectoryEntrySnapshot>::new();
+        let mut available_new = EntryIndex::new(new.entries.clone());
+        let mut pending = EntryIndex::new(Vec::new());
+        let mut renamed_destinations = HashMap::<PathBuf, usize>::new();
         let mut changes = Vec::new();
 
         for old_entry in &self.entries {
-            if let Some(index) = available_new
-                .iter()
-                .position(|new_entry| new_entry.inode == old_entry.inode)
-            {
-                let new_entry = available_new.remove(index);
+            if let Some(new_entry) = available_new.take_inode(old_entry.inode) {
                 if *old_entry == new_entry {
                     continue;
                 }
@@ -90,24 +151,17 @@ impl DirectorySnapshot {
                         from: old_entry.name.clone(),
                         to: new_entry.name.clone(),
                     });
-                    renamed_destinations.push(new_entry);
+                    *renamed_destinations.entry(new_entry.name).or_default() += 1;
                 }
                 continue;
             }
 
-            if let Some(index) = available_new
-                .iter()
-                .position(|new_entry| new_entry.name == old_entry.name)
-            {
-                pending.push(available_new.remove(index));
+            if let Some(new_entry) = available_new.take_name(&old_entry.name) {
+                pending.push(new_entry);
                 continue;
             }
 
-            if let Some(index) = pending
-                .iter()
-                .position(|new_entry| new_entry.inode == old_entry.inode)
-            {
-                let new_entry = pending.remove(index);
+            if let Some(new_entry) = pending.take_inode(old_entry.inode) {
                 changes.push(DirectoryChange::Rename {
                     from: old_entry.name.clone(),
                     to: new_entry.name,
@@ -115,11 +169,15 @@ impl DirectorySnapshot {
                 continue;
             }
 
-            if let Some(index) = renamed_destinations
-                .iter()
-                .position(|new_entry| new_entry.name == old_entry.name)
+            if let hashbrown::hash_map::Entry::Occupied(mut destination) =
+                renamed_destinations.entry(old_entry.name.clone())
             {
-                renamed_destinations.remove(index);
+                let remaining = *destination.get() - 1;
+                if remaining == 0 {
+                    destination.remove();
+                } else {
+                    *destination.get_mut() = remaining;
+                }
                 continue;
             }
 
@@ -129,7 +187,7 @@ impl DirectorySnapshot {
             });
         }
 
-        for entry in available_new {
+        for entry in available_new.remaining() {
             changes.push(DirectoryChange::Action {
                 action: KqueueAction::Create,
                 path: entry.name.clone(),
@@ -141,7 +199,7 @@ impl DirectorySnapshot {
                 });
             }
         }
-        for entry in pending {
+        for entry in pending.remaining() {
             changes.push(DirectoryChange::Action {
                 action: KqueueAction::Write,
                 path: entry.name,
