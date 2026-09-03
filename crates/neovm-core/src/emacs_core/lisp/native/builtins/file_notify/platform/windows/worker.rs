@@ -12,6 +12,7 @@ use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::path::{Path, PathBuf};
 use std::ptr;
+use std::sync::mpsc::{SyncSender, sync_channel};
 use std::thread::JoinHandle;
 use windows_sys::Win32::Foundation::{
     ERROR_OPERATION_ABORTED, HANDLE, INVALID_HANDLE_VALUE, WAIT_FAILED, WAIT_OBJECT_0,
@@ -36,6 +37,11 @@ pub(super) enum WorkerMessage {
 pub(super) struct WorkerFailure {
     pub(super) watch_id: WatchId,
     pub(super) error: String,
+}
+
+enum StartupReport {
+    Ready,
+    Failed(String),
 }
 
 pub(super) struct Worker {
@@ -64,27 +70,38 @@ impl Worker {
         let io_event = create_event()?;
         let stop_event = create_event()?;
         let worker_stop_event = stop_event.try_clone().map_err(|error| error.to_string())?;
+        let (startup_tx, startup_rx) = sync_channel(1);
 
-        let join = std::thread::Builder::new()
-            .name("neomacs-w32notify".to_owned())
-            .spawn(move || {
-                run(
-                    directory_handle,
-                    io_event,
-                    worker_stop_event,
-                    watched_name,
-                    recursive,
-                    native_filter,
-                    watch_id,
-                    activity,
-                    events,
-                );
-            })
-            .map_err(|error| error.to_string())?;
-        Ok(Self {
-            stop_event,
-            join: Some(join),
-        })
+        let mut join = Some(
+            std::thread::Builder::new()
+                .name("neomacs-w32notify".to_owned())
+                .spawn(move || {
+                    run(
+                        directory_handle,
+                        io_event,
+                        worker_stop_event,
+                        watched_name,
+                        recursive,
+                        native_filter,
+                        watch_id,
+                        activity,
+                        events,
+                        startup_tx,
+                    );
+                })
+                .map_err(|error| error.to_string())?,
+        );
+        match startup_rx.recv() {
+            Ok(StartupReport::Ready) => Ok(Self { stop_event, join }),
+            Ok(StartupReport::Failed(error)) => {
+                let _ = join.take().expect("worker thread was started").join();
+                Err(error)
+            }
+            Err(_) => {
+                let _ = join.take().expect("worker thread was started").join();
+                Err("Windows file-notification worker exited during startup".to_owned())
+            }
+        }
     }
 }
 
@@ -111,12 +128,14 @@ fn run(
     watch_id: WatchId,
     activity: WatchActivity,
     events: DeliverySender<WorkerMessage, WorkerFailure>,
+    startup: SyncSender<StartupReport>,
 ) {
     let directory_raw = directory.as_raw_handle() as HANDLE;
     let io_event_raw = io_event.as_raw_handle() as HANDLE;
     let stop_event_raw = stop_event.as_raw_handle() as HANDLE;
     let handles = [stop_event_raw, io_event_raw];
     let mut buffer = vec![0_u8; BUFFER_CAPACITY];
+    let mut startup = Some(startup);
 
     loop {
         let mut overlapped = OVERLAPPED {
@@ -132,10 +151,19 @@ fn run(
         ) {
             Ok(pending) => pending,
             Err(error) => {
+                if let Some(startup) = startup.take() {
+                    let _ = startup.send(StartupReport::Failed(error.to_string()));
+                    return;
+                }
                 fail(&activity, events, watch_id, error.to_string());
                 return;
             }
         };
+        if let Some(startup) = startup.take()
+            && startup.send(StartupReport::Ready).is_err()
+        {
+            return;
+        }
 
         // SAFETY: both event handles stay owned for the full wait.
         let ready = unsafe { WaitForMultipleObjects(2, handles.as_ptr(), 0, INFINITE) };
