@@ -390,6 +390,36 @@ pub struct RetainedWindowMatrix {
     pub(crate) chrome_modified_flag: bool,
 }
 
+/// Why a window could not take the cursor-only fast path.
+///
+/// A bare `None` was not enough to work with: a window that silently
+/// full-rebuilds every frame costs as much as an edited one and leaves no
+/// trace of which condition rejected it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CursorOnlyDecline {
+    /// The retained matrix is not usable as a base.
+    MatrixNotValid,
+    /// Some layout input other than `point` moved.
+    KeyMoved,
+    /// Relative/visual line numbers derive every gutter value from point.
+    LineNumbersCoverWholeWindow,
+    /// Nothing non-chrome to reuse.
+    NoBodyRows,
+    /// No retained body row spans the current point.
+    PointOutsideEveryRetainedRow,
+    /// Absolute line numbers bake the current-line face into the margin, and
+    /// point moved to a different display row.
+    LineNumberedCursorRowChanged,
+    /// The cursor's row cannot carry a re-decorated cursor.
+    CursorRowNotReDecoratable,
+    /// Point moved onto the last visible row with buffer left below, which a
+    /// full layout might answer by scrolling.
+    PointMoveMayScrollDown,
+    /// Point moved onto the first visible row while scrolled off the buffer
+    /// start, which a full layout might answer by scrolling.
+    PointMoveMayScrollUp,
+}
+
 /// Everything the cursor-only fast path (Phase 1) needs to replay a window
 /// without re-walking the buffer: the retained body rows to install verbatim,
 /// the point-independent emitter body state to seed, and the old/new point so
@@ -890,12 +920,15 @@ impl RetainedWindowMatrix {
     /// the retained body rows, or the new cursor row is structurally unsafe
     /// (continuation / left-truncation / overlay-arrow fringe — the column
     /// resolve cannot place the cursor on those correctly).
-    pub fn cursor_only_replay(&self, curr: &RetainedWindowKey) -> Option<CursorOnlyReplay> {
+    pub fn cursor_only_replay(
+        &self,
+        curr: &RetainedWindowKey,
+    ) -> Result<CursorOnlyReplay, CursorOnlyDecline> {
         if self.validity != MatrixValidity::Valid {
-            return None;
+            return Err(CursorOnlyDecline::MatrixNotValid);
         }
         if !RetainedWindowKey::cursor_only_eligible(&self.key, curr) {
-            return None;
+            return Err(CursorOnlyDecline::KeyMoved);
         }
         let point_moved = self.key.point != curr.point;
         let point_dependency = curr.display_line_numbers.point_motion_body_dependency();
@@ -903,7 +936,7 @@ impl RetainedWindowMatrix {
             // GNU xdisp.c refuses cursor-only redisplay for relative and visual
             // line numbers: every gutter value is derived from point, so the
             // retained body as a whole is stale.
-            return None;
+            return Err(CursorOnlyDecline::LineNumbersCoverWholeWindow);
         }
         let new_point = curr.point;
         let mut body_rows: Vec<(usize, MatrixRow)> = Vec::new();
@@ -929,9 +962,11 @@ impl RetainedWindowMatrix {
             body_rows.push((idx, MatrixRow::clone(row)));
         }
         if body_rows.is_empty() {
-            return None;
+            return Err(CursorOnlyDecline::NoBodyRows);
         }
-        let (new_cursor_row_index, cursor_row) = new_cursor?;
+        let Some((new_cursor_row_index, cursor_row)) = new_cursor else {
+            return Err(CursorOnlyDecline::PointOutsideEveryRetainedRow);
+        };
         if point_moved
             && point_dependency == PointMotionBodyDependency::CurrentDisplayRow
             && retained_cursor_row_index != Some(new_cursor_row_index)
@@ -939,13 +974,13 @@ impl RetainedWindowMatrix {
             // Absolute line numbers bake the current-line face into the left
             // margin. Moving to another display row changes body decoration
             // even though the underlying number stays absolute.
-            return None;
+            return Err(CursorOnlyDecline::LineNumberedCursorRowChanged);
         }
         if cursor_row.continued
             || cursor_row.truncated_left
             || cursor_row.left_fringe_bitmap.is_some()
         {
-            return None;
+            return Err(CursorOnlyDecline::CursorRowNotReDecoratable);
         }
         // Scroll-safety (GNU `try_cursor_movement` / `make_cursor_line_fully_visible`):
         // a point move onto the top or bottom visible row can trigger a window
@@ -958,10 +993,10 @@ impl RetainedWindowMatrix {
         let last_body_index = body_rows.last().map(|(idx, _)| *idx);
         let window_at_buffer_top = curr.window_start <= curr.buffer_begv + 1;
         if Some(new_cursor_row_index) == last_body_index && !cursor_row.ends_at_zv {
-            return None;
+            return Err(CursorOnlyDecline::PointMoveMayScrollDown);
         }
         if Some(new_cursor_row_index) == first_body_index && !window_at_buffer_top {
-            return None;
+            return Err(CursorOnlyDecline::PointMoveMayScrollUp);
         }
         let body_row_snapshots = self
             .display_snapshot
@@ -970,7 +1005,7 @@ impl RetainedWindowMatrix {
             .filter(|snapshot| body_indices.contains(&(snapshot.row as usize)))
             .cloned()
             .collect();
-        Some(CursorOnlyReplay {
+        Ok(CursorOnlyReplay {
             body_rows,
             body_row_snapshots,
             points: self.display_snapshot.points.clone(),

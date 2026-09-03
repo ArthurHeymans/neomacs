@@ -2957,18 +2957,22 @@ impl LayoutEngine {
             return None;
         };
         let curr_key = RetainedWindowKey::from_params(params, layout_box, evaluator);
-        let Some(mut replay) = prev.cursor_only_replay(&curr_key) else {
-            // The edit path reports why it declined; without the same report
-            // here a window that silently full-rebuilds every frame is
-            // invisible, which is exactly how the LSP fixture hid two of its
-            // three windows.
-            tracing::debug!(
-                window = params.window_id,
-                validity = ?prev.validity,
-                differing = ?prev.key.differing_fields(&curr_key),
-                "cursor-only declined by the retained matrix"
-            );
-            return None;
+        let mut replay = match prev.cursor_only_replay(&curr_key) {
+            Ok(replay) => replay,
+            Err(reason) => {
+                // The edit path reports why it declined; without the same
+                // report here a window that silently full-rebuilds every frame
+                // is invisible, which is exactly how the LSP fixture hid two of
+                // its three windows.
+                tracing::debug!(
+                    window = params.window_id,
+                    validity = ?prev.validity,
+                    ?reason,
+                    differing = ?prev.key.differing_fields(&curr_key),
+                    "cursor-only declined by the retained matrix"
+                );
+                return None;
+            }
         };
         if prev.chrome_reusable_after_cursor_move(&replay, chrome_reuse_context(params, evaluator))
         {
