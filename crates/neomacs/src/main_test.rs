@@ -71,7 +71,7 @@ use neovm_core::emacs_core::value::list_to_vec;
 use neovm_core::face::FaceHeight;
 use neovm_core::heap_types::LispString;
 use neovm_core::window::{
-    FrameFullscreen, FrameId, FrameParam, GuiFrameGeometryHints, WindowId,
+    FrameFullscreen, FrameId, FrameParam, FrameVisibility, GuiFrameGeometryHints, WindowId,
     default_gui_tool_bar_line_height,
 };
 use std::path::Path;
@@ -2241,6 +2241,7 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -2315,6 +2316,7 @@ fn opening_gui_frame_adoption_applies_fullscreen_mode() {
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -2370,6 +2372,7 @@ fn primary_display_host_destroy_gui_frame_routes_primary_and_secondary_windows()
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -2416,6 +2419,7 @@ fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -2481,6 +2485,7 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
         image_catalog: test_image_catalog(&cmd_tx, Arc::clone(&image_metadata)),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -2641,6 +2646,7 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
                 &worker_cmd_tx,
                 Arc::new(ImageRenderState::default()),
             ),
+            #[cfg(feature = "video")]
             resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
             resolved_webkits: Mutex::new(std::collections::HashMap::new()),
             resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -2696,6 +2702,7 @@ fn primary_image_catalog_does_not_wait_for_renderer_metadata_lock() {
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
         image_catalog: test_image_catalog(&cmd_tx, Arc::clone(&image_metadata)),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -2754,6 +2761,7 @@ fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -2836,6 +2844,7 @@ fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptl
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
         image_catalog: test_image_catalog(&cmd_tx, Arc::clone(&image_metadata)),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -2901,6 +2910,7 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -2938,6 +2948,7 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
 }
 
 #[test]
+#[cfg(feature = "video")]
 fn resolved_video_registry_never_evicts_a_still_referenceable_identity() {
     let mut registry = super::ResolvedVideoRegistry::default();
     for index in 0..80 {
@@ -2982,6 +2993,7 @@ fn primary_display_host_request_video_preserves_uri_source() {
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3027,6 +3039,7 @@ fn primary_display_host_routes_one_typed_video_session_lifecycle() {
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3082,6 +3095,7 @@ fn primary_display_host_request_webkit_queues_create_and_load_once_with_stable_i
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3132,6 +3146,7 @@ fn primary_display_host_preserves_file_navigation_as_a_typed_path() {
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3172,6 +3187,7 @@ fn primary_display_host_xwidget_lifecycle_uses_explicit_xwidget_id() {
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3242,6 +3258,7 @@ fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3306,6 +3323,7 @@ fn primary_window_resize_does_not_wait_for_host_acknowledgement() {
         font_metrics: None,
         primary_window_size: Arc::clone(&shared),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3369,6 +3387,7 @@ fn primary_window_display_host_forwards_visual_config_to_renderer() {
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3430,6 +3449,7 @@ fn primary_window_display_host_round_trips_clipboard_requests_through_renderer()
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3490,6 +3510,7 @@ fn redisplay_title_sync_formats_frame_title_format_for_primary_window() {
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3535,6 +3556,7 @@ fn frame_host_title_formats_the_restored_runtime_system_name() {
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -6375,6 +6397,7 @@ fn primary_display_host_reports_quality_policy_frame_shader_suppression() {
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 900),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -6452,6 +6475,7 @@ fn primary_display_host_routes_typed_terminal_requests_to_the_renderer() {
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 900),
         image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
