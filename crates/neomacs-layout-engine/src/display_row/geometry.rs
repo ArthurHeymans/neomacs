@@ -1,6 +1,7 @@
 use crate::display_item::RenderFaceRef;
 use crate::display_pixel_calc::PixelCalcContext;
 use crate::display_row::builder::{DisplayRowLayout, DisplayTabPolicy};
+use crate::display_row::face_state::DisplayRowMeasurementMode;
 use crate::hit_test::HitRow;
 use crate::types::LayoutCharPos0;
 use crate::window_output::{
@@ -158,19 +159,33 @@ pub(crate) struct DisplayRowGeometryDefaults {
     pub(crate) text_y: f32,
     pub(crate) height: f32,
     pub(crate) ascent: f32,
+    measurement_mode: DisplayRowMeasurementMode,
 }
 
 impl DisplayRowGeometryDefaults {
-    pub(crate) fn new(text_y: f32, height: f32, ascent: f32) -> Self {
+    pub(crate) fn new(
+        text_y: f32,
+        height: f32,
+        ascent: f32,
+        measurement_mode: DisplayRowMeasurementMode,
+    ) -> Self {
         Self {
             text_y,
             height,
             ascent,
+            measurement_mode,
         }
     }
 
     pub(crate) fn initial_state(self) -> DisplayRowGeometryState {
-        DisplayRowGeometryState::new(0, self.text_y, 0.0, self.height, self.ascent)
+        DisplayRowGeometryState::for_measurement_mode(
+            0,
+            self.text_y,
+            0.0,
+            self.height,
+            self.ascent,
+            self.measurement_mode,
+        )
     }
 
     #[cfg(test)]
@@ -189,6 +204,7 @@ pub(crate) struct DisplayRowGeometryCursor {
     y: f32,
     row_extra_y: f32,
     metrics: CurrentDisplayRowMetrics,
+    measurement_mode: DisplayRowMeasurementMode,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -321,6 +337,7 @@ pub(crate) struct DisplayRowGeometryState {
     row_extra_y: f32,
     height: f32,
     ascent: f32,
+    measurement_mode: DisplayRowMeasurementMode,
 }
 
 pub(crate) enum DisplayRowYRecording<'a> {
@@ -561,13 +578,33 @@ impl<'a> DisplayRowBoundaryTarget<'a> {
 }
 
 impl DisplayRowGeometryState {
+    #[cfg(test)]
     pub(crate) fn new(row: usize, y: f32, row_extra_y: f32, height: f32, ascent: f32) -> Self {
+        Self::for_measurement_mode(
+            row,
+            y,
+            row_extra_y,
+            height,
+            ascent,
+            DisplayRowMeasurementMode::ConcreteFont,
+        )
+    }
+
+    pub(crate) fn for_measurement_mode(
+        row: usize,
+        y: f32,
+        row_extra_y: f32,
+        height: f32,
+        ascent: f32,
+        measurement_mode: DisplayRowMeasurementMode,
+    ) -> Self {
         Self {
             row,
             y,
             row_extra_y,
             height,
             ascent,
+            measurement_mode,
         }
     }
 
@@ -641,6 +678,10 @@ impl DisplayRowGeometryState {
     }
 
     pub(crate) fn include_glyph_vertical_metrics(&mut self, glyph_height: f32, glyph_ascent: f32) {
+        match self.measurement_mode {
+            DisplayRowMeasurementMode::ConcreteFont => {}
+            DisplayRowMeasurementMode::LogicalCells => return,
+        }
         let mut metrics = CurrentDisplayRowMetrics::new(self.height, self.ascent);
         metrics.include_glyph(glyph_height, glyph_ascent);
         self.height = metrics.height();
@@ -648,6 +689,10 @@ impl DisplayRowGeometryState {
     }
 
     pub(crate) fn include_row_extents(&mut self, height: f32, ascent: f32) {
+        match self.measurement_mode {
+            DisplayRowMeasurementMode::ConcreteFont => {}
+            DisplayRowMeasurementMode::LogicalCells => return,
+        }
         self.height = self.height.max(height);
         self.ascent = self.ascent.max(ascent);
     }
@@ -656,6 +701,10 @@ impl DisplayRowGeometryState {
     /// visible-content geometry. Used for GNU `line-height t`, where the
     /// newline itself contributes no font height.
     pub(crate) fn replace_current_row_metrics(&mut self, height: f32, ascent: f32) {
+        match self.measurement_mode {
+            DisplayRowMeasurementMode::ConcreteFont => {}
+            DisplayRowMeasurementMode::LogicalCells => return,
+        }
         self.height = height.max(1.0);
         self.ascent = ascent.max(0.0).min(self.height);
     }
@@ -887,9 +936,22 @@ impl CurrentDisplayRowMetrics {
     pub(crate) fn finish_and_advance_to_next_row(
         &mut self,
         advance: CurrentDisplayRowAdvance,
+        measurement_mode: DisplayRowMeasurementMode,
     ) -> DisplayRowAdvance {
+        // GNU `compute_line_metrics` makes terminal geometry categorical:
+        // after producing the glyphs it overwrites ascent/height with one
+        // logical cell and discards line spacing.  Keep that policy at this
+        // shared row-transition boundary so buffer text, display strings,
+        // overlays and wrapping cannot accidentally reintroduce pixel metrics.
+        if measurement_mode == DisplayRowMeasurementMode::LogicalCells {
+            self.reset(advance.default_height, advance.default_ascent);
+        }
+        let line_spacing = match measurement_mode {
+            DisplayRowMeasurementMode::ConcreteFont => advance.kind.line_spacing(),
+            DisplayRowMeasurementMode::LogicalCells => 0.0,
+        };
         let row_extra_y = advance.row_extra_y
-            + self.next_row_vertical_delta(advance.default_height, advance.kind.line_spacing());
+            + self.next_row_vertical_delta(advance.default_height, line_spacing);
         let finished =
             self.finish_and_reset(advance.y, advance.default_height, advance.default_ascent);
         DisplayRowAdvance {
@@ -909,6 +971,7 @@ impl DisplayRowGeometryCursor {
             y: state.y,
             row_extra_y: state.row_extra_y,
             metrics: CurrentDisplayRowMetrics::new(state.height, state.ascent),
+            measurement_mode: state.measurement_mode,
         }
     }
 
@@ -930,9 +993,8 @@ impl DisplayRowGeometryCursor {
         defaults: DisplayRowGeometryDefaults,
         kind: DisplayRowAdvanceKind,
     ) -> DisplayTextRowMetrics {
-        let row_advance = self
-            .metrics
-            .finish_and_advance_to_next_row(CurrentDisplayRowAdvance {
+        let row_advance = self.metrics.finish_and_advance_to_next_row(
+            CurrentDisplayRowAdvance {
                 y: self.y,
                 next_row: self.row + 1,
                 text_y: defaults.text_y,
@@ -940,7 +1002,9 @@ impl DisplayRowGeometryCursor {
                 default_height: defaults.height,
                 default_ascent: defaults.ascent,
                 kind,
-            });
+            },
+            self.measurement_mode,
+        );
         self.row += 1;
         self.y = row_advance.next_y;
         self.row_extra_y = row_advance.row_extra_y;
@@ -990,6 +1054,7 @@ impl DisplayRowGeometryCursor {
             row_extra_y: self.row_extra_y,
             height: self.metrics.height(),
             ascent: self.metrics.ascent(),
+            measurement_mode: self.measurement_mode,
         }
     }
 }

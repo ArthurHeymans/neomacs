@@ -305,7 +305,12 @@ impl RowTransitionTestContext {
         let mut builder = crate::output::builder::DisplayOutputBuilder::new();
         builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 48.0), true);
         builder.begin_row(0, GlyphRowRole::Text);
-        let defaults = DisplayRowGeometryDefaults::new(0.0, 16.0, 12.0);
+        let defaults = DisplayRowGeometryDefaults::new(
+            0.0,
+            16.0,
+            12.0,
+            DisplayRowMeasurementMode::ConcreteFont,
+        );
         let geometry = defaults.initial_state();
         let max_rows = 4;
 

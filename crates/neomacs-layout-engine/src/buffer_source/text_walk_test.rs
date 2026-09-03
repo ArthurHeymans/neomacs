@@ -2,6 +2,7 @@ use super::*;
 use crate::buffer_source::body_render::BufferSourceWalkSetupRequest;
 use crate::buffer_source::loop_context::BufferSourceLoopRequestContext;
 use crate::buffer_source::render_plan::BufferSourceOutputSetup;
+use crate::display_row::face_state::DisplayRowMeasurementMode;
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::types::WindowKind;
 use crate::window_layout::{WindowChromeMetrics, WindowDividerLayout, WindowLayoutBox};
@@ -95,6 +96,7 @@ fn setup_request() -> BufferSourceWalkSetupRequest<'static> {
         12.0,
         5,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 11.0),
+        DisplayRowMeasurementMode::LogicalCells,
         LineWrapMode::Truncate,
         3,
         true,

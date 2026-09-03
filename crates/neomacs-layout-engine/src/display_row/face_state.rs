@@ -807,6 +807,10 @@ impl DisplayRowMeasurementPolicy {
         self.mode.uses_concrete_font_geometry()
     }
 
+    pub(crate) fn mode(self) -> DisplayRowMeasurementMode {
+        self.mode
+    }
+
     pub(crate) fn measurement_face(
         self,
         face_id: FaceId,

@@ -14,6 +14,7 @@ use crate::display_item::DisplayStringBoxBoundaries;
 use crate::display_origin::{DisplayOrigin, OverlayStringKind};
 use crate::display_row::append_context::DisplayRowAppendSurface;
 use crate::display_row::builder::{DisplayRowGlyphSlot, DisplayRowPosition};
+use crate::display_row::face_state::DisplayRowMeasurementMode;
 use crate::display_row::geometry::{
     DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
     DisplayRowYRecording,
@@ -221,11 +222,15 @@ impl<'a> OverlayStringRenderRowContext<'a> {
         self.append_surface.right_edge()
     }
 
-    pub(crate) fn geometry_defaults(self) -> DisplayRowGeometryDefaults {
+    pub(crate) fn geometry_defaults(
+        self,
+        measurement_mode: DisplayRowMeasurementMode,
+    ) -> DisplayRowGeometryDefaults {
         DisplayRowGeometryDefaults::new(
             self.text_y,
             self.metrics.row_height(),
             self.metrics.ascent(),
+            measurement_mode,
         )
     }
 
@@ -547,7 +552,8 @@ impl<'a> OverlayStringRowBreakRenderContext<'a> {
         let content_x = self.row_context.content_x();
         let geometry_transition = DisplayRowLineBreakTransitionRequest::new(
             state.hit_row_range.range_to(self.anchor_charpos),
-            self.row_context.geometry_defaults(),
+            self.row_context
+                .geometry_defaults(state.source_render.measurement_mode()),
             self.row_context.row_base,
             0,
             content_x,

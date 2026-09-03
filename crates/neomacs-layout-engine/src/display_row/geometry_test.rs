@@ -46,15 +46,18 @@ fn current_display_row_metrics_resets_to_default_extents() {
 fn content_only_short_row_advances_by_its_finished_height() {
     let mut metrics = CurrentDisplayRowMetrics::new(3.0, 2.0);
 
-    let advance = metrics.finish_and_advance_to_next_row(CurrentDisplayRowAdvance {
-        y: 0.0,
-        next_row: 1,
-        text_y: 0.0,
-        row_extra_y: 0.0,
-        default_height: 16.0,
-        default_ascent: 12.0,
-        kind: DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
-    });
+    let advance = metrics.finish_and_advance_to_next_row(
+        CurrentDisplayRowAdvance {
+            y: 0.0,
+            next_row: 1,
+            text_y: 0.0,
+            row_extra_y: 0.0,
+            default_height: 16.0,
+            default_ascent: 12.0,
+            kind: DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
+        },
+        DisplayRowMeasurementMode::ConcreteFont,
+    );
 
     assert_eq!(advance.finished.height, 3.0);
     assert_eq!(advance.row_extra_y, -13.0);
@@ -105,15 +108,18 @@ fn current_display_row_metrics_advances_to_next_row_from_finished_extents() {
     let mut metrics = CurrentDisplayRowMetrics::new(16.0, 12.0);
     metrics.include_glyph(24.0, 18.0);
 
-    let advance = metrics.finish_and_advance_to_next_row(CurrentDisplayRowAdvance {
-        y: 7.0,
-        next_row: 3,
-        text_y: 10.0,
-        row_extra_y: 2.0,
-        default_height: 16.0,
-        default_ascent: 12.0,
-        kind: DisplayRowAdvanceKind::LineBreak { line_spacing: 3.0 },
-    });
+    let advance = metrics.finish_and_advance_to_next_row(
+        CurrentDisplayRowAdvance {
+            y: 7.0,
+            next_row: 3,
+            text_y: 10.0,
+            row_extra_y: 2.0,
+            default_height: 16.0,
+            default_ascent: 12.0,
+            kind: DisplayRowAdvanceKind::LineBreak { line_spacing: 3.0 },
+        },
+        DisplayRowMeasurementMode::ConcreteFont,
+    );
 
     assert_eq!(
         advance,
@@ -138,20 +144,55 @@ fn current_display_row_metrics_advances_visual_wrap_without_line_spacing() {
     let mut metrics = CurrentDisplayRowMetrics::new(16.0, 12.0);
     metrics.include_glyph(24.0, 18.0);
 
-    let advance = metrics.finish_and_advance_to_next_row(CurrentDisplayRowAdvance {
-        y: 7.0,
-        next_row: 2,
-        text_y: 10.0,
-        row_extra_y: 2.0,
-        default_height: 16.0,
-        default_ascent: 12.0,
-        kind: DisplayRowAdvanceKind::VisualWrap,
-    });
+    let advance = metrics.finish_and_advance_to_next_row(
+        CurrentDisplayRowAdvance {
+            y: 7.0,
+            next_row: 2,
+            text_y: 10.0,
+            row_extra_y: 2.0,
+            default_height: 16.0,
+            default_ascent: 12.0,
+            kind: DisplayRowAdvanceKind::VisualWrap,
+        },
+        DisplayRowMeasurementMode::ConcreteFont,
+    );
 
     assert_eq!(advance.row_extra_y, 10.0);
     assert_eq!(advance.next_y, 10.0 + 2.0 * 16.0 + 10.0);
     assert_eq!(metrics.height(), 16.0);
     assert_eq!(metrics.ascent(), 12.0);
+}
+
+#[test]
+fn logical_cell_geometry_discards_pixel_metrics_and_line_spacing() {
+    let defaults =
+        DisplayRowGeometryDefaults::new(10.0, 16.0, 12.0, DisplayRowMeasurementMode::LogicalCells);
+    let mut geometry = defaults.initial_state();
+
+    geometry.include_glyph_vertical_metrics(24.0, 18.0);
+    geometry.include_row_extents(32.0, 20.0);
+    geometry.replace_current_row_metrics(3.0, 2.0);
+
+    assert_eq!(geometry.height(), 16.0);
+    assert_eq!(geometry.ascent(), 12.0);
+
+    let mut cursor = geometry.cursor();
+    let finished = cursor.finish_and_advance_to_next_row(
+        defaults,
+        DisplayRowAdvanceKind::LineBreak { line_spacing: 4.0 },
+    );
+
+    assert_eq!(
+        finished,
+        DisplayTextRowMetrics {
+            y: 10.0,
+            height: 16.0,
+            ascent: 12.0,
+        }
+    );
+    assert_eq!(cursor.state().y(), 26.0);
+    assert_eq!(cursor.state().height(), 16.0);
+    assert_eq!(cursor.state().ascent(), 12.0);
 }
 
 #[test]
@@ -162,6 +203,7 @@ fn display_row_geometry_cursor_advances_row_position_and_resets_metrics() {
         row_extra_y: 3.0,
         height: 24.0,
         ascent: 18.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     });
 
     let hit_row = cursor.hit_row(11, 22);
@@ -175,6 +217,7 @@ fn display_row_geometry_cursor_advances_row_position_and_resets_metrics() {
             text_y: 10.0,
             height: 16.0,
             ascent: 12.0,
+            measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
         },
         DisplayRowAdvanceKind::LineBreak { line_spacing: 4.0 },
     );
@@ -195,6 +238,7 @@ fn display_row_geometry_cursor_advances_row_position_and_resets_metrics() {
             row_extra_y: 15.0,
             height: 16.0,
             ascent: 12.0,
+            measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
         }
     );
     assert_eq!(
@@ -218,6 +262,7 @@ fn display_row_geometry_cursor_finishes_current_row_without_advancing() {
         row_extra_y: 3.0,
         height: 24.0,
         ascent: 18.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     });
 
     assert_eq!(
@@ -236,6 +281,7 @@ fn display_row_geometry_cursor_finishes_current_row_without_advancing() {
             row_extra_y: 3.0,
             height: 24.0,
             ascent: 18.0,
+            measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
         }
     );
 }
@@ -248,6 +294,7 @@ fn display_row_geometry_state_builds_cursor_after_row_y_adjustment() {
         row_extra_y: 3.0,
         height: 24.0,
         ascent: 18.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
 
     let cursor = geometry.with_row_y(48.0).cursor();
@@ -277,6 +324,7 @@ fn display_row_geometry_state_constructor_groups_current_row_fields() {
             row_extra_y: 7.0,
             height: 18.0,
             ascent: 13.0,
+            measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
         }
     );
 }
@@ -297,6 +345,7 @@ fn display_row_geometry_state_can_be_mutated_directly() {
         row_extra_y: 3.0,
         height: 24.0,
         ascent: 18.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
 
     geometry.row += 1;
@@ -312,6 +361,7 @@ fn display_row_geometry_state_can_be_mutated_directly() {
             row_extra_y: 8.0,
             height: 32.0,
             ascent: 20.0,
+            measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
         }
     );
 }
@@ -324,6 +374,7 @@ fn display_row_geometry_state_include_glyph_vertical_metrics_by_name() {
         row_extra_y: 9.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
 
     geometry.include_glyph_vertical_metrics(24.0, 18.0);
@@ -343,6 +394,7 @@ fn display_row_geometry_state_include_row_extents_by_name() {
         row_extra_y: 9.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
 
     geometry.include_row_extents(24.0, 24.0);
@@ -362,6 +414,7 @@ fn display_row_geometry_state_reports_current_row_visibility_by_limit() {
         row_extra_y: 9.0,
         height: 24.0,
         ascent: 18.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
 
     assert!(geometry.current_row_is_visible(DisplayRowVisibilityLimit {
@@ -386,6 +439,7 @@ fn display_row_geometry_state_records_current_row_y() {
         row_extra_y: 11.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
     let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
 
@@ -402,6 +456,7 @@ fn display_row_geometry_state_builds_row_y_fallback_from_current_extra_y() {
         row_extra_y: 11.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
 
     let fallback = geometry.row_y_fallback(10.0, 16.0);
@@ -424,6 +479,7 @@ fn display_row_geometry_state_resolves_recorded_current_row_y() {
         row_extra_y: 11.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
     let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
     row_y_positions.record(1, 25.0);
@@ -440,6 +496,7 @@ fn display_row_geometry_state_resolves_any_row_y_with_current_fallback() {
         row_extra_y: 11.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
     let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
     row_y_positions.record(1, 25.0);
@@ -456,6 +513,7 @@ fn display_row_geometry_state_resolves_row_limit_positions() {
         row_extra_y: 11.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
     let limit = DisplayRowLimit { max_rows: 5 };
 
@@ -477,6 +535,7 @@ fn display_row_flags_mark_and_query_typed_row_flags() {
         row_extra_y: 11.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
     let exhausted = DisplayRowGeometryState {
         row: 4,
@@ -484,6 +543,7 @@ fn display_row_flags_mark_and_query_typed_row_flags() {
         row_extra_y: 11.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
     let limit = DisplayRowLimit { max_rows: 4 };
     let mut flags = DisplayRowFlags::new(4);
@@ -506,6 +566,7 @@ fn display_row_geometry_state_builds_typed_row_markers() {
         row_extra_y: 11.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
     let next_row_geometry = DisplayRowGeometryState {
         row: 3,
@@ -513,6 +574,7 @@ fn display_row_geometry_state_builds_typed_row_markers() {
         row_extra_y: 11.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
 
     let current_marker = geometry.current_row_marker();
@@ -534,6 +596,7 @@ fn display_row_scoped_value_tracks_value_by_owning_row() {
         row_extra_y: 11.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
     let next_row_geometry = DisplayRowGeometryState {
         row: 3,
@@ -541,6 +604,7 @@ fn display_row_scoped_value_tracks_value_by_owning_row() {
         row_extra_y: 11.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
     let mut scoped_value = DisplayRowScopedValue::inactive();
 
@@ -566,6 +630,7 @@ fn display_row_geometry_state_builds_row_scoped_start_marker() {
         row_extra_y: 11.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
     let other_row_geometry = DisplayRowGeometryState {
         row: 3,
@@ -573,6 +638,7 @@ fn display_row_geometry_state_builds_row_scoped_start_marker() {
         row_extra_y: 11.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
 
     let marker = geometry.start_marker_at_x(42.5);
@@ -598,6 +664,7 @@ fn display_row_geometry_state_builds_text_position_from_current_row() {
         row_extra_y: 11.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
 
     assert_eq!(
@@ -620,6 +687,7 @@ fn display_row_geometry_state_builds_row_metrics_snapshot() {
         row_extra_y: 11.0,
         height: 24.0,
         ascent: 18.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
 
     let snapshot = geometry.row_metrics_snapshot(5);
@@ -638,6 +706,7 @@ fn display_row_geometry_state_clamps_row_metrics_snapshot_extents() {
         row_extra_y: 11.0,
         height: 0.0,
         ascent: 7.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
 
     let snapshot = geometry.row_metrics_snapshot(5);
@@ -654,6 +723,7 @@ fn display_row_geometry_state_builds_display_text_row_begin() {
         row_extra_y: 11.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
 
     let begin = geometry.display_text_row_begin(5, 7, 13.0, LayoutCharPos0::new(21));
@@ -679,6 +749,7 @@ fn display_row_geometry_state_resolves_glyph_y_with_offset() {
         row_extra_y: 11.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
 
     assert_eq!(geometry.glyph_y(2.5), 71.5);
@@ -746,6 +817,7 @@ fn display_row_geometry_cursor_finishes_and_builds_next_display_text_row_begin()
         row_extra_y: 3.0,
         height: 24.0,
         ascent: 18.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     });
 
     let transition = cursor.finish_and_begin_next_display_text_row(
@@ -753,6 +825,7 @@ fn display_row_geometry_cursor_finishes_and_builds_next_display_text_row_begin()
             text_y: 10.0,
             height: 16.0,
             ascent: 12.0,
+            measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
         },
         DisplayRowAdvanceKind::LineBreak { line_spacing: 4.0 },
         5,
@@ -787,6 +860,7 @@ fn display_row_geometry_cursor_finishes_and_builds_next_display_text_row_begin()
             row_extra_y: 15.0,
             height: 16.0,
             ascent: 12.0,
+            measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
         }
     );
 }
@@ -799,6 +873,7 @@ fn display_row_geometry_state_can_finish_boundary_and_record_hit_row() {
         row_extra_y: 3.0,
         height: 24.0,
         ascent: 18.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
     let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
     let mut hit_rows = Vec::new();
@@ -813,6 +888,7 @@ fn display_row_geometry_state_can_finish_boundary_and_record_hit_row() {
                 text_y: 10.0,
                 height: 16.0,
                 ascent: 12.0,
+                measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
             },
             5,
             7,
@@ -854,6 +930,7 @@ fn display_row_geometry_transition_target_groups_truncation_transition_and_commi
         row_extra_y: 3.0,
         height: 24.0,
         ascent: 18.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
     let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
     let mut hit_rows = Vec::new();
@@ -869,6 +946,7 @@ fn display_row_geometry_transition_target_groups_truncation_transition_and_commi
                     text_y: 10.0,
                     height: 16.0,
                     ascent: 12.0,
+                    measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
                 },
                 5,
                 7,
@@ -913,6 +991,7 @@ fn display_row_geometry_transition_target_line_break_constructor_sets_kind() {
         row_extra_y: 3.0,
         height: 24.0,
         ascent: 18.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
     let mut row_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);
     let mut hit_rows = Vec::new();
@@ -928,6 +1007,7 @@ fn display_row_geometry_transition_target_line_break_constructor_sets_kind() {
                     text_y: 10.0,
                     height: 16.0,
                     ascent: 12.0,
+                    measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
                 },
                 5,
                 7,
@@ -962,6 +1042,7 @@ fn display_row_geometry_state_can_finish_boundary_without_row_y_recording() {
         row_extra_y: 3.0,
         height: 24.0,
         ascent: 18.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
 
     let boundary = geometry.finish_boundary_in_place(DisplayRowBoundaryTarget::line_break(
@@ -973,6 +1054,7 @@ fn display_row_geometry_state_can_finish_boundary_without_row_y_recording() {
             text_y: 10.0,
             height: 16.0,
             ascent: 12.0,
+            measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
         },
         5,
         7,
@@ -1047,18 +1129,20 @@ fn display_row_boundary_transition_records_hit_row_and_returns_geometry_transiti
 #[test]
 fn display_row_geometry_defaults_constructor_groups_row_baseline_metrics() {
     assert_eq!(
-        DisplayRowGeometryDefaults::new(10.0, 16.0, 12.0),
+        DisplayRowGeometryDefaults::new(10.0, 16.0, 12.0, DisplayRowMeasurementMode::ConcreteFont,),
         DisplayRowGeometryDefaults {
             text_y: 10.0,
             height: 16.0,
             ascent: 12.0,
+            measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
         }
     );
 }
 
 #[test]
 fn display_row_geometry_defaults_build_initial_row_state() {
-    let defaults = DisplayRowGeometryDefaults::new(10.0, 16.0, 12.0);
+    let defaults =
+        DisplayRowGeometryDefaults::new(10.0, 16.0, 12.0, DisplayRowMeasurementMode::ConcreteFont);
 
     assert_eq!(
         defaults.initial_state(),
@@ -1068,7 +1152,8 @@ fn display_row_geometry_defaults_build_initial_row_state() {
 
 #[test]
 fn display_row_geometry_defaults_build_row_y_fallback() {
-    let defaults = DisplayRowGeometryDefaults::new(10.0, 16.0, 12.0);
+    let defaults =
+        DisplayRowGeometryDefaults::new(10.0, 16.0, 12.0, DisplayRowMeasurementMode::ConcreteFont);
 
     assert_eq!(
         defaults.row_y_fallback(9.0),
@@ -1086,6 +1171,7 @@ fn display_row_boundary_target_constructors_encode_boundary_kind_and_hit_range()
         text_y: 10.0,
         height: 16.0,
         ascent: 12.0,
+        measurement_mode: DisplayRowMeasurementMode::ConcreteFont,
     };
 
     let mut line_break_y_positions = DisplayRowYPositions::with_first_row(8.0, 16.0);

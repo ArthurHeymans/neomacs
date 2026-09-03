@@ -62,6 +62,7 @@ pub(crate) struct BufferSourceWalkSetupRequest<'a> {
     line_number_pixel_width: f32,
     max_rows: usize,
     metrics: DisplayRowFallbackMetrics,
+    measurement_mode: DisplayRowMeasurementMode,
     wrap_mode: LineWrapMode,
     hscroll: i32,
     word_wrap: bool,
@@ -145,6 +146,7 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
         line_number_pixel_width: f32,
         max_rows: usize,
         metrics: DisplayRowFallbackMetrics,
+        measurement_mode: DisplayRowMeasurementMode,
         wrap_mode: LineWrapMode,
         hscroll: i32,
         word_wrap: bool,
@@ -167,6 +169,7 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
             line_number_pixel_width,
             max_rows,
             metrics,
+            measurement_mode,
             wrap_mode,
             hscroll,
             word_wrap,
@@ -231,6 +234,7 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
             geometry.line_number_pixel_width,
             geometry.max_rows,
             default_face.row_metrics_for_body_width(geometry.char_width),
+            default_face.measurement_policy().mode(),
             params.wrap_mode,
             params.hscroll,
             params.word_wrap,
@@ -257,6 +261,7 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
             self.text_y,
             self.metrics.row_height(),
             self.metrics.ascent(),
+            self.measurement_mode,
         );
 
         BufferSourceWalkSetup {

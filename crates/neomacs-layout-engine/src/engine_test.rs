@@ -5517,6 +5517,27 @@ fn layout_frame_rust_display_string_newline_terminates_row() {
         "",
         "the row between `X` and `BBB` must be the blank empty-line row, rows={row_texts:?}"
     );
+
+    // GNU `compute_line_metrics` (xdisp.c) deliberately discards glyph/font
+    // pixel metrics on a terminal frame: every completed row occupies exactly
+    // one logical cell.  In particular, the newline appended for a display
+    // string must not combine its ascent/descent with the following blank row
+    // and consume two cells, or the last visible body row disappears.
+    let text_rows: Vec<&RowTrace> = trace
+        .matrix_rows
+        .iter()
+        .filter(|row| !row.mode_line && row.role == GlyphRowRole::Text && row.enabled)
+        .collect();
+    let logical_cell_height = text_rows[x_row].height_px_bits;
+    assert_eq!(
+        text_rows[x_row + 1].height_px_bits,
+        logical_cell_height,
+        "a blank terminal row after a display-string newline must occupy exactly one logical cell"
+    );
+    assert_eq!(
+        text_rows[bbb_row].height_px_bits, logical_cell_height,
+        "all terminal text rows must retain the same logical-cell height"
+    );
 }
 
 #[test]
@@ -8811,6 +8832,7 @@ fn inactive_echo_area_grows_to_contain_tall_display_image() {
     let frame_id = eval
         .frame_manager_mut()
         .create_frame("tall-echo-image", 320, 120, root);
+    realize_test_gui_frame(&mut eval, frame_id);
     {
         let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
         frame.char_width = 8.0;
@@ -9906,40 +9928,40 @@ fn layout_frame_rust_nbsp_uses_nobreak_space_foreground() {
         .expect("default face")
         .foreground;
 
-    // In highlight mode the nbsp substitute renders as a space glyph, so there
-    // are two `' '` glyphs: the literal space (base face) and the nbsp substitute
-    // (nobreak-space face). Distinguish them by resolved foreground, not by char.
-    let space_glyphs: Vec<&Glyph> = text_glyphs
-        .iter()
-        .filter(|g| matches!(g.glyph_type, GlyphType::Char { ch: ' ' }))
-        .collect();
+    // GNU defaults `nobreak-char-ascii-display` to nil: highlight mode keeps
+    // the original U+00A0 glyph and merges the `nobreak-space` face over it.
     assert_eq!(
-        space_glyphs.len(),
-        2,
-        "expected one literal space and one nbsp substitute space, got {:?}",
+        glyphs_logical_text(text_glyphs),
+        "a \u{00A0}c",
+        "default highlight mode must preserve the original U+00A0 glyph"
+    );
+    let normal_space_glyph = text_glyphs
+        .iter()
+        .find(|g| matches!(g.glyph_type, GlyphType::Char { ch: ' ' }))
+        .expect("literal ASCII space glyph");
+    let nbsp_glyph = text_glyphs
+        .iter()
+        .find(|g| matches!(g.glyph_type, GlyphType::Char { ch: '\u{00A0}' }))
+        .expect("original U+00A0 glyph");
+
+    let normal_space_face = state
+        .faces
+        .get(&normal_space_glyph.face_id)
+        .expect("resolved face for literal ASCII space");
+    let nbsp_face = state
+        .faces
+        .get(&nbsp_glyph.face_id)
+        .expect("resolved face for U+00A0");
+    assert_eq!(
+        normal_space_face.foreground, default_fg,
+        "the literal ASCII space must keep the default foreground"
+    );
+    assert_eq!(
+        nbsp_face.foreground,
+        nbsp_fg,
+        "U+00A0 must receive the nobreak-space foreground; glyphs={:?}",
         glyphs_logical_text(text_glyphs)
     );
-
-    let mut nbsp_glyph = None;
-    let mut normal_space_glyph = None;
-    for glyph in &space_glyphs {
-        let face = state
-            .faces
-            .get(&glyph.face_id)
-            .expect("resolved face for space glyph");
-        if face.foreground == nbsp_fg {
-            nbsp_glyph = Some(*glyph);
-        } else if face.foreground == default_fg {
-            normal_space_glyph = Some(*glyph);
-        }
-    }
-
-    let nbsp_glyph = nbsp_glyph.expect(
-        "exactly one space glyph (the nbsp substitute) must resolve to the nobreak-space \
-         (escape-glyph-inherited) foreground",
-    );
-    let normal_space_glyph =
-        normal_space_glyph.expect("the literal space must keep the default base foreground");
 
     // The nbsp realized a SEPARATE face id, not the base/default face reused.
     assert_ne!(
@@ -10041,14 +10063,22 @@ fn layout_frame_rust_nbsp_underline_follows_nobreak_space_foreground() {
         .expect("text row");
     let text_glyphs = &text_row.glyphs[GlyphArea::Text.index()];
 
-    // The nbsp substitute is the space glyph whose realized face carries the
-    // nobreak-space (escape-glyph-inherited) foreground.
+    assert_eq!(
+        glyphs_logical_text(text_glyphs),
+        "a \u{00A0}c",
+        "default highlight mode must preserve the original U+00A0 glyph"
+    );
+    // The original U+00A0 glyph's realized face carries the nobreak-space
+    // (escape-glyph-inherited) foreground and underline.
     let nbsp_face = text_glyphs
         .iter()
-        .filter(|g| matches!(g.glyph_type, GlyphType::Char { ch: ' ' }))
-        .filter_map(|g| state.faces.get(&g.face_id))
-        .find(|face| face.foreground == nbsp_fg)
-        .expect("nbsp substitute space carrying the nobreak-space foreground");
+        .find(|g| matches!(g.glyph_type, GlyphType::Char { ch: '\u{00A0}' }))
+        .and_then(|g| state.faces.get(&g.face_id))
+        .expect("original U+00A0 glyph carrying the nobreak-space face");
+    assert_eq!(
+        nbsp_face.foreground, nbsp_fg,
+        "U+00A0 must use the escape-glyph-inherited foreground"
+    );
 
     assert_ne!(
         nbsp_face.underline_style,
@@ -10327,36 +10357,37 @@ fn layout_frame_rust_nobreak_hyphen_uses_nobreak_hyphen_foreground() {
         .expect("default face")
         .foreground;
 
-    // Two `-` glyphs: literal hyphen (base) and the U+2011 substitute (nobreak).
-    let hyphen_glyphs: Vec<&Glyph> = text_glyphs
-        .iter()
-        .filter(|g| matches!(g.glyph_type, GlyphType::Char { ch: '-' }))
-        .collect();
     assert_eq!(
-        hyphen_glyphs.len(),
-        2,
-        "expected one literal hyphen and one U+2011 substitute, got {:?}",
-        glyphs_logical_text(text_glyphs)
+        glyphs_logical_text(text_glyphs),
+        "x-\u{2011}y",
+        "default highlight mode must preserve the original U+2011 glyph"
     );
-
-    let mut nobreak_glyph = None;
-    let mut normal_hyphen_glyph = None;
-    for glyph in &hyphen_glyphs {
-        let face = state
+    let normal_hyphen_glyph = text_glyphs
+        .iter()
+        .find(|g| matches!(g.glyph_type, GlyphType::Char { ch: '-' }))
+        .expect("literal ASCII hyphen");
+    let nobreak_glyph = text_glyphs
+        .iter()
+        .find(|g| matches!(g.glyph_type, GlyphType::Char { ch: '\u{2011}' }))
+        .expect("original U+2011 glyph");
+    assert_eq!(
+        state
             .faces
-            .get(&glyph.face_id)
-            .expect("resolved face for hyphen glyph");
-        if face.foreground == hyphen_fg {
-            nobreak_glyph = Some(*glyph);
-        } else if face.foreground == default_fg {
-            normal_hyphen_glyph = Some(*glyph);
-        }
-    }
-
-    let nobreak_glyph = nobreak_glyph
-        .expect("the U+2011 substitute hyphen must resolve to the nobreak-hyphen foreground");
-    let normal_hyphen_glyph =
-        normal_hyphen_glyph.expect("the literal hyphen must keep the default base foreground");
+            .get(&normal_hyphen_glyph.face_id)
+            .expect("resolved face for literal hyphen")
+            .foreground,
+        default_fg,
+        "the literal ASCII hyphen must keep the default foreground"
+    );
+    assert_eq!(
+        state
+            .faces
+            .get(&nobreak_glyph.face_id)
+            .expect("resolved face for U+2011")
+            .foreground,
+        hyphen_fg,
+        "U+2011 must receive the nobreak-hyphen foreground"
+    );
 
     assert_ne!(
         nobreak_glyph.face_id, normal_hyphen_glyph.face_id,
@@ -11780,6 +11811,7 @@ fn layout_frame_rust_applies_extra_line_spacing_once_to_newline_rows() {
     let frame_id =
         eval.frame_manager_mut()
             .create_frame("layout-extra-line-spacing-once", 800, 160, buf_id);
+    realize_test_gui_frame(&mut eval, frame_id);
 
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
@@ -19071,9 +19103,39 @@ fn layout_main_text_rows_with(
     layout_main_text_rows_with_width(text, 640, setup)
 }
 
+fn layout_main_text_rows_with_graphical_frame(
+    text: &str,
+    setup: impl FnOnce(&mut Context, BufferId),
+) -> (
+    Context,
+    BufferId,
+    neovm_core::window::FrameId,
+    Vec<neomacs_display_protocol::glyph_matrix::MatrixRow>,
+    f32,
+    f32,
+) {
+    layout_main_text_rows_with_width_and_frame_kind(text, 640, true, setup)
+}
+
 fn layout_main_text_rows_with_width(
     text: &str,
     frame_width_px: u32,
+    setup: impl FnOnce(&mut Context, BufferId),
+) -> (
+    Context,
+    BufferId,
+    neovm_core::window::FrameId,
+    Vec<neomacs_display_protocol::glyph_matrix::MatrixRow>,
+    f32,
+    f32,
+) {
+    layout_main_text_rows_with_width_and_frame_kind(text, frame_width_px, false, setup)
+}
+
+fn layout_main_text_rows_with_width_and_frame_kind(
+    text: &str,
+    frame_width_px: u32,
+    graphical: bool,
     setup: impl FnOnce(&mut Context, BufferId),
 ) -> (
     Context,
@@ -19100,6 +19162,12 @@ fn layout_main_text_rows_with_width(
         160,
         buf_id,
     );
+    if graphical {
+        eval.frame_manager_mut()
+            .get_mut(frame_id)
+            .expect("frame")
+            .set_window_system(Some(Value::symbol("neo")));
+    }
     let selected_window = eval
         .frame_manager()
         .get(frame_id)
@@ -23655,7 +23723,7 @@ fn layout_frame_rust_line_height_t_lets_overlay_string_content_define_row_height
 #[test]
 fn layout_frame_rust_line_height_t_lets_display_replacement_content_define_row_height() {
     let (_eval, _buf_id, _frame_id, rows, _char_width, char_height) =
-        layout_main_text_rows_with("xsource line\n", |eval, buf_id| {
+        layout_main_text_rows_with_graphical_frame("xsource line\n", |eval, buf_id| {
             eval.buffer_manager_mut().set_current(buf_id);
             eval.buffer_manager_mut()
                 .get_mut(buf_id)
@@ -23703,7 +23771,7 @@ fn layout_frame_rust_line_height_t_lets_display_replacement_content_define_row_h
 #[test]
 fn display_replacement_string_line_spacing_overrides_buffer_spacing() {
     let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
-        layout_main_text_rows_with("xsource line\n", |eval, buf_id| {
+        layout_main_text_rows_with_graphical_frame("xsource line\n", |eval, buf_id| {
             eval.buffer_manager_mut().set_current(buf_id);
             eval.buffer_manager_mut()
                 .get_mut(buf_id)
