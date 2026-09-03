@@ -15,8 +15,8 @@
 use crate::display_cursor::ResolvedCursorCoordinatePair;
 use crate::frame_face_arena::FrameFaceGeneration;
 use crate::types::{
-    DisplayLineNumbersMode, LineWrapMode, PartialBodyWalkStart, PointMotionBodyDependency,
-    WindowParams,
+    DisplayLineNumbersMode, LineWrapMode, NobreakDisplayMode, PartialBodyWalkStart,
+    PointMotionBodyDependency, WindowParams,
 };
 use crate::window_layout::{WindowLayoutBox, WindowPartitionSignature};
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, PhysCursor};
@@ -121,9 +121,9 @@ pub struct RetainedWindowKey {
     /// `show-trailing-whitespace` + the resolved background color.
     pub show_trailing_whitespace: bool,
     pub trailing_ws_bg: u32,
-    /// `nobreak-char-display` + `glyphless-char-display` foreground; special-char
-    /// rendering.
-    pub nobreak_char_display: i32,
+    /// Effective `nobreak-char-display` + `nobreak-char-ascii-display` policy;
+    /// changes special-character rendering.
+    pub nobreak_char_display: NobreakDisplayMode,
     pub glyphless_char_fg: u32,
     /// `indicate-empty-lines` controls empty-line fringe glyphs baked into
     /// reused rows. Physical fringe allocation lives in `partition`.
@@ -1585,7 +1585,7 @@ mod scroll_classifier_tests {
             cursor_role: crate::types::WindowCursorRole::Active,
             show_trailing_whitespace: false,
             trailing_ws_bg: 0,
-            nobreak_char_display: 0,
+            nobreak_char_display: NobreakDisplayMode::Literal,
             glyphless_char_fg: 0,
             indicate_empty_lines: 0,
             line_prefix: Vec::new(),
@@ -1750,7 +1750,9 @@ mod scroll_classifier_tests {
                 k.show_trailing_whitespace = true
             }),
             ("trailing_ws_bg", |k| k.trailing_ws_bg = 0x00ff_00ff),
-            ("nobreak_char_display", |k| k.nobreak_char_display = 1),
+            ("nobreak_char_display", |k| {
+                k.nobreak_char_display = NobreakDisplayMode::HighlightOriginal
+            }),
             ("glyphless_char_fg", |k| k.glyphless_char_fg = 0x00ff_ffff),
             ("indicate_empty_lines", |k| k.indicate_empty_lines = 1),
             ("left_fringe", |k| {

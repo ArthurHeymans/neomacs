@@ -23,6 +23,7 @@ use crate::display_source_resolver::{
 };
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
+use crate::types::NobreakDisplayMode;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
@@ -313,11 +314,11 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
 #[derive(Clone, Copy)]
 pub(crate) struct DisplaySourceNobreakHint {
     source_char: char,
-    nobreak_char_display: i32,
+    nobreak_char_display: NobreakDisplayMode,
 }
 
 impl DisplaySourceNobreakHint {
-    pub(crate) fn new(source_char: char, nobreak_char_display: i32) -> Self {
+    pub(crate) fn new(source_char: char, nobreak_char_display: NobreakDisplayMode) -> Self {
         Self {
             source_char,
             nobreak_char_display,
@@ -325,13 +326,15 @@ impl DisplaySourceNobreakHint {
     }
 
     /// The merge face name for a precluster substitute, or `None` when this char
-    /// is not highlighted. In highlight mode (`nobreak-char-display` == t == 1) a
-    /// non-ASCII space/hyphen paints in `nobreak-space`/`nobreak-hyphen`.
+    /// is not highlighted. In either typed highlight mode
+    /// (`nobreak-char-display` is t), a non-ASCII space/hyphen paints in
+    /// `nobreak-space`/`nobreak-hyphen`; the mode separately records whether
+    /// GNU preserves the codepoint or uses its ASCII lookalike.
     /// Independent of that policy, a non-printable char (its `\`+octal escape,
     /// see [`is_escape_glyph_octal`]) paints in `escape-glyph` -- GNU always
     /// merges the escape glyph for these (xdisp.c:8631-8633).
     fn highlight_face_name(self) -> Option<&'static str> {
-        if self.nobreak_char_display == 1 {
+        if self.nobreak_char_display.highlights() {
             if nonascii_space_p(self.source_char) {
                 return Some("nobreak-space");
             }
@@ -380,8 +383,9 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
 
         // GNU `get_next_display_element` (xdisp.c:8594-8617): in highlight mode
         // (`nobreak-char-display` == t) a non-ASCII space / nobreak hyphen is
-        // shown via its ASCII substitute painted in the `nobreak-space` /
-        // `nobreak-hyphen` face MERGED over the surrounding base face. Unlike a
+        // shown in the `nobreak-space` / `nobreak-hyphen` face MERGED over the
+        // surrounding base face. `nobreak-char-ascii-display` decides whether
+        // the glyph is the original codepoint or an ASCII lookalike. Unlike a
         // control char, nbsp/hyphen reach here as a plain `TextRun` item (they
         // classify as `Text`), so the branch is keyed on the ORIGINAL source char
         // (threaded via `nobreak_hint`), NOT `item.kind` -- this keeps display

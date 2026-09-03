@@ -63,7 +63,7 @@ fn window_params() -> WindowParams {
         extra_line_spacing: 0.0,
         selective_display: 0,
         escape_glyph_fg: 0,
-        nobreak_char_display: 0,
+        nobreak_char_display: crate::types::NobreakDisplayMode::Literal,
         nobreak_char_fg: 0,
         glyphless_char_fg: 0,
         wrap_prefix: vec![],

@@ -31,8 +31,8 @@ use neovm_core::window::{
 };
 
 use super::types::{
-    DisplayLineNumbersMode, FrameParams, LineWrapMode, VisualCursorSpec, WindowCursorRole,
-    WindowKind, WindowParams,
+    DisplayLineNumbersMode, FrameParams, LineWrapMode, NobreakDisplayMode, VisualCursorSpec,
+    WindowCursorRole, WindowKind, WindowParams,
 };
 use crate::coords::{
     clamped_lisp_charpos_to_layout_i64, layout_char_pos_from_i64, layout_emacs_byte_pos_from_i64,
@@ -811,16 +811,22 @@ fn global_bool(obarray: &Obarray, name: &str) -> bool {
         .is_some_and(|value| !value.is_nil())
 }
 
-fn effective_nobreak_char_display(buffer: &Buffer, obarray: &Obarray) -> i32 {
+fn effective_nobreak_char_display(buffer: &Buffer, obarray: &Obarray) -> NobreakDisplayMode {
     // `nobreak-char-display` is a `DEFVAR_LISP`, but GNU reads `Vnobreak_char_display`
     // while displaying buffer text (xdisp.c:8522, with the window's buffer current),
     // so a buffer-local binding takes effect. Read buffer-local-then-global, not the
     // raw global.
     match effective_buffer_value(buffer, obarray, LayoutVar::NobreakCharDisplay) {
-        Some(value) if value.is_nil() => 0,
-        Some(value) if value.as_int() == Some(2) => 2,
-        Some(_) => 1,
-        None => 0,
+        Some(value) if value.is_nil() => NobreakDisplayMode::Literal,
+        Some(value) if value.is_t() => {
+            if global_bool(obarray, "nobreak-char-ascii-display") {
+                NobreakDisplayMode::HighlightAscii
+            } else {
+                NobreakDisplayMode::HighlightOriginal
+            }
+        }
+        Some(_) => NobreakDisplayMode::Escape,
+        None => NobreakDisplayMode::Literal,
     }
 }
 

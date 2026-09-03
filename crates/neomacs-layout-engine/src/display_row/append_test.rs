@@ -6670,7 +6670,11 @@ fn buffer_text_source_append_context_appends_source_char() {
         0.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
-    let source_char = DisplaySourceTextChar::new('a', CharPos0::new(0), 2);
+    let source_char = DisplaySourceTextChar::new(
+        'a',
+        CharPos0::new(0),
+        crate::types::NobreakDisplayMode::Escape,
+    );
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "a", RenderFaceRef::FaceId(FaceId::new(7)));
     let mut append_state = DisplaySourceRowAppendState::default();
@@ -7477,7 +7481,11 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
         0.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
-    let source_char = DisplaySourceTextChar::new('a', CharPos0::new(0), 2);
+    let source_char = DisplaySourceTextChar::new(
+        'a',
+        CharPos0::new(0),
+        crate::types::NobreakDisplayMode::Escape,
+    );
     let source_item =
         buffer_source_mapped_display_item(buf_id, 0, 1, "a", RenderFaceRef::FaceId(FaceId::new(7)));
     let mut append_state = DisplaySourceRowAppendState::default();
@@ -9083,58 +9091,103 @@ fn buffer_text_item_append_context_builds_control_char_item() {
 #[test]
 fn buffer_text_source_append_item_names_nobreak_display_policy() {
     assert_eq!(
-        DisplaySourceAppendItem::nobreak_display('\u{00A0}', 1),
+        DisplaySourceAppendItem::nobreak_display(
+            '\u{00A0}',
+            crate::types::NobreakDisplayMode::HighlightOriginal,
+        ),
+        Some(DisplaySourceAppendItem::SourceMappedText {
+            text: "\u{00A0}".into()
+        })
+    );
+    assert_eq!(
+        DisplaySourceAppendItem::nobreak_display(
+            '\u{00A0}',
+            crate::types::NobreakDisplayMode::HighlightAscii,
+        ),
         Some(DisplaySourceAppendItem::SourceMappedText { text: " ".into() })
     );
     assert_eq!(
-        DisplaySourceAppendItem::nobreak_display('\u{00AD}', 1),
+        DisplaySourceAppendItem::nobreak_display(
+            '\u{00AD}',
+            crate::types::NobreakDisplayMode::HighlightAscii,
+        ),
         Some(DisplaySourceAppendItem::SourceMappedText { text: "-".into() })
     );
     assert_eq!(
-        DisplaySourceAppendItem::nobreak_display('\u{00A0}', 2),
+        DisplaySourceAppendItem::nobreak_display(
+            '\u{00A0}',
+            crate::types::NobreakDisplayMode::Escape,
+        ),
         Some(DisplaySourceAppendItem::SourceMappedText { text: "\\ ".into() })
     );
     assert_eq!(
-        DisplaySourceAppendItem::nobreak_display('\u{00AD}', 2),
+        DisplaySourceAppendItem::nobreak_display(
+            '\u{00AD}',
+            crate::types::NobreakDisplayMode::Escape,
+        ),
         Some(DisplaySourceAppendItem::SourceMappedText { text: "\\-".into() })
     );
     assert_eq!(
-        DisplaySourceAppendItem::nobreak_display('\u{00A0}', 0),
+        DisplaySourceAppendItem::nobreak_display(
+            '\u{00A0}',
+            crate::types::NobreakDisplayMode::Literal,
+        ),
         None
     );
-    assert_eq!(DisplaySourceAppendItem::nobreak_display('x', 2), None);
+    assert_eq!(
+        DisplaySourceAppendItem::nobreak_display('x', crate::types::NobreakDisplayMode::Escape,),
+        None
+    );
 }
 
 #[test]
 fn buffer_text_source_special_display_names_precluster_policy() {
     assert_eq!(
-        DisplaySourceSpecialDisplay::for_precluster_char('\u{0001}', 2),
+        DisplaySourceSpecialDisplay::for_precluster_char(
+            '\u{0001}',
+            crate::types::NobreakDisplayMode::Escape,
+        ),
         Some(DisplaySourceSpecialDisplay::Control(
             DisplaySourceAppendItem::ControlChar { ch: '\u{0001}' }
         ))
     );
     assert_eq!(
-        DisplaySourceSpecialDisplay::for_precluster_char('\u{007F}', 2),
+        DisplaySourceSpecialDisplay::for_precluster_char(
+            '\u{007F}',
+            crate::types::NobreakDisplayMode::Escape,
+        ),
         Some(DisplaySourceSpecialDisplay::Control(
             DisplaySourceAppendItem::ControlChar { ch: '\u{007F}' }
         ))
     );
     assert_eq!(
-        DisplaySourceSpecialDisplay::for_precluster_char('\u{00A0}', 2),
+        DisplaySourceSpecialDisplay::for_precluster_char(
+            '\u{00A0}',
+            crate::types::NobreakDisplayMode::Escape,
+        ),
         Some(DisplaySourceSpecialDisplay::Nobreak(
             DisplaySourceAppendItem::SourceMappedText { text: "\\ ".into() }
         ))
     );
     assert_eq!(
-        DisplaySourceSpecialDisplay::for_precluster_char('\n', 2),
+        DisplaySourceSpecialDisplay::for_precluster_char(
+            '\n',
+            crate::types::NobreakDisplayMode::Escape,
+        ),
         None
     );
     assert_eq!(
-        DisplaySourceSpecialDisplay::for_precluster_char('\t', 2),
+        DisplaySourceSpecialDisplay::for_precluster_char(
+            '\t',
+            crate::types::NobreakDisplayMode::Escape,
+        ),
         None
     );
     assert_eq!(
-        DisplaySourceSpecialDisplay::for_precluster_char('x', 2),
+        DisplaySourceSpecialDisplay::for_precluster_char(
+            'x',
+            crate::types::NobreakDisplayMode::Escape,
+        ),
         None
     );
 }
@@ -9170,7 +9223,11 @@ fn buffer_text_source_special_display_names_cluster_policy() {
 
 #[test]
 fn buffer_text_source_char_names_range_and_precluster_policy() {
-    let source_char = DisplaySourceTextChar::new('\u{00A0}', CharPos0::new(4), 2);
+    let source_char = DisplaySourceTextChar::new(
+        '\u{00A0}',
+        CharPos0::new(4),
+        crate::types::NobreakDisplayMode::Escape,
+    );
     let request = source_char
         .nobreak_special_request()
         .expect("nobreak source char should produce source request");
@@ -9206,7 +9263,11 @@ fn buffer_text_source_char_names_range_and_precluster_policy() {
 
 #[test]
 fn buffer_text_source_char_names_cluster_policy() {
-    let source_char = DisplaySourceTextChar::new('\u{FE0F}', CharPos0::new(1), 2);
+    let source_char = DisplaySourceTextChar::new(
+        '\u{FE0F}',
+        CharPos0::new(1),
+        crate::types::NobreakDisplayMode::Escape,
+    );
     let cluster_tail = Some(('\u{2764}', false));
 
     assert_eq!(
@@ -9215,7 +9276,11 @@ fn buffer_text_source_char_names_cluster_policy() {
     );
     assert_eq!(source_char.cluster_special_request(cluster_tail), None);
 
-    let standalone_joiner = DisplaySourceTextChar::new('\u{200D}', CharPos0::new(2), 2);
+    let standalone_joiner = DisplaySourceTextChar::new(
+        '\u{200D}',
+        CharPos0::new(2),
+        crate::types::NobreakDisplayMode::Escape,
+    );
     assert_eq!(
         standalone_joiner
             .special_request(None)
@@ -9375,7 +9440,11 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         0.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
-    let source_char = DisplaySourceTextChar::new('\u{00A0}', CharPos0::new(0), 2);
+    let source_char = DisplaySourceTextChar::new(
+        '\u{00A0}',
+        CharPos0::new(0),
+        crate::types::NobreakDisplayMode::Escape,
+    );
     let source_request = source_char
         .special_request(None)
         .expect("nobreak source char should map to a display item");
@@ -9497,7 +9566,11 @@ fn buffer_text_special_source_append_preserves_direct_control_item() {
         0.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
-    let source_char = DisplaySourceTextChar::new('\u{0007}', CharPos0::new(0), 2);
+    let source_char = DisplaySourceTextChar::new(
+        '\u{0007}',
+        CharPos0::new(0),
+        crate::types::NobreakDisplayMode::Escape,
+    );
     let source_request = source_char
         .special_request(None)
         .expect("control source char should map to a display item");
@@ -9584,7 +9657,11 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
         0.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
-    let source_char = DisplaySourceTextChar::new('\u{fffc}', CharPos0::new(0), 2);
+    let source_char = DisplaySourceTextChar::new(
+        '\u{fffc}',
+        CharPos0::new(0),
+        crate::types::NobreakDisplayMode::Escape,
+    );
     let source_request = source_char
         .special_request(None)
         .expect("glyphless source char should map to a display item");
@@ -10768,7 +10845,7 @@ fn test_display_space_window_params() -> WindowParams {
         extra_line_spacing: 0.0,
         selective_display: 0,
         escape_glyph_fg: 0,
-        nobreak_char_display: 0,
+        nobreak_char_display: crate::types::NobreakDisplayMode::Literal,
         nobreak_char_fg: 0,
         glyphless_char_fg: 0,
         wrap_prefix: vec![],

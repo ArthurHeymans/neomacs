@@ -4642,7 +4642,16 @@ pub(crate) fn builtin_internal_describe_syntax_value(
             out.push_str(" (nestable)");
         }
         if flags.contains(crate::emacs_core::syntax::SyntaxFlags::PREFIX) {
-            out.push_str(",\n\t  is a prefix character for `backward-prefix-chars'");
+            let prefix_doc =
+                Value::string(",\n\t  is a prefix character for `backward-prefix-chars'");
+            let quoted =
+                eval.funcall_general(Value::symbol("substitute-command-keys"), vec![prefix_doc])?;
+            out.push_str(quoted.as_utf8_str().ok_or_else(|| {
+                signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("stringp"), quoted],
+                )
+            })?);
         }
         out
     } else {

@@ -56,6 +56,28 @@ pub enum LineWrapMode {
     Wrap,
 }
 
+/// Complete GNU display policy for non-ASCII spaces and hyphens.
+///
+/// GNU keeps `nobreak-char-display` and `nobreak-char-ascii-display` as
+/// separate Lisp/C variables, but redisplay consumes their product as one of
+/// these four behaviors.  Keeping that product closed prevents callers from
+/// losing the distinction between highlighting the original character and
+/// replacing it with its ASCII lookalike.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum NobreakDisplayMode {
+    #[default]
+    Literal,
+    HighlightOriginal,
+    HighlightAscii,
+    Escape,
+}
+
+impl NobreakDisplayMode {
+    pub(crate) const fn highlights(self) -> bool {
+        matches!(self, Self::HighlightOriginal | Self::HighlightAscii)
+    }
+}
+
 /// GNU `display-line-numbers` modes understood by the layout engine.
 ///
 /// This is a closed semantic domain rather than the old `u8` transport code:
@@ -360,8 +382,8 @@ pub struct WindowParams {
     pub selective_display: i32,
     /// escape-glyph face foreground color
     pub escape_glyph_fg: u32,
-    /// nobreak-char-display: 0=off, 1=highlight, 2=escape notation
-    pub nobreak_char_display: i32,
+    /// Effective `nobreak-char-display` + `nobreak-char-ascii-display` policy.
+    pub nobreak_char_display: NobreakDisplayMode,
     /// nobreak-char face foreground color
     pub nobreak_char_fg: u32,
     /// glyphless-char face foreground color

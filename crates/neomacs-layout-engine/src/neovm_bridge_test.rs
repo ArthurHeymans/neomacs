@@ -206,19 +206,37 @@ fn collect_layout_params_reads_nobreak_char_display_global() {
         .obarray_mut()
         .set_symbol_value("nobreak-char-display", Value::NIL);
     let (_, wps) = collect_layout_params(&evaluator, frame_id, None).expect("layout params");
-    assert_eq!(wps[0].nobreak_char_display, 0);
+    assert_eq!(
+        wps[0].nobreak_char_display,
+        crate::types::NobreakDisplayMode::Literal
+    );
 
     evaluator
         .obarray_mut()
         .set_symbol_value("nobreak-char-display", Value::T);
     let (_, wps) = collect_layout_params(&evaluator, frame_id, None).expect("layout params");
-    assert_eq!(wps[0].nobreak_char_display, 1);
+    assert_eq!(
+        wps[0].nobreak_char_display,
+        crate::types::NobreakDisplayMode::HighlightOriginal
+    );
+
+    evaluator
+        .obarray_mut()
+        .set_symbol_value("nobreak-char-ascii-display", Value::T);
+    let (_, wps) = collect_layout_params(&evaluator, frame_id, None).expect("layout params");
+    assert_eq!(
+        wps[0].nobreak_char_display,
+        crate::types::NobreakDisplayMode::HighlightAscii
+    );
 
     evaluator
         .obarray_mut()
         .set_symbol_value("nobreak-char-display", Value::fixnum(2));
     let (_, wps) = collect_layout_params(&evaluator, frame_id, None).expect("layout params");
-    assert_eq!(wps[0].nobreak_char_display, 2);
+    assert_eq!(
+        wps[0].nobreak_char_display,
+        crate::types::NobreakDisplayMode::Escape
+    );
 }
 
 #[test]

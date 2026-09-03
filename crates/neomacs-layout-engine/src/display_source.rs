@@ -21,7 +21,7 @@ use crate::display_source_append_plan::{
 };
 use crate::display_spec::{DisplaySpaceKey, display_space_positive_number};
 use crate::neovm_bridge::{LayoutBufferView, OrderedFaceSources, TtyGlyphlessCharDisplay};
-use crate::types::WindowParams;
+use crate::types::{NobreakDisplayMode, WindowParams};
 use crate::unicode::{EmacsTextStorage, decode_emacs_char, decode_utf8};
 use neomacs_display_protocol::face::BoxVerticalEdges;
 use neomacs_display_protocol::types::FaceId;
@@ -640,7 +640,10 @@ impl DisplaySourceStepChar {
         DisplaySourceTextRange::single_char(CharPos0::new(self.start_charpos as usize))
     }
 
-    pub(crate) fn source_char(self, nobreak_display_policy: i32) -> DisplaySourceTextChar {
+    pub(crate) fn source_char(
+        self,
+        nobreak_display_policy: NobreakDisplayMode,
+    ) -> DisplaySourceTextChar {
         DisplaySourceTextChar::new(self.ch, self.source_range().start(), nobreak_display_policy)
     }
 }
@@ -1218,7 +1221,10 @@ pub(crate) enum DisplaySourceSpecialDisplay {
 }
 
 impl DisplaySourceSpecialDisplay {
-    pub(crate) fn for_precluster_char(ch: char, nobreak_display_policy: i32) -> Option<Self> {
+    pub(crate) fn for_precluster_char(
+        ch: char,
+        nobreak_display_policy: NobreakDisplayMode,
+    ) -> Option<Self> {
         if Self::is_control_char(ch) {
             Some(Self::Control(DisplaySourceAppendItem::ControlChar { ch }))
         } else {
@@ -1279,7 +1285,11 @@ pub(crate) struct DisplaySourceTextChar {
 }
 
 impl DisplaySourceTextChar {
-    pub(crate) fn new(ch: char, start: CharPos0, nobreak_display_policy: i32) -> Self {
+    pub(crate) fn new(
+        ch: char,
+        start: CharPos0,
+        nobreak_display_policy: NobreakDisplayMode,
+    ) -> Self {
         Self {
             ch,
             range: DisplaySourceTextRange::single_char(start),
@@ -1710,17 +1720,23 @@ pub(crate) fn escape_glyph_octal_text(code: u32) -> String {
 }
 
 impl DisplaySourceAppendItem {
-    pub(crate) fn nobreak_display(ch: char, display_policy: i32) -> Option<Self> {
+    pub(crate) fn nobreak_display(ch: char, display_policy: NobreakDisplayMode) -> Option<Self> {
         // GNU `get_next_display_element` (xdisp.c:8594-8643): in highlight mode
-        // (`nobreak-char-display` == t == policy 1) the substitute is the ASCII
-        // space/hyphen painted in the merged nobreak-space/nobreak-hyphen face;
-        // in escape mode (any other non-nil == policy 2) it is the `\`-prefixed
-        // form painted in escape-glyph. Both rely on the precluster Special path.
+        // GNU preserves the original character by default.  Only the separate
+        // `nobreak-char-ascii-display` boolean selects an ASCII lookalike.
+        // Any non-nil, non-t `nobreak-char-display` value selects escape form.
         let text = match display_policy {
-            1 if nonascii_space_p(ch) => " ",
-            1 if nonascii_hyphen_p(ch) => "-",
-            2 if nonascii_space_p(ch) => "\\ ",
-            2 if nonascii_hyphen_p(ch) => "\\-",
+            NobreakDisplayMode::HighlightOriginal
+                if nonascii_space_p(ch) || nonascii_hyphen_p(ch) =>
+            {
+                return Some(Self::SourceMappedText {
+                    text: ch.to_string().into(),
+                });
+            }
+            NobreakDisplayMode::HighlightAscii if nonascii_space_p(ch) => " ",
+            NobreakDisplayMode::HighlightAscii if nonascii_hyphen_p(ch) => "-",
+            NobreakDisplayMode::Escape if nonascii_space_p(ch) => "\\ ",
+            NobreakDisplayMode::Escape if nonascii_hyphen_p(ch) => "\\-",
             _ => return None,
         };
         Some(Self::SourceMappedText { text: text.into() })

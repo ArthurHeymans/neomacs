@@ -1588,7 +1588,7 @@ fn test_window_params() -> WindowParams {
         extra_line_spacing: 0.0,
         selective_display: 0,
         escape_glyph_fg: 0,
-        nobreak_char_display: 0,
+        nobreak_char_display: crate::types::NobreakDisplayMode::Literal,
         nobreak_char_fg: 0,
         glyphless_char_fg: 0,
         wrap_prefix: vec![],
@@ -10612,10 +10612,12 @@ fn layout_frame_rust_remaps_named_faces_on_line_and_wrap_prefix_strings() {
 }
 
 #[test]
-fn layout_frame_rust_renders_nobreak_chars_as_mapped_text() {
+fn layout_frame_rust_preserves_nobreak_chars_when_ascii_display_is_disabled() {
     let mut eval = Context::new();
     eval.obarray_mut()
         .set_symbol_value("nobreak-char-display", Value::T);
+    eval.obarray_mut()
+        .set_symbol_value("nobreak-char-ascii-display", Value::NIL);
     let buf_id = eval
         .buffer_manager()
         .current_buffer()
@@ -10643,6 +10645,56 @@ fn layout_frame_rust_renders_nobreak_chars_as_mapped_text() {
         .as_ref()
         .expect("display state");
     let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("text row");
+
+    assert_eq!(
+        glyphs_logical_text(&text_row.glyphs[1]),
+        "a\u{00a0}b\u{00ad}c"
+    );
+}
+
+#[test]
+fn layout_frame_rust_uses_ascii_nobreak_glyphs_when_explicitly_enabled() {
+    let mut eval = Context::new();
+    eval.obarray_mut()
+        .set_symbol_value("nobreak-char-display", Value::T);
+    eval.obarray_mut()
+        .set_symbol_value("nobreak-char-ascii-display", Value::T);
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("a\u{00a0}b\u{00ad}c");
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-buffer-ascii-nobreak-text", 640, 160, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let entry = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state")
         .window_matrices
         .iter()
         .find(|entry| entry.window_id.get() == selected_window.0 as i64)

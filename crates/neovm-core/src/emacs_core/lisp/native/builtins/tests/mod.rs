@@ -7671,6 +7671,31 @@ fn pure_dispatch_internal_placeholder_cluster_matches_compat_contracts() {
 }
 
 #[test]
+fn internal_describe_syntax_routes_prefix_documentation_through_quote_substitution() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.eval_str(
+        r#"(fset 'substitute-command-keys
+                 (lambda (_string &optional _no-face _include-menus)
+                   "GNU-QUOTED-PREFIX-DOC"))"#,
+    )
+    .expect("install observable quote-substitution probe");
+
+    // GNU syntax.h: Squote == 6; syntax.c stores the prefix flag in bit 20.
+    let syntax = Value::cons(Value::fixnum(6 + (1 << 20)), Value::NIL);
+    builtin_internal_describe_syntax_value(&mut eval, vec![syntax])
+        .expect("describe prefix syntax");
+
+    assert_eq!(
+        eval.buffers
+            .current_buffer()
+            .expect("current buffer")
+            .buffer_string(),
+        "' p\twhich means: prefixGNU-QUOTED-PREFIX-DOC"
+    );
+}
+
+#[test]
 fn internal_set_lisp_face_attribute_from_resource_matches_gnu_conversion() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
