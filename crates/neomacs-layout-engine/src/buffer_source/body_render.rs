@@ -33,8 +33,8 @@ use crate::display_row::overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::display_row::walk_state::{
     BoxFaceRowState, FaceScanCheckpoint, HitRowRangeTracker, HorizontalScrollSkipState,
-    InvisibleTextScanCheckpoint, LineNumberRenderState, TrailingWhitespaceRenderState,
-    WordWrapRenderState,
+    HorizontalScrollTruncationTarget, InvisibleTextScanCheckpoint, LineNumberRenderState,
+    TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::display_source_progress::{DisplaySourceProgressState, DisplaySourceRowProgressState};
 use crate::display_status_line::ChromeRowRenderServices;
@@ -273,7 +273,15 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
             window_top: self.window_top,
             invisible_text_checkpoint: InvisibleTextScanCheckpoint::new(self.window_start),
             row_flags: DisplayRowFlags::new(self.max_rows),
-            hscroll_skip: HorizontalScrollSkipState::new(self.wrap_mode, self.hscroll),
+            hscroll_skip: HorizontalScrollSkipState::new(
+                self.wrap_mode,
+                self.hscroll,
+                if self.line_number_pixel_width > 0.0 {
+                    HorizontalScrollTruncationTarget::LineNumberPrefix
+                } else {
+                    HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph
+                },
+            ),
             word_wrap: WordWrapRenderState::new(self.word_wrap),
             physical_line_tabs: DisplayPhysicalLineTabState::default(),
             prefix_request: DisplayRowPrefixRequest::initial(

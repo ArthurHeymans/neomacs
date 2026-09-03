@@ -43,7 +43,111 @@ pub(crate) struct WordWrapRenderState {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct HorizontalScrollSkipState {
     configured_columns: i32,
+    truncation_target: HorizontalScrollTruncationTarget,
     phase: HorizontalScrollSkipPhase,
+}
+
+/// The already-laid-out glyph that GNU's left-truncation marker overwrites.
+///
+/// `display_line` normally replaces the first visible source glyph.  With
+/// display line numbers, however, `maybe_produce_line_number` defers the
+/// prefix until horizontal skipping reaches `first_visible_x`, and
+/// `insert_left_trunc_glyphs` subsequently overwrites the prefix's first
+/// glyph.  Keeping those targets distinct prevents the line-number case from
+/// consuming one additional buffer character or one additional screen cell.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum HorizontalScrollTruncationTarget {
+    #[default]
+    FirstVisibleSourceGlyph,
+    LineNumberPrefix,
+}
+
+/// One source display item encountered while walking to the horizontal-scroll
+/// boundary.  The variant, rather than a width heuristic later in rendering,
+/// decides how GNU exposes an item that straddles `first_visible_x`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum HorizontalScrollDisplayItem {
+    Glyph { ch: char, columns: u16 },
+    Tab { columns: u16 },
+}
+
+impl HorizontalScrollDisplayItem {
+    pub(crate) fn glyph(ch: char, columns: i32) -> Self {
+        Self::Glyph {
+            ch,
+            columns: columns.clamp(1, i32::from(u16::MAX)) as u16,
+        }
+    }
+
+    pub(crate) fn tab(columns: i32) -> Self {
+        Self::Tab {
+            columns: columns.clamp(1, i32::from(u16::MAX)) as u16,
+        }
+    }
+
+    fn columns(self) -> i32 {
+        i32::from(match self {
+            Self::Glyph { columns, .. } | Self::Tab { columns } => columns,
+        })
+    }
+
+    fn visible_remainder(
+        self,
+        visible_columns: i32,
+        target: HorizontalScrollTruncationTarget,
+    ) -> HorizontalScrollVisibleRemainder {
+        match target {
+            // The marker consumes the first visible cell of the boundary
+            // item.  A TAB or wide glyph can leave blank cells after it.
+            HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph => {
+                HorizontalScrollVisibleRemainder::blank_columns(visible_columns - 1)
+            }
+            // GNU suppresses a negative row offset when line numbers are
+            // present.  A wide glyph is therefore retained whole; a TAB uses
+            // `stretch_adjust` and retains only its visible suffix.
+            HorizontalScrollTruncationTarget::LineNumberPrefix => match self {
+                Self::Glyph { ch, columns } if columns > 1 => {
+                    HorizontalScrollVisibleRemainder::WholeWideGlyph { ch, columns }
+                }
+                Self::Tab { .. } => {
+                    HorizontalScrollVisibleRemainder::blank_columns(visible_columns)
+                }
+                Self::Glyph { .. } => HorizontalScrollVisibleRemainder::None,
+            },
+        }
+    }
+}
+
+/// The part of a boundary-crossing item that remains after the truncation
+/// marker has been installed.  This is deliberately independent from the
+/// marker target: matrix overwrite and source-item clipping are two different
+/// GNU redisplay operations.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum HorizontalScrollVisibleRemainder {
+    #[default]
+    None,
+    BlankColumns(u16),
+    WholeWideGlyph {
+        ch: char,
+        columns: u16,
+    },
+}
+
+impl HorizontalScrollVisibleRemainder {
+    fn blank_columns(columns: i32) -> Self {
+        if columns <= 0 {
+            Self::None
+        } else {
+            Self::BlankColumns(columns.min(i32::from(u16::MAX)) as u16)
+        }
+    }
+
+    pub(crate) fn columns(self) -> usize {
+        usize::from(match self {
+            Self::None => 0,
+            Self::BlankColumns(columns) | Self::WholeWideGlyph { columns, .. } => columns,
+        })
+    }
 }
 
 /// What remains to be consumed at the left edge of a horizontally-scrolled
@@ -65,7 +169,46 @@ enum HorizontalScrollSkipPhase {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum HscrollConsumedTextDisposition {
     Hidden,
-    ReplacedByLeftTruncation,
+    InstallLeftTruncation {
+        target: HorizontalScrollTruncationTarget,
+        visible_remainder: HorizontalScrollVisibleRemainder,
+    },
+}
+
+/// Which side of a consumed source item owns the cursor anchor.
+///
+/// Fully hidden items advance the best approximation to their end.  The item
+/// that reaches or crosses the visible boundary is different: GNU
+/// `set_cursor_from_row` places point at the first visible row position, so its
+/// source start owns the anchor even when a truncation marker covers it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HscrollConsumedTextCursorAnchor {
+    ConsumedItemEnd,
+    VisibleBoundaryItemStart,
+}
+
+impl HscrollConsumedTextCursorAnchor {
+    fn charpos(self, source_char: crate::display_source::DisplaySourceStepChar) -> i64 {
+        match self {
+            Self::ConsumedItemEnd => source_char.start_charpos() + 1,
+            Self::VisibleBoundaryItemStart => source_char.start_charpos(),
+        }
+    }
+}
+
+impl HscrollConsumedTextDisposition {
+    pub(crate) fn cursor_anchor_charpos(
+        self,
+        source_char: crate::display_source::DisplaySourceStepChar,
+    ) -> i64 {
+        match self {
+            Self::Hidden => HscrollConsumedTextCursorAnchor::ConsumedItemEnd,
+            Self::InstallLeftTruncation { .. } => {
+                HscrollConsumedTextCursorAnchor::VisibleBoundaryItemStart
+            }
+        }
+        .charpos(source_char)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -666,7 +809,11 @@ impl WordWrapRenderState {
 }
 
 impl HorizontalScrollSkipState {
-    pub(crate) fn new(wrap_mode: LineWrapMode, hscroll_columns: i32) -> Self {
+    pub(crate) fn new(
+        wrap_mode: LineWrapMode,
+        hscroll_columns: i32,
+        truncation_target: HorizontalScrollTruncationTarget,
+    ) -> Self {
         let configured_columns = if wrap_mode == LineWrapMode::Truncate {
             hscroll_columns.max(0)
         } else {
@@ -674,6 +821,7 @@ impl HorizontalScrollSkipState {
         };
         Self {
             configured_columns,
+            truncation_target,
             phase: if configured_columns > 0 {
                 HorizontalScrollSkipPhase::Skipping {
                     remaining_columns: configured_columns,
@@ -714,8 +862,11 @@ impl HorizontalScrollSkipState {
         }
     }
 
-    pub(crate) fn consume_columns(&mut self, columns: i32) -> HscrollConsumedTextDisposition {
-        let columns = columns.max(0);
+    pub(crate) fn consume_display_item(
+        &mut self,
+        item: HorizontalScrollDisplayItem,
+    ) -> HscrollConsumedTextDisposition {
+        let columns = item.columns();
         match self.phase {
             HorizontalScrollSkipPhase::Skipping { remaining_columns }
                 if columns < remaining_columns =>
@@ -728,13 +879,34 @@ impl HorizontalScrollSkipState {
             HorizontalScrollSkipPhase::Skipping { remaining_columns }
                 if columns == remaining_columns =>
             {
-                self.phase = HorizontalScrollSkipPhase::ReplaceNextGlyph;
-                HscrollConsumedTextDisposition::Hidden
+                match self.truncation_target {
+                    HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph => {
+                        self.phase = HorizontalScrollSkipPhase::ReplaceNextGlyph;
+                        HscrollConsumedTextDisposition::Hidden
+                    }
+                    HorizontalScrollTruncationTarget::LineNumberPrefix => {
+                        self.phase = HorizontalScrollSkipPhase::Complete;
+                        HscrollConsumedTextDisposition::InstallLeftTruncation {
+                            target: HorizontalScrollTruncationTarget::LineNumberPrefix,
+                            visible_remainder: HorizontalScrollVisibleRemainder::None,
+                        }
+                    }
+                }
             }
-            HorizontalScrollSkipPhase::Skipping { .. }
-            | HorizontalScrollSkipPhase::ReplaceNextGlyph => {
+            HorizontalScrollSkipPhase::Skipping { remaining_columns } => {
                 self.phase = HorizontalScrollSkipPhase::Complete;
-                HscrollConsumedTextDisposition::ReplacedByLeftTruncation
+                HscrollConsumedTextDisposition::InstallLeftTruncation {
+                    target: self.truncation_target,
+                    visible_remainder: item
+                        .visible_remainder(columns - remaining_columns, self.truncation_target),
+                }
+            }
+            HorizontalScrollSkipPhase::ReplaceNextGlyph => {
+                self.phase = HorizontalScrollSkipPhase::Complete;
+                HscrollConsumedTextDisposition::InstallLeftTruncation {
+                    target: self.truncation_target,
+                    visible_remainder: item.visible_remainder(columns, self.truncation_target),
+                }
             }
             HorizontalScrollSkipPhase::Disabled | HorizontalScrollSkipPhase::Complete => {
                 debug_assert!(false, "hscroll columns consumed after skipping completed");

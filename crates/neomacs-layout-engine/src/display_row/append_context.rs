@@ -221,6 +221,12 @@ impl DisplayRowAppendSurface {
         self.area.content_x()
     }
 
+    /// Left edge of the complete TEXT_AREA, including a structural display
+    /// line-number prefix.  `content_x` is the ordinary buffer body's start.
+    pub(crate) fn text_area_left(&self) -> f32 {
+        self.area.content_x() - self.area.line_number_width()
+    }
+
     pub(crate) fn right_edge(&self) -> f32 {
         self.area.right_edge()
     }

@@ -436,6 +436,10 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
         self.metrics
     }
 
+    pub(crate) fn text_area_left(&self) -> f32 {
+        self.append_surface.text_area_left()
+    }
+
     fn row_context(
         self,
         geometry: &'a DisplayRowGeometryState,

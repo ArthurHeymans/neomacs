@@ -75,7 +75,8 @@ use crate::display_row::source_render::{
 use crate::display_row::transition::*;
 use crate::display_row::walk_state::{
     BoxFaceRowState, DisplayRowTextOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker,
-    HorizontalScrollSkipState, HscrollConsumedTextDisposition, InvisibleTextScanCheckpoint,
+    HorizontalScrollDisplayItem, HorizontalScrollSkipState, HorizontalScrollTruncationTarget,
+    HorizontalScrollVisibleRemainder, HscrollConsumedTextDisposition, InvisibleTextScanCheckpoint,
     LineNumberRenderState, TrailingWhitespaceRenderState, WordWrapBreakCandidate,
     WordWrapRenderState,
 };
@@ -986,8 +987,12 @@ fn display_row_text_window_emit_context_applies_line_break_render_state_after_tr
     let mut ctx = RowTransitionTestContext::new("text-window-transition-line-state");
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
-    hscroll_skip.consume_columns(5);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Truncate,
+        4,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
+    hscroll_skip.consume_display_item(HorizontalScrollDisplayItem::tab(5));
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
@@ -1041,7 +1046,11 @@ fn display_row_text_window_emit_context_applies_overflow_render_state_after_tran
     let mut ctx = RowTransitionTestContext::new("text-window-transition-overflow-state");
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Wrap,
+        0,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
@@ -1102,8 +1111,12 @@ fn display_row_transition_render_state_applies_row_start_line_break_policy() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
-    hscroll_skip.consume_columns(5);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Truncate,
+        4,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
+    hscroll_skip.consume_display_item(HorizontalScrollDisplayItem::tab(5));
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
     word_wrap.record_candidate(
@@ -1145,7 +1158,11 @@ fn display_row_transition_render_state_applies_row_start_line_break_policy() {
 #[test]
 fn buffer_hscroll_skip_preserves_line_break_action() {
     let mut position = DisplaySourceTextPosition::new(0, 10);
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Truncate,
+        4,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
 
     let action = consume_hscroll_skip_from_position(b"\nnext", &mut position, &mut hscroll_skip, 8)
         .expect("hscroll skip action");
@@ -1153,8 +1170,7 @@ fn buffer_hscroll_skip_preserves_line_break_action() {
     assert_eq!(
         action,
         BufferSourceHscrollSkipAction::LineBreak {
-            ch_start_byte_idx: 0,
-            charpos: 11
+            source_char: DisplaySourceStepChar::new('\n', 0, 10),
         }
     );
     assert_eq!(position, DisplaySourceTextPosition::new(1, 11));
@@ -1164,7 +1180,11 @@ fn buffer_hscroll_skip_preserves_line_break_action() {
 #[test]
 fn buffer_hscroll_skip_consumes_tab_to_next_stop() {
     let mut position = DisplaySourceTextPosition::new(0, 0);
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Truncate,
+        4,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
 
     let action = consume_hscroll_skip_from_position(b"\tabc", &mut position, &mut hscroll_skip, 8)
         .expect("hscroll skip action");
@@ -1172,9 +1192,11 @@ fn buffer_hscroll_skip_consumes_tab_to_next_stop() {
     assert_eq!(
         action,
         BufferSourceHscrollSkipAction::Text {
-            ch_start_byte_idx: 0,
-            charpos: 1,
-            disposition: HscrollConsumedTextDisposition::ReplacedByLeftTruncation
+            source_char: DisplaySourceStepChar::new('\t', 0, 0),
+            disposition: HscrollConsumedTextDisposition::InstallLeftTruncation {
+                target: HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+                visible_remainder: HorizontalScrollVisibleRemainder::BlankColumns(3),
+            }
         }
     );
     assert_eq!(position, DisplaySourceTextPosition::new(1, 1));
@@ -1184,7 +1206,11 @@ fn buffer_hscroll_skip_consumes_tab_to_next_stop() {
 #[test]
 fn buffer_hscroll_skip_consumes_wide_char_columns() {
     let mut position = DisplaySourceTextPosition::new(0, 3);
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 2);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Truncate,
+        2,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
 
     let action =
         consume_hscroll_skip_from_position("界x".as_bytes(), &mut position, &mut hscroll_skip, 8)
@@ -1193,8 +1219,7 @@ fn buffer_hscroll_skip_consumes_wide_char_columns() {
     assert_eq!(
         action,
         BufferSourceHscrollSkipAction::Text {
-            ch_start_byte_idx: 0,
-            charpos: 4,
+            source_char: DisplaySourceStepChar::new('界', 0, 3),
             disposition: HscrollConsumedTextDisposition::Hidden
         }
     );
@@ -1208,9 +1233,11 @@ fn buffer_hscroll_skip_consumes_wide_char_columns() {
     assert_eq!(
         action,
         BufferSourceHscrollSkipAction::Text {
-            ch_start_byte_idx: "界".len(),
-            charpos: 5,
-            disposition: HscrollConsumedTextDisposition::ReplacedByLeftTruncation
+            source_char: DisplaySourceStepChar::new('x', "界".len(), 4),
+            disposition: HscrollConsumedTextDisposition::InstallLeftTruncation {
+                target: HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+                visible_remainder: HorizontalScrollVisibleRemainder::None,
+            }
         }
     );
     assert_eq!(position, DisplaySourceTextPosition::new("界x".len(), 5));
@@ -1220,7 +1247,11 @@ fn buffer_hscroll_skip_consumes_wide_char_columns() {
 #[test]
 fn buffer_hscroll_skip_keeps_marker_pending_while_still_skipping() {
     let mut position = DisplaySourceTextPosition::new(0, 0);
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 3);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Truncate,
+        3,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
 
     let action = consume_hscroll_skip_from_position(b"abc", &mut position, &mut hscroll_skip, 8)
         .expect("hscroll skip action");
@@ -1228,8 +1259,7 @@ fn buffer_hscroll_skip_keeps_marker_pending_while_still_skipping() {
     assert_eq!(
         action,
         BufferSourceHscrollSkipAction::Text {
-            ch_start_byte_idx: 0,
-            charpos: 1,
+            source_char: DisplaySourceStepChar::new('a', 0, 0),
             disposition: HscrollConsumedTextDisposition::Hidden
         }
     );
@@ -1249,7 +1279,11 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
     );
     let mut byte_idx = 0;
     let mut charpos = 0;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Truncate,
+        4,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
     let mut row_extend = DisplayRowScopedValue::inactive();
     let mut x = 0.0;
     let mut col = 0;
@@ -1335,14 +1369,18 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
     assert_eq!(byte_idx, 1);
     assert_eq!(charpos, 1);
     assert!(!hscroll_skip.should_skip());
-    assert_eq!(x, 8.0);
-    assert_eq!(col, 1);
+    assert_eq!(x, 32.0);
+    assert_eq!(col, 4);
     context
         .builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[GlyphArea::Text.index()];
-            assert_eq!(text.len(), 1);
+            assert_eq!(text.len(), 2);
             assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: '$' }));
+            assert!(matches!(
+                text[1].glyph_type,
+                GlyphType::Stretch { width_cols: 3 }
+            ));
             assert!(row.truncated_left);
         })
         .expect("current row");
@@ -1353,8 +1391,7 @@ fn buffer_hscroll_skip_action_applies_line_break_transition_state() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut context = RowTransitionTestContext::new("hscroll-line-break-state");
     let action = BufferSourceHscrollSkipAction::LineBreak {
-        ch_start_byte_idx: 3,
-        charpos: 12,
+        source_char: DisplaySourceStepChar::new('\n', 3, 11),
     };
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
@@ -1388,8 +1425,7 @@ fn buffer_hscroll_skip_action_captures_line_break_cursor() {
     let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let action = BufferSourceHscrollSkipAction::LineBreak {
-        ch_start_byte_idx: 3,
-        charpos: 12,
+        source_char: DisplaySourceStepChar::new('\n', 3, 11),
     };
     let mut cursor = CursorCaptureState::new();
 
@@ -1415,8 +1451,7 @@ fn buffer_hscroll_skip_action_applies_after_line_break_transition() {
     let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let action = BufferSourceHscrollSkipAction::LineBreak {
-        ch_start_byte_idx: 3,
-        charpos: 12,
+        source_char: DisplaySourceStepChar::new('\n', 3, 11),
     };
     let mut cursor = CursorCaptureState::new();
 
@@ -1440,8 +1475,7 @@ fn buffer_hscroll_skip_action_skips_after_state_when_transition_exhausted() {
     let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let action = BufferSourceHscrollSkipAction::LineBreak {
-        ch_start_byte_idx: 3,
-        charpos: 12,
+        source_char: DisplaySourceStepChar::new('\n', 3, 11),
     };
     let mut cursor = CursorCaptureState::new();
 
@@ -1465,8 +1499,7 @@ fn buffer_hscroll_skip_action_captures_text_cursor() {
     let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let action = BufferSourceHscrollSkipAction::Text {
-        ch_start_byte_idx: 5,
-        charpos: 9,
+        source_char: DisplaySourceStepChar::new('x', 5, 8),
         disposition: HscrollConsumedTextDisposition::Hidden,
     };
     let mut cursor = CursorCaptureState::new();
@@ -1478,6 +1511,27 @@ fn buffer_hscroll_skip_action_captures_text_cursor() {
     assert_eq!(captured.byte_idx, 5);
     assert_eq!(captured.col, 3);
     assert_eq!(captured.slot_width, Some(8.0));
+}
+
+#[test]
+fn buffer_hscroll_boundary_item_anchors_cursor_at_its_source_start() {
+    let active_face = test_active_face_state(FaceId::new(9), 8.0);
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let action = BufferSourceHscrollSkipAction::Text {
+        source_char: DisplaySourceStepChar::new('\t', 5, 8),
+        disposition: HscrollConsumedTextDisposition::InstallLeftTruncation {
+            target: HorizontalScrollTruncationTarget::LineNumberPrefix,
+            visible_remainder: HorizontalScrollVisibleRemainder::BlankColumns(3),
+        },
+    };
+    let mut cursor = CursorCaptureState::new();
+
+    action.capture_text_cursor_if_point(&mut cursor, &active_face, &geometry, 8, 32.0, 4);
+
+    let captured = cursor.as_ref().expect("boundary cursor captured");
+    assert_eq!(captured.x, 32.0);
+    assert_eq!(captured.byte_idx, 5);
+    assert_eq!(captured.col, 4);
 }
 
 #[test]
@@ -1523,9 +1577,11 @@ fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
         &face_resolver,
     );
     let action = BufferSourceHscrollSkipAction::Text {
-        ch_start_byte_idx: 5,
-        charpos: 9,
-        disposition: HscrollConsumedTextDisposition::ReplacedByLeftTruncation,
+        source_char: DisplaySourceStepChar::new('x', 5, 8),
+        disposition: HscrollConsumedTextDisposition::InstallLeftTruncation {
+            target: HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+            visible_remainder: HorizontalScrollVisibleRemainder::None,
+        },
     };
 
     action.append_left_truncation_marker_to_text_row_and_apply(
@@ -1913,7 +1969,11 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
     let mut box_face = BoxFaceRowState::inactive();
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
     let mut prefix_request = DisplayRowPrefixRequest::None;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Wrap,
+        0,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
     let mut face_scan = FaceScanCheckpoint::initial();
@@ -2897,7 +2957,11 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     let mut col = 5;
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut line_numbers = LineNumberRenderState::new(true, 1, 0);
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Wrap,
+        0,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut hit_row_range = HitRowRangeTracker::new(0);
     let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(charpos);
@@ -3069,7 +3133,11 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
     let mut hit_row_range = HitRowRangeTracker::new(1);
     let mut prefix_request = DisplayRowPrefixRequest::None;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Wrap,
+        0,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
     let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(charpos);
@@ -3397,7 +3465,11 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
     let mut final_position = DisplaySourceTextPosition::new(20, 30);
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Wrap,
+        0,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
     let mut wrap_state = WordWrapRenderState::new(true);
     wrap_state.allow_after_current_char(' ');
     wrap_state.record_candidate(
@@ -3627,7 +3699,11 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
     let mut hit_row_range = HitRowRangeTracker::new(6);
     let mut prefix_request = DisplayRowPrefixRequest::None;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Wrap,
+        0,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
     let mut face_scan = FaceScanCheckpoint::initial();
@@ -3874,7 +3950,11 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
     let mut hit_row_range = HitRowRangeTracker::new(6);
     let mut prefix_request = DisplayRowPrefixRequest::None;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Wrap,
+        0,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
     let mut face_scan = FaceScanCheckpoint::initial();
@@ -3974,7 +4054,11 @@ fn display_row_transition_render_state_applies_overflow_wrap_policy() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Wrap,
+        0,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
     word_wrap.record_candidate(
@@ -6889,7 +6973,11 @@ fn buffer_text_source_render_request_appends_plain_text_run_with_cursor_inside()
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
     let mut hit_row_range = HitRowRangeTracker::new(0);
     let mut prefix_request = DisplayRowPrefixRequest::None;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Wrap,
+        0,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
     let mut face_scan = FaceScanCheckpoint::initial();
@@ -7034,7 +7122,11 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_trailing_enabled
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
     let mut hit_row_range = HitRowRangeTracker::new(0);
     let mut prefix_request = DisplayRowPrefixRequest::None;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Truncate,
+        0,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
     trailing_whitespace.track_rendered_char(' ', context.geometry.start_marker_at_x(0.0));
@@ -7188,7 +7280,11 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_word_wrap_enable
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
     let mut hit_row_range = HitRowRangeTracker::new(0);
     let mut prefix_request = DisplayRowPrefixRequest::None;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Wrap,
+        0,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
     let mut word_wrap = WordWrapRenderState::new(true);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
     let mut face_scan = FaceScanCheckpoint::initial();
@@ -7343,7 +7439,11 @@ fn buffer_text_source_render_request_renders_fit_prefix_before_overflow() {
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
     let mut hit_row_range = HitRowRangeTracker::new(0);
     let mut prefix_request = DisplayRowPrefixRequest::None;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Wrap,
+        0,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
     let mut face_scan = FaceScanCheckpoint::initial();
@@ -7886,7 +7986,11 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
         },
     );
     output_emitter.note_display_buffer_pos(LispCharPos1::new(7));
-    write_char_to_current_row_with_width(&mut builder, 'x', FaceId::new(7), 0, 8.0);
+    builder
+        .edit_current_row_for_test(|row| {
+            crate::glyph_row_writer::push_stretch_to_row(row, 3, FaceId::new(7), 24.0, 0.0, 0.0, 0);
+        })
+        .expect("current row");
     crate::window_output::finish_text_window_row(
         TextWindowOutputTarget::from_builder(&mut builder),
         &mut output_emitter,
@@ -7941,8 +8045,11 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
     assert_eq!(row.height_px, 20.0);
     assert_eq!(row.ascent_px, 15.0);
     let text = &row.glyphs[GlyphArea::Text.index()];
-    assert!(matches!(text[4].glyph_type, GlyphType::Char { ch: '$' }));
-    assert_eq!(text[4].face_id, FaceId::new(9));
+    assert_eq!(text.len(), 3, "one stretch glyph occupies three columns");
+    assert_eq!(text[0].glyph_type, GlyphType::Stretch { width_cols: 3 });
+    assert!(matches!(text[1].glyph_type, GlyphType::Char { ch: ' ' }));
+    assert!(matches!(text[2].glyph_type, GlyphType::Char { ch: '$' }));
+    assert_eq!(text[2].face_id, FaceId::new(9));
 }
 
 #[test]
@@ -12326,7 +12433,11 @@ fn display_property_live_render_outcome(
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
     let mut hit_row_range = HitRowRangeTracker::new(0);
     let mut prefix_request = DisplayRowPrefixRequest::None;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(
+        LineWrapMode::Wrap,
+        0,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
     let mut face_scan = FaceScanCheckpoint::initial();

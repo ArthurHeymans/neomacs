@@ -19,6 +19,7 @@ use crate::display_row::append_context::{
 };
 use crate::display_row::builder::{
     DisplayRowGlyphCheckpoint, DisplayRowPosition, DisplayRowVerticalMetrics,
+    DisplayRowWriteMetrics,
 };
 use crate::display_row::face_environment::WindowFaces;
 use crate::display_row::face_state::{
@@ -38,6 +39,7 @@ use crate::display_row::render_state::{
 use crate::display_row::replacement::DisplayPropertyReplacementRowRenderRequest;
 use crate::display_row::source_state::DisplayRowSourceState;
 use crate::display_row::text_output::TextRowOutput;
+use crate::display_row::walk_state::HorizontalScrollVisibleRemainder;
 use crate::display_row::{
     DisplayRowRenderContext, DisplayRowRenderExecutor, DisplayRowRenderer,
     DisplayRowSourceFragmentFrame, DisplayRowSourceRenderRequest,
@@ -62,7 +64,9 @@ use crate::window_output::{
     WindowOutputEmitter, install_text_window_row_decoration_request,
     transition_text_window_row_with_limit,
 };
-use neomacs_display_protocol::glyph_matrix::{FringeBitmapInfo, GlyphArea, GlyphRow, GlyphType};
+use neomacs_display_protocol::glyph_matrix::{
+    FringeBitmapInfo, GlyphArea, GlyphProvenance, GlyphRow, GlyphType,
+};
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::emacs_core::Context;
@@ -133,6 +137,77 @@ impl DisplayCurrentRowMutation for TakeGlyphAreaMutation {
 struct AppendGlyphAreaMutation {
     area: GlyphArea,
     glyphs: Vec<neomacs_display_protocol::glyph_matrix::Glyph>,
+}
+
+/// Apply GNU `insert_left_trunc_glyphs` to an eagerly materialized display
+/// line-number prefix.
+///
+/// The hscroll marker is rendered through the normal synthetic-text path and
+/// is therefore the final TEXT_AREA glyph.  GNU's matrix operation replaces
+/// the prefix's leading glyph with that marker; it neither appends a column
+/// nor changes the source walk's body position.
+struct InstallLeadingHscrollMarkerFromTailMutation;
+
+impl DisplayCurrentRowMutation for InstallLeadingHscrollMarkerFromTailMutation {
+    type Output = ();
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output {
+        let text = &mut row.glyphs[GlyphArea::Text.index()];
+        let marker = text
+            .pop()
+            .expect("hscroll marker must be materialized before installation");
+        let first = text
+            .first_mut()
+            .expect("line-number prefix must precede its hscroll marker");
+        *first = marker;
+    }
+}
+
+/// Materialize the source-owned part of an item that remains visible after
+/// the hscroll boundary.  GNU does this while producing the boundary item;
+/// Neomacs' skip phase has already consumed that item, so the matrix mutation
+/// keeps its clipped representation and source provenance atomic.
+struct AppendHscrollVisibleRemainderMutation {
+    remainder: HorizontalScrollVisibleRemainder,
+    face_id: FaceId,
+    charpos: usize,
+    char_width: f32,
+}
+
+impl DisplayCurrentRowMutation for AppendHscrollVisibleRemainderMutation {
+    type Output = DisplayRowWriteMetrics;
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output {
+        let columns = self.remainder.columns();
+        let pixel_width = self.char_width.max(1.0) * columns as f32;
+        let provenance = GlyphProvenance::buffer(self.charpos);
+        match self.remainder {
+            HorizontalScrollVisibleRemainder::None => {}
+            HorizontalScrollVisibleRemainder::BlankColumns(columns) => {
+                crate::glyph_row_writer::push_stretch_to_area(
+                    row,
+                    GlyphArea::Text.index(),
+                    columns,
+                    self.face_id,
+                    pixel_width,
+                    0.0,
+                    0.0,
+                    provenance,
+                );
+            }
+            HorizontalScrollVisibleRemainder::WholeWideGlyph { ch, .. } => {
+                crate::glyph_row_writer::push_wide_char_to_area(
+                    row,
+                    GlyphArea::Text.index(),
+                    ch,
+                    self.face_id,
+                    provenance,
+                    pixel_width,
+                );
+            }
+        }
+        DisplayRowWriteMetrics::new(pixel_width, columns)
+    }
 }
 
 struct FirstTextGlyphAfterCheckpointMutation {
@@ -1287,6 +1362,38 @@ impl<'a> TextRowSourceRenderState<'a> {
     pub(crate) fn mark_current_text_row_truncated_left(&mut self) {
         self.output_render()
             .install_row_decoration(TextWindowRowDecorationRequest::MarkCurrentTruncatedLeft);
+    }
+
+    /// Move the just-rendered synthetic hscroll marker over the first glyph of
+    /// the structural line-number prefix, matching GNU's post-layout matrix
+    /// overwrite.  The mutation owns both the removal and replacement so no
+    /// caller can observe an invalid intermediate glyph row.
+    pub(crate) fn install_leading_hscroll_marker_from_tail(&mut self) {
+        self.output_render
+            .current_row_output()
+            .apply_current_row_mutation(InstallLeadingHscrollMarkerFromTailMutation)
+            .expect("hscroll marker installation requires a current text row");
+    }
+
+    pub(crate) fn append_hscroll_visible_remainder(
+        &mut self,
+        remainder: HorizontalScrollVisibleRemainder,
+        face_id: FaceId,
+        charpos: usize,
+        char_width: f32,
+        start: DisplayRowPosition,
+    ) -> DisplayRowPosition {
+        let metrics = self
+            .output_render
+            .current_row_output()
+            .apply_current_row_mutation(AppendHscrollVisibleRemainderMutation {
+                remainder,
+                face_id,
+                charpos,
+                char_width,
+            })
+            .expect("hscroll boundary remainder requires a current text row");
+        start.advance_by(metrics)
     }
 
     /// Fill the current row's background from the current pen `x` to the

@@ -65,8 +65,10 @@ use crate::display_row::walk_state::FaceScanCheckpoint;
 use crate::display_row::walk_state::WordWrapBreakCandidate;
 #[cfg(test)]
 use crate::display_row::walk_state::{
-    BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState, InvisibleTextScanCheckpoint,
-    LineNumberRenderState, TrailingWhitespaceRenderState, WordWrapRenderState,
+    BoxFaceRowState, HitRowRangeTracker, HorizontalScrollDisplayItem, HorizontalScrollSkipState,
+    HorizontalScrollTruncationTarget, HorizontalScrollVisibleRemainder,
+    HscrollConsumedTextDisposition, InvisibleTextScanCheckpoint, LineNumberRenderState,
+    TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::display_status_line::{max_mini_window_lines, max_mini_window_lines_for_buffer};
 use crate::font::frame_metrics::FrameFontDomain;

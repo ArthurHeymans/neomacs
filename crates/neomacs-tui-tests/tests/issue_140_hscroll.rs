@@ -170,6 +170,75 @@ fn issue_140_ce_with_line_numbers_matches_gnu() {
     assert_pair_exact_display("issue_140_ce_with_line_numbers_matches_gnu", &gnu, &neo);
 }
 
+/// GNU `move_it_in` can cross `first_visible_x` in the middle of one display
+/// item (for example, a tab).  It still emits the pending line number before
+/// that item's visible part, and `insert_left_trunc_glyphs` overwrites the
+/// line-number field's first glyph.  The truncation target is therefore a row
+/// structure choice, not a consequence of whether the source walk lands on or
+/// crosses the horizontal-scroll boundary.
+#[test]
+fn issue_140_tab_crossing_hscroll_with_line_numbers_matches_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+    resize_both(&mut gnu, &mut neo, 40, 160);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(700));
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(progn (erase-buffer) (setq truncate-lines t) (setq display-line-numbers t) \
+         (insert 9 (make-string 300 ?x) 10) (goto-char (point-min)) nil)",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_millis(900));
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(progn (scroll-left 5) (redisplay) nil)",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    let gh = window_hscroll(&mut gnu);
+    let nh = window_hscroll(&mut neo);
+    assert_eq!(gh, 5, "precondition: GNU manual hscroll must stick");
+    assert_eq!(nh, gh, "Neomacs hscroll must match GNU");
+    assert_pair_exact_display(
+        "issue_140_tab_crossing_hscroll_with_line_numbers_matches_gnu",
+        &gnu,
+        &neo,
+    );
+}
+
+/// A double-width terminal glyph is another display item that can cross the
+/// left boundary.  Keep this beside the tab case so the boundary contract is
+/// defined by display columns rather than accidentally special-cased to tabs.
+#[test]
+fn issue_140_wide_glyph_crossing_hscroll_with_line_numbers_matches_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+    resize_both(&mut gnu, &mut neo, 40, 160);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(700));
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(progn (erase-buffer) (setq truncate-lines t) (setq display-line-numbers t) \
+         (insert \"界\" (make-string 300 ?x) 10) (goto-char (point-min)) nil)",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_millis(900));
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(progn (scroll-left 1) (redisplay) nil)",
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    let gh = window_hscroll(&mut gnu);
+    let nh = window_hscroll(&mut neo);
+    assert_eq!(gh, 1, "precondition: GNU manual hscroll must stick");
+    assert_eq!(nh, gh, "Neomacs hscroll must match GNU");
+    assert_pair_exact_display(
+        "issue_140_wide_glyph_crossing_hscroll_with_line_numbers_matches_gnu",
+        &gnu,
+        &neo,
+    );
+}
+
 #[test]
 fn issue_140_ce_at_eob_no_newline_centers() {
     // 300 x's, NO trailing newline -> point at EOB -> GNU centers (text_cols/2).

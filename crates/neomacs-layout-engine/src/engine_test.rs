@@ -244,8 +244,12 @@ fn word_wrap_render_state_records_candidates_only_when_wrap_is_allowed() {
 #[test]
 fn text_row_transition_state_policy_applies_line_break_state_updates() {
     let mut line_numbers = LineNumberRenderState::new(true, 3, 5);
-    let mut hscroll = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
-    hscroll.consume_columns(2);
+    let mut hscroll = HorizontalScrollSkipState::new(
+        LineWrapMode::Truncate,
+        4,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
+    hscroll.consume_display_item(HorizontalScrollDisplayItem::glyph('界', 2));
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
     word_wrap.record_candidate(
@@ -291,8 +295,12 @@ fn text_row_transition_state_policy_applies_line_break_state_updates() {
 #[test]
 fn text_row_transition_state_policy_applies_character_wrap_state_updates() {
     let mut line_numbers = LineNumberRenderState::new(true, 3, 5);
-    let mut hscroll = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
-    hscroll.consume_columns(2);
+    let mut hscroll = HorizontalScrollSkipState::new(
+        LineWrapMode::Truncate,
+        4,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
+    hscroll.consume_display_item(HorizontalScrollDisplayItem::glyph('界', 2));
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
     word_wrap.record_candidate(
@@ -832,17 +840,21 @@ fn overlay_string_render_source_exposes_typed_render_inputs() {
 
 #[test]
 fn horizontal_scroll_skip_state_consumes_and_resets_remaining_columns() {
-    let mut state = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 5);
+    let mut state = HorizontalScrollSkipState::new(
+        LineWrapMode::Truncate,
+        5,
+        HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph,
+    );
 
     assert!(state.should_skip());
     assert_eq!(state.consumed_columns(), 0);
 
-    state.consume_columns(2);
+    state.consume_display_item(HorizontalScrollDisplayItem::glyph('界', 2));
 
     assert!(state.should_skip());
     assert_eq!(state.consumed_columns(), 2);
 
-    state.consume_columns(9);
+    state.consume_display_item(HorizontalScrollDisplayItem::tab(9));
 
     assert!(!state.should_skip());
     assert_eq!(state.consumed_columns(), 5);
@@ -851,7 +863,73 @@ fn horizontal_scroll_skip_state_consumes_and_resets_remaining_columns() {
 
     assert!(state.should_skip());
     assert_eq!(state.consumed_columns(), 0);
-    assert!(!HorizontalScrollSkipState::new(LineWrapMode::Wrap, 5).should_skip());
+    assert!(
+        !HorizontalScrollSkipState::new(
+            LineWrapMode::Wrap,
+            5,
+            HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph
+        )
+        .should_skip()
+    );
+}
+
+#[test]
+fn horizontal_scroll_line_number_target_completes_at_exact_boundary() {
+    let mut state = HorizontalScrollSkipState::new(
+        LineWrapMode::Truncate,
+        5,
+        HorizontalScrollTruncationTarget::LineNumberPrefix,
+    );
+
+    assert_eq!(
+        state.consume_display_item(HorizontalScrollDisplayItem::tab(5)),
+        HscrollConsumedTextDisposition::InstallLeftTruncation {
+            target: HorizontalScrollTruncationTarget::LineNumberPrefix,
+            visible_remainder: HorizontalScrollVisibleRemainder::None,
+        }
+    );
+    assert!(!state.should_skip());
+    assert_eq!(state.consumed_columns(), 5);
+}
+
+#[test]
+fn horizontal_scroll_line_number_target_survives_crossing_boundary() {
+    let mut state = HorizontalScrollSkipState::new(
+        LineWrapMode::Truncate,
+        5,
+        HorizontalScrollTruncationTarget::LineNumberPrefix,
+    );
+
+    assert_eq!(
+        state.consume_display_item(HorizontalScrollDisplayItem::tab(8)),
+        HscrollConsumedTextDisposition::InstallLeftTruncation {
+            target: HorizontalScrollTruncationTarget::LineNumberPrefix,
+            visible_remainder: HorizontalScrollVisibleRemainder::BlankColumns(3),
+        }
+    );
+    assert!(!state.should_skip());
+    assert_eq!(state.consumed_columns(), 5);
+}
+
+#[test]
+fn horizontal_scroll_line_number_target_retains_crossing_wide_glyph() {
+    let mut state = HorizontalScrollSkipState::new(
+        LineWrapMode::Truncate,
+        1,
+        HorizontalScrollTruncationTarget::LineNumberPrefix,
+    );
+
+    assert_eq!(
+        state.consume_display_item(HorizontalScrollDisplayItem::glyph('界', 2)),
+        HscrollConsumedTextDisposition::InstallLeftTruncation {
+            target: HorizontalScrollTruncationTarget::LineNumberPrefix,
+            visible_remainder: HorizontalScrollVisibleRemainder::WholeWideGlyph {
+                ch: '界',
+                columns: 2,
+            },
+        }
+    );
+    assert!(!state.should_skip());
 }
 
 #[test]
@@ -11085,6 +11163,50 @@ fn tty_hscroll_eol_cursor_matches_gnu_display_matrix() {
     assert_eq!(cursor.row, 0);
     assert_eq!(cursor.col, 156);
     assert_eq!(cursor.x, 156 * 8);
+}
+
+#[test]
+fn tty_hscroll_overwrites_line_number_prefix_without_consuming_source() {
+    // GNU xdisp.c:10182-10188 defers `maybe_produce_line_number` while the
+    // iterator is left of `first_visible_x`.  Once the first source glyph is
+    // visible, display_line emits the complete line-number field and
+    // `insert_left_trunc_glyphs` later overwrites its first glyph
+    // (xdisp.c:26698-26710).  The `$` therefore occupies the gutter; it neither
+    // consumes the first visible source glyph nor reduces body capacity.
+    let text = format!("{}\n", "x".repeat(300));
+    let trace = backend_layout_trace_with_buffer_and_window_setup(
+        BufferTextBackendKind::GapBuffer,
+        "tty-hscroll-line-number-prefix-overwrite",
+        &text,
+        1280,
+        800,
+        |buffer, _buf_id, _text| {
+            buffer.set_buffer_local("truncate-lines", Value::T);
+            buffer.set_buffer_local("display-line-numbers", Value::T);
+            buffer.goto_emacs_byte_pos(EmacsBytePos::new(300));
+        },
+        |window| {
+            if let neovm_core::window::Window::Leaf { point, hscroll, .. } = window {
+                *point = LispCharPos1::from_one_based_usize(301);
+                *hscroll = 148;
+            }
+        },
+    );
+
+    let row = trace
+        .matrix_rows
+        .iter()
+        .find(|row| row.role == GlyphRowRole::Text && row.truncated_left)
+        .expect("hscrolled numbered text row");
+    let visible_text = row.glyph_areas[GlyphArea::Text.index()]
+        .iter()
+        .map(glyph_trace_text)
+        .collect::<Vec<_>>()
+        .join("");
+    // The final positionless space is the newline redisplay glyph (the same
+    // invariant covered by `tty_hscroll_eol_cursor_matches_gnu_display_matrix`),
+    // not a lost body cell or a right-truncation marker.
+    assert_eq!(visible_text, format!("$ 1 {} ", "x".repeat(152)));
 }
 
 #[test]

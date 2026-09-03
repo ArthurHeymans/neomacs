@@ -876,14 +876,34 @@ pub(crate) fn display_row_text_is_empty(row: &GlyphRow) -> bool {
     display_row_text_glyph_count(row) == 0
 }
 
-pub(crate) fn display_row_total_glyph_count(row: &GlyphRow) -> usize {
-    row.glyphs[GlyphArea::LeftMargin.index()].len()
-        + row.glyphs[GlyphArea::Text.index()].len()
-        + row.glyphs[GlyphArea::RightMargin.index()].len()
+/// A row extent measured in terminal/display columns, not backing-vector
+/// glyphs.  A single stretch glyph can occupy many columns, so keeping this as
+/// a distinct type prevents structural decorators from accidentally treating
+/// `Vec<Glyph>::len()` as a screen coordinate.
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct DisplayRowColumnCount(usize);
+
+impl DisplayRowColumnCount {
+    pub(crate) fn from_row(row: &GlyphRow, char_width_px: f32) -> Self {
+        Self(
+            row.glyphs
+                .iter()
+                .map(|area| DisplayRowWriteMetrics::from_glyphs(area, char_width_px).width_cols())
+                .sum(),
+        )
+    }
+
+    pub(crate) const fn get(self) -> usize {
+        self.0
+    }
 }
 
-pub(crate) fn trim_display_row_text_to_total_glyph_count(row: &mut GlyphRow, target: usize) {
-    while display_row_total_glyph_count(row) > target {
+pub(crate) fn trim_display_row_text_to_total_columns(
+    row: &mut GlyphRow,
+    target: usize,
+    char_width_px: f32,
+) {
+    while DisplayRowColumnCount::from_row(row, char_width_px).get() > target {
         let text_area = &mut row.glyphs[GlyphArea::Text.index()];
         if text_area.is_empty() {
             break;

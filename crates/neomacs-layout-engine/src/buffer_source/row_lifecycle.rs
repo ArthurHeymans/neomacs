@@ -36,7 +36,8 @@ use crate::display_row::transition::{
     DisplayRowTransitionContinuation,
 };
 use crate::display_row::walk_state::{
-    BoxFaceRowState, FaceScanCheckpoint, HitRowRangeTracker, HorizontalScrollSkipState,
+    BoxFaceRowState, FaceScanCheckpoint, HitRowRangeTracker, HorizontalScrollDisplayItem,
+    HorizontalScrollSkipState, HorizontalScrollTruncationTarget, HorizontalScrollVisibleRemainder,
     HscrollConsumedTextDisposition, InvisibleTextScanCheckpoint, LineNumberRenderState,
     TrailingWhitespaceRenderState, sync_position_after_row_transition,
 };
@@ -88,12 +89,10 @@ fn sync_row_extend_to_active_face(
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferSourceHscrollSkipAction {
     LineBreak {
-        ch_start_byte_idx: usize,
-        charpos: i64,
+        source_char: DisplaySourceStepChar,
     },
     Text {
-        ch_start_byte_idx: usize,
-        charpos: i64,
+        source_char: DisplaySourceStepChar,
         disposition: HscrollConsumedTextDisposition,
     },
 }
@@ -105,29 +104,41 @@ impl BufferSourceHscrollSkipAction {
 
     pub(crate) fn ch_start_byte_idx(self) -> usize {
         match self {
-            Self::LineBreak {
-                ch_start_byte_idx, ..
+            Self::LineBreak { source_char } | Self::Text { source_char, .. } => {
+                source_char.start_byte_idx()
             }
-            | Self::Text {
-                ch_start_byte_idx, ..
-            } => ch_start_byte_idx,
         }
     }
 
-    pub(crate) fn charpos(self) -> i64 {
+    pub(crate) fn end_charpos(self) -> i64 {
         match self {
-            Self::LineBreak { charpos, .. } | Self::Text { charpos, .. } => charpos,
+            Self::LineBreak { source_char } | Self::Text { source_char, .. } => {
+                source_char.start_charpos() + 1
+            }
         }
     }
 
-    pub(crate) fn should_show_left_truncation(self) -> bool {
-        matches!(
-            self,
+    fn left_truncation_effect(
+        self,
+    ) -> Option<(
+        HorizontalScrollTruncationTarget,
+        HorizontalScrollVisibleRemainder,
+    )> {
+        match self {
             Self::Text {
-                disposition: HscrollConsumedTextDisposition::ReplacedByLeftTruncation,
+                disposition:
+                    HscrollConsumedTextDisposition::InstallLeftTruncation {
+                        target,
+                        visible_remainder,
+                    },
                 ..
-            }
-        )
+            } => Some((target, visible_remainder)),
+            Self::LineBreak { .. }
+            | Self::Text {
+                disposition: HscrollConsumedTextDisposition::Hidden,
+                ..
+            } => None,
+        }
     }
 
     pub(crate) fn apply_line_break_before_row_transition(
@@ -139,7 +150,7 @@ impl BufferSourceHscrollSkipAction {
     ) {
         if self.is_line_break() {
             *x = content_x;
-            output_emitter.note_display_buffer_pos(LispCharPos1::new(self.charpos()));
+            output_emitter.note_display_buffer_pos(LispCharPos1::new(self.end_charpos()));
             row_extend.clear();
         }
     }
@@ -151,8 +162,8 @@ impl BufferSourceHscrollSkipAction {
         if !self.is_line_break() {
             return None;
         }
-        let hit_range = hit_row_range.range_to(self.charpos());
-        hit_row_range.advance_to(self.charpos());
+        let hit_range = hit_row_range.range_to(self.end_charpos());
+        hit_row_range.advance_to(self.end_charpos());
         Some(hit_range)
     }
 
@@ -166,7 +177,7 @@ impl BufferSourceHscrollSkipAction {
         col: usize,
         char_h: f32,
     ) {
-        if !target.is_missing() || point_charpos != self.charpos() {
+        if !target.is_missing() || point_charpos != self.end_charpos() {
             return;
         }
         capture_cursor_approximation(
@@ -218,7 +229,14 @@ impl BufferSourceHscrollSkipAction {
         x: f32,
         col: usize,
     ) {
-        if !target.is_missing() || point_charpos != self.charpos() {
+        let Self::Text {
+            source_char,
+            disposition,
+        } = self
+        else {
+            return;
+        };
+        if !target.is_missing() || point_charpos != disposition.cursor_anchor_charpos(source_char) {
             return;
         }
         capture_cursor_approximation(
@@ -226,7 +244,7 @@ impl BufferSourceHscrollSkipAction {
             CapturedCursorInfo::from_active_face_state(
                 active_face_state,
                 CapturedCursorPlacement::from_row_text_position(
-                    row_geometry.text_position(x, self.ch_start_byte_idx(), col),
+                    row_geometry.text_position(x, source_char.start_byte_idx(), col),
                     CapturedCursorSlotWidth::FaceChar,
                     false,
                 ),
@@ -241,32 +259,38 @@ impl BufferSourceHscrollSkipAction {
         source_render: &mut TextRowSourceRenderState<'_>,
         mut row_progress: DisplaySourceRowProgressState<'_>,
         content_x: f32,
-    ) {
-        if !self.should_show_left_truncation() {
-            return;
-        }
-        // The `$` OVERLAYS this character; it does not replace its position.
+    ) -> Option<DisplayRowPosition> {
+        let Some((target, visible_remainder)) = self.left_truncation_effect() else {
+            return None;
+        };
+        let body_position = row_progress.row_position();
+
         // GNU produces the marker with `CHARPOS (truncate_it.position) = -1`
-        // and `object = Qnil` (src/xdisp.c:23858-23860) and then overwrites the
-        // glyph in place, and answers the column from the WALK instead:
-        // `buffer_posn_from_coords` adds `it.first_visible_x` to the target x
-        // (src/dispnew.c:6300-6302) and stops the iterator on exactly this
-        // character.  Measured, GNU Emacs 31.0.90, 80x24 pty: a line starting at
-        // 202 hscrolled by 5 answers 207 -- not 208 -- for a click in column 0.
-        //
-        // Published BEFORE the marker is appended, while the row's pen is still
-        // on the marker's own column.
+        // and `object = Qnil` (src/xdisp.c:23858-23860), then overwrites an
+        // already-laid-out glyph.  In the ordinary case that glyph represents
+        // the first visible source character.  With line numbers it is the
+        // first structural prefix glyph, while the source walk is already at
+        // the first visible character (`maybe_produce_line_number`,
+        // xdisp.c:10182-10188, 10628-10634).
         let metrics = render_context.metrics();
+        let active_face_id = render_context.active_face().face_id();
+        let marker_x = match target {
+            HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph => row_progress.x(),
+            HorizontalScrollTruncationTarget::LineNumberPrefix => render_context.text_area_left(),
+        };
         source_render
             .output_emitter()
             .push_text_overlaid_marker_point(
-                LispCharPos1::new(self.charpos()),
-                row_progress.x(),
+                LispCharPos1::new(self.end_charpos()),
+                marker_x,
                 row_geometry.y(),
                 metrics.char_width(),
                 row_geometry.height(),
                 row_geometry.row(),
-                row_progress.col(),
+                match target {
+                    HorizontalScrollTruncationTarget::FirstVisibleSourceGlyph => row_progress.col(),
+                    HorizontalScrollTruncationTarget::LineNumberPrefix => 0,
+                },
             );
         append_hscroll_truncation_marker_to_text_row(
             render_context,
@@ -275,6 +299,28 @@ impl BufferSourceHscrollSkipAction {
             &mut row_progress,
             content_x,
         );
+        if target == HorizontalScrollTruncationTarget::LineNumberPrefix {
+            source_render.install_leading_hscroll_marker_from_tail();
+            // The appended marker was only a vehicle for normal face/glyph
+            // construction.  Moving it over the prefix must not consume a
+            // body column; the next source character starts at `content_x`.
+            row_progress.apply_position(body_position);
+        }
+        let cursor_anchor = row_progress.row_position();
+        if visible_remainder != HorizontalScrollVisibleRemainder::None {
+            let end = source_render.append_hscroll_visible_remainder(
+                visible_remainder,
+                active_face_id,
+                match self {
+                    Self::Text { source_char, .. } => source_char.start_charpos().max(0) as usize,
+                    Self::LineBreak { .. } => unreachable!("line breaks have no visible remainder"),
+                },
+                metrics.char_width(),
+                cursor_anchor,
+            );
+            row_progress.apply_position(end);
+        }
+        Some(cursor_anchor)
     }
 }
 
@@ -518,22 +564,20 @@ fn consume_source_char_for_hscroll(
     hscroll_skip: &mut HorizontalScrollSkipState,
     tab_width: i32,
 ) -> BufferSourceHscrollSkipAction {
-    let end_charpos = source_char.start_charpos() + 1;
     if source_char.ch() == '\n' {
-        return BufferSourceHscrollSkipAction::LineBreak {
-            ch_start_byte_idx: source_char.start_byte_idx(),
-            charpos: end_charpos,
-        };
+        return BufferSourceHscrollSkipAction::LineBreak { source_char };
     }
 
-    let disposition = hscroll_skip.consume_columns(hscroll_skip_column_width(
-        source_char,
-        tab_width,
-        hscroll_skip.consumed_columns(),
-    ));
+    let columns =
+        hscroll_skip_column_width(source_char, tab_width, hscroll_skip.consumed_columns());
+    let display_item = if source_char.ch() == '\t' {
+        HorizontalScrollDisplayItem::tab(columns)
+    } else {
+        HorizontalScrollDisplayItem::glyph(source_char.ch(), columns)
+    };
+    let disposition = hscroll_skip.consume_display_item(display_item);
     BufferSourceHscrollSkipAction::Text {
-        ch_start_byte_idx: source_char.start_byte_idx(),
-        charpos: end_charpos,
+        source_char,
         disposition,
     }
 }
@@ -594,7 +638,7 @@ impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
         // START and never its END; only the first one takes.
         source_render
             .output_emitter()
-            .note_row_walk_start(LispCharPos1::new(hscroll_action.charpos()));
+            .note_row_walk_start(LispCharPos1::new(hscroll_action.end_charpos()));
 
         if hscroll_action.is_line_break() {
             progress.reset_physical_line_tabs();
@@ -640,27 +684,28 @@ impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
             );
         }
 
-        hscroll_action.append_left_truncation_marker_to_text_row_and_apply(
-            BufferSyntheticTextRenderContext::with_face_attempt(
-                context.append_surface,
-                context.active_face_state,
-                0.0,
-                context.metrics,
-                face_ids.clone(),
-            ),
-            row_build.row_geometry,
-            &mut source_render.reborrow(),
-            progress.row_progress_mut().reborrow(),
-            context.content_x,
-        );
-        let row_position = progress.row_position();
+        let cursor_position = hscroll_action
+            .append_left_truncation_marker_to_text_row_and_apply(
+                BufferSyntheticTextRenderContext::with_face_attempt(
+                    context.append_surface,
+                    context.active_face_state,
+                    0.0,
+                    context.metrics,
+                    face_ids.clone(),
+                ),
+                row_build.row_geometry,
+                &mut source_render.reborrow(),
+                progress.row_progress_mut().reborrow(),
+                context.content_x,
+            )
+            .unwrap_or_else(|| progress.row_position());
         hscroll_action.capture_text_cursor_if_point(
             cursor_info,
             context.active_face_state,
             row_build.row_geometry,
             context.point_charpos,
-            row_position.x_px(),
-            row_position.col(),
+            cursor_position.x_px(),
+            cursor_position.col(),
         );
         DisplayRowTransitionContinuation::Continue
     }
