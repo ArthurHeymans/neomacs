@@ -25,6 +25,16 @@ pub(super) struct DeliverySender<T> {
     notifier: Option<WaitNotifier>,
 }
 
+impl<T> Clone for DeliverySender<T> {
+    fn clone(&self) -> Self {
+        Self {
+            sender: self.sender.clone(),
+            overflowed: Arc::clone(&self.overflowed),
+            notifier: self.notifier.clone(),
+        }
+    }
+}
+
 pub(super) struct DeliveryReceiver<T> {
     receiver: Receiver<T>,
     overflowed: Arc<AtomicBool>,

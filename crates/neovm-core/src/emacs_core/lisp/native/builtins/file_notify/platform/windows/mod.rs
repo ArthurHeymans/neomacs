@@ -74,6 +74,34 @@ impl W32Request {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WatchMode {
+    Direct,
+    Recursive,
+}
+
+impl WatchMode {
+    fn from_recursive(recursive: bool) -> Self {
+        if recursive {
+            Self::Recursive
+        } else {
+            Self::Direct
+        }
+    }
+
+    fn covers(self, requested: Self) -> bool {
+        self == Self::Recursive || self == requested
+    }
+
+    #[cfg(target_os = "windows")]
+    fn into_notify(self) -> notify::RecursiveMode {
+        match self {
+            Self::Direct => notify::RecursiveMode::NonRecursive,
+            Self::Recursive => notify::RecursiveMode::Recursive,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum W32Action {
     Added,
     Removed,
@@ -154,7 +182,7 @@ fn event_actions(event: &notify::Event, request: &W32Request) -> Vec<(usize, W32
 
 #[cfg(target_os = "windows")]
 mod native {
-    use super::super::super::delivery::{self, DeliveryReceiver, EVENT_CAPACITY};
+    use super::super::super::delivery::{self, DeliveryReceiver, DeliverySender, EVENT_CAPACITY};
     use super::*;
     use crate::emacs_core::process::WaitNotifier;
     use notify::Watcher;
@@ -165,22 +193,53 @@ mod native {
         is_directory: bool,
     }
 
+    struct PhysicalWatch {
+        _watcher: notify::ReadDirectoryChangesWatcher,
+        mode: WatchMode,
+    }
+
     #[derive(Default)]
     pub(crate) struct W32NotifyBackend {
-        watcher: Option<notify::ReadDirectoryChangesWatcher>,
+        tx: Option<DeliverySender<Result<notify::Event, notify::Error>>>,
         rx: Option<DeliveryReceiver<Result<notify::Event, notify::Error>>>,
         watches: Vec<W32Watch>,
-        physical_modes: HashMap<PathBuf, bool>,
+        physical_watches: HashMap<PathBuf, PhysicalWatch>,
         next_id: i64,
     }
 
     impl W32NotifyBackend {
-        fn ensure_watcher(&mut self, notifier: Option<WaitNotifier>) -> Result<(), Flow> {
-            if self.watcher.is_some() {
-                return Ok(());
+        fn ensure_delivery(&mut self, notifier: Option<WaitNotifier>) {
+            if self.tx.is_some() {
+                return;
             }
             let (tx, rx) = delivery::channel(notifier);
-            let watcher = notify::ReadDirectoryChangesWatcher::new(
+            self.tx = Some(tx);
+            self.rx = Some(rx);
+        }
+
+        fn allocate_id(&mut self) -> i64 {
+            let id = self.next_id;
+            self.next_id = self
+                .next_id
+                .checked_add(1)
+                .expect("file notification descriptor space exhausted");
+            id
+        }
+
+        fn configure_path(&mut self, path: &Path, requested: WatchMode) -> Result<(), Flow> {
+            if self
+                .physical_watches
+                .get(path)
+                .is_some_and(|watch| watch.mode.covers(requested))
+            {
+                return Ok(());
+            }
+
+            // Construct and arm the replacement before dropping the old
+            // watcher. A failed recursive upgrade therefore leaves every
+            // existing logical watch physically active.
+            let tx = self.tx.as_ref().expect("delivery was initialized").clone();
+            let mut watcher = notify::ReadDirectoryChangesWatcher::new(
                 move |result| {
                     tx.publish(result);
                 },
@@ -193,73 +252,23 @@ mod native {
                     None,
                 )
             })?;
-            self.watcher = Some(watcher);
-            self.rx = Some(rx);
+            watcher
+                .watch(path, requested.into_notify())
+                .map_err(|error| {
+                    file_notify_error(
+                        "Cannot watch file",
+                        Some(error.to_string()),
+                        Some(Value::string(path.display().to_string())),
+                    )
+                })?;
+            self.physical_watches.insert(
+                path.to_path_buf(),
+                PhysicalWatch {
+                    _watcher: watcher,
+                    mode: requested,
+                },
+            );
             Ok(())
-        }
-
-        fn allocate_id(&mut self) -> i64 {
-            let id = self.next_id;
-            self.next_id = self
-                .next_id
-                .checked_add(1)
-                .expect("file notification descriptor space exhausted");
-            id
-        }
-
-        fn configure_path(&mut self, path: &Path, recursive: bool) -> Result<(), Flow> {
-            let previous = self.physical_modes.get(path).copied();
-            if previous == Some(recursive) || previous == Some(true) {
-                return Ok(());
-            }
-            let watcher = self.watcher.as_mut().expect("watcher was initialized");
-            if previous.is_some() {
-                let _ = watcher.unwatch(path);
-            }
-            let mode = if recursive {
-                notify::RecursiveMode::Recursive
-            } else {
-                notify::RecursiveMode::NonRecursive
-            };
-            watcher.watch(path, mode).map_err(|error| {
-                file_notify_error(
-                    "Cannot watch file",
-                    Some(error.to_string()),
-                    Some(Value::string(path.display().to_string())),
-                )
-            })?;
-            self.physical_modes.insert(path.to_path_buf(), recursive);
-            Ok(())
-        }
-
-        fn reconfigure_after_removal(&mut self, path: &Path) {
-            let desired = self
-                .watches
-                .iter()
-                .filter(|watch| watch.common.path == path)
-                .map(|watch| watch.common.request.recursive())
-                .reduce(|left, right| left || right);
-            let Some(watcher) = self.watcher.as_mut() else {
-                return;
-            };
-            let _ = watcher.unwatch(path);
-            match desired {
-                Some(recursive) => {
-                    let mode = if recursive {
-                        notify::RecursiveMode::Recursive
-                    } else {
-                        notify::RecursiveMode::NonRecursive
-                    };
-                    if watcher.watch(path, mode).is_ok() {
-                        self.physical_modes.insert(path.to_path_buf(), recursive);
-                    } else {
-                        self.physical_modes.remove(path);
-                    }
-                }
-                None => {
-                    self.physical_modes.remove(path);
-                }
-            }
         }
 
         fn watch_matches_path(watch: &W32Watch, event_path: &Path) -> bool {
@@ -322,7 +331,7 @@ mod native {
             request: Self::Request,
             notifier: Option<WaitNotifier>,
         ) -> Result<WatchId, Flow> {
-            self.ensure_watcher(notifier)?;
+            self.ensure_delivery(notifier);
             if !path.exists() {
                 return Err(file_notify_error(
                     "Cannot watch file",
@@ -330,7 +339,7 @@ mod native {
                     Some(Value::string(path.display().to_string())),
                 ));
             }
-            self.configure_path(path, request.recursive())?;
+            self.configure_path(path, WatchMode::from_recursive(request.recursive()))?;
             let descriptor = WatchId::new(self.allocate_id(), 0);
             self.watches.push(W32Watch {
                 common: FileWatch {
@@ -352,11 +361,17 @@ mod native {
                 return Ok(false);
             };
             let removed = self.watches.remove(index);
-            self.reconfigure_after_removal(&removed.common.path);
+            if !self
+                .watches
+                .iter()
+                .any(|watch| watch.common.path == removed.common.path)
+            {
+                self.physical_watches.remove(&removed.common.path);
+            }
             if self.watches.is_empty() {
-                self.watcher = None;
+                self.tx = None;
                 self.rx = None;
-                self.physical_modes.clear();
+                self.physical_watches.clear();
             }
             Ok(true)
         }

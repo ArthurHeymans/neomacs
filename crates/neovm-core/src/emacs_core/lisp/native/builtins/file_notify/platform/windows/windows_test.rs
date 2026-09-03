@@ -62,3 +62,11 @@ fn w32_request_parsing_and_lisp_event_shape_match_gnu() {
         ]
     );
 }
+
+#[test]
+fn recursive_physical_watch_satisfies_both_logical_watch_modes() {
+    assert!(WatchMode::Recursive.covers(WatchMode::Direct));
+    assert!(WatchMode::Recursive.covers(WatchMode::Recursive));
+    assert!(WatchMode::Direct.covers(WatchMode::Direct));
+    assert!(!WatchMode::Direct.covers(WatchMode::Recursive));
+}
