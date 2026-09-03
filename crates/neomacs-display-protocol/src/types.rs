@@ -56,6 +56,45 @@ display_id_type!(SurfaceId, u32);
 // neovm bridge boundary, which wrap into `FaceId` immediately.
 display_id_type!(FaceId, u32);
 
+/// Visual direction encoded by the parity of a resolved Unicode bidi level.
+///
+/// Keep parity interpretation at the protocol boundary instead of scattering
+/// integer bit tests through renderers.  Consumers must exhaustively handle
+/// both directions, while the full numeric level remains available on glyphs
+/// for diagnostics and nested-run semantics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum ResolvedBidiDirection {
+    LeftToRight,
+    RightToLeft,
+}
+
+impl ResolvedBidiDirection {
+    #[must_use]
+    pub const fn from_level(level: u8) -> Self {
+        if level & 1 == 0 {
+            Self::LeftToRight
+        } else {
+            Self::RightToLeft
+        }
+    }
+
+    /// Map a visual offset back to its logical item index.
+    #[must_use]
+    pub const fn logical_index_at_visual_offset(
+        self,
+        visual_offset: usize,
+        item_count: usize,
+    ) -> Option<usize> {
+        if visual_offset >= item_count {
+            return None;
+        }
+        Some(match self {
+            Self::LeftToRight => visual_offset,
+            Self::RightToLeft => item_count - visual_offset - 1,
+        })
+    }
+}
+
 /// Monotonic attempt number for asynchronous work targeting one image.
 ///
 /// An [`ImageId`] names the stable logical asset referenced by presentations;

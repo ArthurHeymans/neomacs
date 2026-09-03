@@ -1,6 +1,18 @@
 use super::*;
 
 #[test]
+fn resolved_bidi_direction_owns_level_parity_and_visual_indexing() {
+    let ltr = ResolvedBidiDirection::from_level(2);
+    let rtl = ResolvedBidiDirection::from_level(3);
+
+    assert_eq!(ltr, ResolvedBidiDirection::LeftToRight);
+    assert_eq!(rtl, ResolvedBidiDirection::RightToLeft);
+    assert_eq!(ltr.logical_index_at_visual_offset(1, 4), Some(1));
+    assert_eq!(rtl.logical_index_at_visual_offset(1, 4), Some(2));
+    assert_eq!(rtl.logical_index_at_visual_offset(4, 4), None);
+}
+
+#[test]
 fn layout_units_collapse_subpixel_float_noise_deterministically() {
     let expected = LayoutUnit::from_px(12.15);
     let noisy = LayoutUnit::from_px(12.150_001);

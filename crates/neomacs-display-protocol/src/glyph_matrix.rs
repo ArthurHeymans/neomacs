@@ -19,7 +19,8 @@ use super::frame_glyphs::{
 use super::image::{ImageMargins, ImageOpaqueBackground, ImageSourceRect, RetainedImageSet};
 use super::presented_pointer::PresentedPrimitiveKind;
 use super::types::{
-    Color, DisplayWindowId, FaceId, ImageId, Px, Rect, SurfaceId, VideoId, WebViewId, XwidgetId,
+    Color, DisplayWindowId, FaceId, ImageId, Px, Rect, ResolvedBidiDirection, SurfaceId, VideoId,
+    WebViewId, XwidgetId,
 };
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::HashMap;
@@ -46,6 +47,21 @@ pub struct TerminalCompositionCell {
 pub struct TerminalComposition {
     pub cells: Box<[TerminalCompositionCell]>,
     pub width_cols: u16,
+}
+
+impl TerminalComposition {
+    /// Return the terminal cell at one visual offset without changing the
+    /// cached logical-order lowering.
+    #[must_use]
+    pub fn visual_cell(
+        &self,
+        direction: ResolvedBidiDirection,
+        visual_offset: usize,
+    ) -> Option<&TerminalCompositionCell> {
+        let logical_index =
+            direction.logical_index_at_visual_offset(visual_offset, self.cells.len())?;
+        self.cells.get(logical_index)
+    }
 }
 
 /// What kind of content this glyph represents.
@@ -701,6 +717,11 @@ pub enum GlyphPointerOccurrenceIdentity {
 }
 
 impl Glyph {
+    #[must_use]
+    pub const fn resolved_bidi_direction(&self) -> ResolvedBidiDirection {
+        ResolvedBidiDirection::from_level(self.bidi_level)
+    }
+
     /// Create a simple character glyph with default attributes.
     pub fn char(ch: char, face_id: FaceId, charpos: usize) -> Self {
         Self::char_with_provenance(ch, face_id, GlyphProvenance::buffer(charpos))

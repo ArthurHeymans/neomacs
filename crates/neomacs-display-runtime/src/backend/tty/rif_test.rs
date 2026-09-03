@@ -2618,6 +2618,25 @@ fn automatic_composite_uses_gnu_terminal_gstring_cells() {
     assert_eq!(rif.desired.cells[3].extenders.as_deref(), Some("\u{180E}"));
 }
 
+#[test]
+fn rtl_automatic_composite_emits_terminal_cells_in_visual_order() {
+    // GNU composite.c walks an automatic composition from its final cluster
+    // in an odd-level bidi run, and term.c emits each selected cluster in
+    // ascending gstring order.  Hanifi U+10D24 has GNU char-width 1, so it is
+    // an independent cell and must move with the other cells, not remain
+    // attached to its logical predecessor.
+    let mut glyph = automatic_composite("𐴓𐴠𐴑𐴤𐴝", 5);
+    glyph.bidi_level = 1;
+    let mut rif = TtyRif::new(10, 5);
+
+    rif.rasterize(&state_with_text_glyphs(10, vec![glyph]));
+
+    let visual = (0..5)
+        .map(|col| desired_char(&rif, 0, col))
+        .collect::<String>();
+    assert_eq!(visual, "𐴝𐴤𐴑𐴠𐴓");
+}
+
 fn run_member_padding(ch: char, charpos: usize) -> Glyph {
     let mut g = Glyph::char(ch, FaceId::new(0), charpos);
     g.padding = true;

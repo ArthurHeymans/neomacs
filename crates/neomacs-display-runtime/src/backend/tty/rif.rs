@@ -16,7 +16,7 @@ use neomacs_display_protocol::glyph_matrix::*;
 use neomacs_display_protocol::tty_capabilities::{
     ColorGround, TtyAttributeCapabilities, TtyAttributeExit, TtyFaceAppearance, TtyItalicRendition,
 };
-use neomacs_display_protocol::types::{DisplayWindowId, FaceId, Rect};
+use neomacs_display_protocol::types::{DisplayWindowId, FaceId, Rect, ResolvedBidiDirection};
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
@@ -2147,7 +2147,11 @@ impl TtyRif {
                 // cluster string, mirroring GNU's COMPOSITE_GLYPH.
                 match &glyph.glyph_type {
                     GlyphType::AutomaticComposite { text, terminal } => {
-                        for cell in &terminal.cells {
+                        let direction = glyph.resolved_bidi_direction();
+                        for visual_offset in 0..terminal.cells.len() {
+                            let cell = terminal
+                                .visual_cell(direction, visual_offset)
+                                .expect("visual terminal-cell offset is in bounds");
                             if col >= screen_width {
                                 break;
                             }
@@ -2218,8 +2222,9 @@ impl TtyRif {
                                 Vec::with_capacity(run_paddings.len() + 1);
                             graphemes.push(g0);
                             graphemes.extend(run_paddings.iter().map(String::as_str));
-                            if glyph.bidi_level & 1 == 1 {
-                                graphemes.reverse();
+                            match glyph.resolved_bidi_direction() {
+                                ResolvedBidiDirection::LeftToRight => {}
+                                ResolvedBidiDirection::RightToLeft => graphemes.reverse(),
                             }
                             let consumed = graphemes.len() - 1;
                             for grapheme in graphemes {
