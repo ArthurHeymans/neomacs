@@ -10,6 +10,7 @@
 //! - Pre/post-command hooks
 //! - Prefix argument handling
 
+use crate::buffer::{CharLen, CharPos0, CharRange};
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::intern::{intern, resolve_sym};
 use crate::emacs_core::keyboard::pure::KEY_CHAR_META;
@@ -1442,6 +1443,59 @@ enum KeyEchoState {
         /// other display properties.
         prompt: Option<LispString>,
     },
+}
+
+/// Semantic pieces of a keyboard-owned echo message.
+///
+/// Keeping key names distinct from prose makes it impossible to change the
+/// wording while accidentally retaining GNU's old numeric property offsets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum KeyEchoSegment {
+    Plain(&'static str),
+    KeyBinding(&'static str),
+}
+
+impl KeyEchoSegment {
+    const fn text(self) -> &'static str {
+        match self {
+            Self::Plain(text) | Self::KeyBinding(text) => text,
+        }
+    }
+}
+
+/// Build GNU `echo_add_key`'s help-event suffix with its semantic key names
+/// carrying the `help-key-binding` face.
+fn help_event_echo_suffix() -> LispString {
+    const SEGMENTS: [KeyEchoSegment; 5] = [
+        KeyEchoSegment::Plain(" (Type "),
+        KeyEchoSegment::KeyBinding("?"),
+        KeyEchoSegment::Plain(" for further options, "),
+        KeyEchoSegment::KeyBinding("C-q"),
+        KeyEchoSegment::Plain(" for quick help)"),
+    ];
+
+    let mut text = String::new();
+    let mut key_binding_ranges = Vec::new();
+    for segment in SEGMENTS {
+        let start = CharPos0::new(text.chars().count());
+        text.push_str(segment.text());
+        if matches!(segment, KeyEchoSegment::KeyBinding(_)) {
+            key_binding_ranges.push(CharRange::from_start_len(
+                start,
+                CharLen::new(segment.text().chars().count()),
+            ));
+        }
+    }
+
+    let mut suffix = LispString::from_utf8(&text);
+    for range in key_binding_ranges {
+        suffix.intervals_mut().put_property_in_char_range(
+            range,
+            Value::symbol("face"),
+            Value::symbol("help-key-binding"),
+        );
+    }
+    suffix
 }
 
 /// Keyboard-local state owned by the active terminal/keyboard.
@@ -3255,9 +3309,7 @@ impl crate::emacs_core::eval::Context {
         {
             // GNU keyboard.c::echo_add_key appends this when a help event is
             // the first echoed key, while waiting for the following help-map key.
-            message = message.concat(&LispString::from_utf8(
-                " (Type ? for further options, C-q for quick help)",
-            ));
+            message = message.concat(&help_event_echo_suffix());
         } else {
             // GNU keyboard.c::echo_dash turns a pending prefix into a
             // mini-prompt for the next key, then help.el appends the default

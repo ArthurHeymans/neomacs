@@ -1,6 +1,45 @@
 use super::*;
 
 #[test]
+fn help_prefix_echo_faces_semantic_key_bindings() {
+    let mut eval = crate::emacs_core::Context::new();
+    eval.assign("help-char", Value::fixnum(8));
+    eval.assign("help-event-list", Value::list(vec![Value::symbol("help")]));
+
+    let echo = eval
+        .prefix_echo_message(&[Value::fixnum(8)])
+        .expect("help prefix echo");
+    let text = echo.as_utf8_str().expect("UTF-8 help prefix echo");
+    assert_eq!(text, "C-h (Type ? for further options, C-q for quick help)");
+
+    let face = Value::symbol("face");
+    let help_key_binding = Value::symbol("help-key-binding");
+    let question_mark = text.find('?').expect("further-options binding");
+    let quick_help = text.find("C-q").expect("quick-help binding");
+    for pos in [question_mark, quick_help, quick_help + 1, quick_help + 2] {
+        assert_eq!(
+            echo.intervals()
+                .get_property_at_char_pos(crate::buffer::CharPos0::new(pos), face),
+            Some(help_key_binding),
+            "semantic key binding at {pos} must use GNU's help-key-binding face"
+        );
+    }
+    for pos in [
+        question_mark - 1,
+        question_mark + 1,
+        quick_help - 1,
+        quick_help + 3,
+    ] {
+        assert_eq!(
+            echo.intervals()
+                .get_property_at_char_pos(crate::buffer::CharPos0::new(pos), face),
+            None,
+            "plain help prose at {pos} must remain unstyled"
+        );
+    }
+}
+
+#[test]
 fn presented_interactions_retain_exact_posn_string_until_retirement() {
     let mut interactions = PresentedInteractions::default();
     let presentation = interactions.begin();
