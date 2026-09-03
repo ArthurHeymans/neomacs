@@ -207,7 +207,11 @@ fn font_lock_c_faces_match_gnu() {
 /// absolute header path and filesystem metadata deterministic too.
 #[test]
 fn dired_faces_match_gnu() {
-    let directory = TuiTempDirectory::new("neomacs-face-dired-");
+    // Dired includes `..` in its `-al` listing.  Keep that parent private too:
+    // a direct child of the shared system temp directory observes unrelated
+    // parallel tests changing the parent's link count and size between the GNU
+    // and Neomacs snapshots.
+    let directory = TuiTempDirectory::new_with_private_parent("neomacs-face-dired-", "listing");
     fs::create_dir(directory.join("sub")).expect("create dired fixture subdirectory");
     fs::write(directory.join("alpha.txt"), "a\n").expect("write alpha fixture");
     fs::write(directory.join("beta.el"), "b\n").expect("write beta fixture");
