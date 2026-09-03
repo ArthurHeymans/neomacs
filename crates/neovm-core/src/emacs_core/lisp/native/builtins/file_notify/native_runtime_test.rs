@@ -18,11 +18,16 @@ fn workspace_temp_dir() -> tempfile::TempDir {
 
 fn callback_events(eval: &mut crate::emacs_core::eval::Context, variable: &str) -> Vec<Vec<Value>> {
     let events = eval.eval_str(variable).expect("read callback events");
-    crate::emacs_core::value::list_to_vec(&events)
+    let mut events: Vec<_> = crate::emacs_core::value::list_to_vec(&events)
         .expect("callback events list")
         .iter()
         .map(|event| crate::emacs_core::value::list_to_vec(event).expect("native event list"))
-        .collect()
+        .collect();
+    // The deliberately minimal callback prepends so these tests do not rely
+    // on Lisp library functions such as `append'. Restore delivery order at
+    // the assertion boundary.
+    events.reverse();
+    events
 }
 
 fn service_until(
@@ -31,8 +36,21 @@ fn service_until(
     ready: impl Fn(&[Vec<Value>]) -> bool,
 ) -> Vec<Vec<Value>> {
     for _ in 0..5 {
-        eval.eval_str("(read-event nil nil 1)")
-            .expect("service native file notification");
+        let special_event = eval
+            .eval_str("(read-event nil nil 1)")
+            .expect("read native file notification");
+        if special_event.is_cons() {
+            let fields = crate::emacs_core::value::list_to_vec(&special_event)
+                .expect("file-notify special event list");
+            assert_eq!(fields.first(), Some(&Value::symbol("file-notify")));
+            assert_eq!(fields.len(), 3, "file-notify special event shape");
+            // A bare Context seeds the native special-event key, but does not
+            // load filenotify.el. Apply the same callback and payload fields as
+            // `file-notify-handle-event' so host CI remains independent of
+            // generated Lisp sources while still exercising Lisp invocation.
+            eval.apply(fields[2], vec![fields[1]])
+                .expect("invoke native file-notification callback");
+        }
         let events = callback_events(eval, variable);
         if ready(&events) {
             return events;
@@ -42,7 +60,7 @@ fn service_until(
     panic!("timed out waiting for native file-notification events: {events:?}");
 }
 
-fn install_self_removing_callback(eval: &mut crate::emacs_core::eval::Context) {
+fn install_self_removing_callback(eval: &mut crate::emacs_core::eval::Context) -> Value {
     #[cfg(target_os = "linux")]
     let remove_watch = "inotify-rm-watch";
     #[cfg(target_os = "macos")]
@@ -54,49 +72,61 @@ fn install_self_removing_callback(eval: &mut crate::emacs_core::eval::Context) {
         r#"
         (progn
           (setq neovm-test-self-removing-events nil)
-          (defun neovm-test-self-removing-callback (event)
+          (lambda (event)
             (setq neovm-test-self-removing-events
-                  (append neovm-test-self-removing-events (list event)))
+                  (cons event neovm-test-self-removing-events))
             ({remove_watch} (car event))))
         "#,
     ))
-    .expect("install self-removing callback");
+    .expect("create self-removing callback")
 }
 
 #[cfg(target_os = "linux")]
-fn add_self_removing_watch(eval: &mut crate::emacs_core::eval::Context, directory: &Path) -> Value {
+fn add_self_removing_watch(
+    eval: &mut crate::emacs_core::eval::Context,
+    directory: &Path,
+    callback: Value,
+) -> Value {
     inotify_add_watch(
         eval,
         vec![
             Value::string(directory.display().to_string()),
             Value::list(vec![Value::symbol("create")]),
-            Value::symbol("neovm-test-self-removing-callback"),
+            callback,
         ],
     )
     .expect("add self-removing inotify watch")
 }
 
 #[cfg(target_os = "macos")]
-fn add_self_removing_watch(eval: &mut crate::emacs_core::eval::Context, directory: &Path) -> Value {
+fn add_self_removing_watch(
+    eval: &mut crate::emacs_core::eval::Context,
+    directory: &Path,
+    callback: Value,
+) -> Value {
     kqueue_add_watch(
         eval,
         vec![
             Value::string(directory.display().to_string()),
             Value::list(vec![Value::symbol("create"), Value::symbol("write")]),
-            Value::symbol("neovm-test-self-removing-callback"),
+            callback,
         ],
     )
     .expect("add self-removing kqueue watch")
 }
 
 #[cfg(target_os = "windows")]
-fn add_self_removing_watch(eval: &mut crate::emacs_core::eval::Context, directory: &Path) -> Value {
+fn add_self_removing_watch(
+    eval: &mut crate::emacs_core::eval::Context,
+    directory: &Path,
+    callback: Value,
+) -> Value {
     w32notify_add_watch(
         eval,
         vec![
             Value::string(directory.display().to_string()),
             Value::list(vec![Value::symbol("file-name")]),
-            Value::symbol("neovm-test-self-removing-callback"),
+            callback,
         ],
     )
     .expect("add self-removing Windows watch")
@@ -125,9 +155,9 @@ fn native_callback_can_remove_its_own_watch() {
     crate::test_utils::init_test_tracing();
     reset_file_notify_thread_locals();
     let directory = workspace_temp_dir();
-    let mut eval = crate::test_utils::runtime_startup_context();
-    install_self_removing_callback(&mut eval);
-    let descriptor = add_self_removing_watch(&mut eval, directory.path());
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let callback = install_self_removing_callback(&mut eval);
+    let descriptor = add_self_removing_watch(&mut eval, directory.path(), callback);
     assert!(native_watch_is_valid(descriptor));
 
     std::fs::write(directory.path().join("created.txt"), "created")
@@ -154,23 +184,24 @@ fn inotify_rename_delivers_an_ordered_cookie_pair() {
     let to = directory.path().join("rename-to.txt");
     std::fs::write(&from, "contents").expect("seed renamed file");
 
-    let mut eval = crate::test_utils::runtime_startup_context();
-    eval.eval_str(
-        r#"
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let callback = eval
+        .eval_str(
+            r#"
         (progn
           (setq neovm-test-inotify-rename-events nil)
-          (defun neovm-test-inotify-rename-callback (event)
+          (lambda (event)
             (setq neovm-test-inotify-rename-events
-                  (append neovm-test-inotify-rename-events (list event)))))
+                  (cons event neovm-test-inotify-rename-events))))
         "#,
-    )
-    .expect("install inotify rename callback");
+        )
+        .expect("create inotify rename callback");
     let descriptor = inotify_add_watch(
         &mut eval,
         vec![
             Value::string(directory.path().display().to_string()),
             Value::list(vec![Value::symbol("moved-from"), Value::symbol("moved-to")]),
-            Value::symbol("neovm-test-inotify-rename-callback"),
+            callback,
         ],
     )
     .expect("add inotify rename watch");
@@ -212,23 +243,24 @@ fn kqueue_directory_rename_reports_both_relative_names() {
     let to = directory.path().join("rename-to.txt");
     std::fs::write(&from, "contents").expect("seed renamed file");
 
-    let mut eval = crate::test_utils::runtime_startup_context();
-    eval.eval_str(
-        r#"
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let callback = eval
+        .eval_str(
+            r#"
         (progn
           (setq neovm-test-kqueue-rename-events nil)
-          (defun neovm-test-kqueue-rename-callback (event)
+          (lambda (event)
             (setq neovm-test-kqueue-rename-events
-                  (append neovm-test-kqueue-rename-events (list event)))))
+                  (cons event neovm-test-kqueue-rename-events))))
         "#,
-    )
-    .expect("install kqueue rename callback");
+        )
+        .expect("create kqueue rename callback");
     let descriptor = kqueue_add_watch(
         &mut eval,
         vec![
             Value::string(directory.path().display().to_string()),
             Value::list(vec![Value::symbol("rename"), Value::symbol("write")]),
-            Value::symbol("neovm-test-kqueue-rename-callback"),
+            callback,
         ],
     )
     .expect("add kqueue rename watch");
@@ -264,23 +296,24 @@ fn windows_recursive_watch_delivers_an_ordered_rename_pair() {
     let to = nested.join("rename-to.txt");
     std::fs::write(&from, "contents").expect("seed renamed file");
 
-    let mut eval = crate::test_utils::runtime_startup_context();
-    eval.eval_str(
-        r#"
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let callback = eval
+        .eval_str(
+            r#"
         (progn
           (setq neovm-test-w32-rename-events nil)
-          (defun neovm-test-w32-rename-callback (event)
+          (lambda (event)
             (setq neovm-test-w32-rename-events
-                  (append neovm-test-w32-rename-events (list event)))))
+                  (cons event neovm-test-w32-rename-events))))
         "#,
-    )
-    .expect("install Windows rename callback");
+        )
+        .expect("create Windows rename callback");
     let descriptor = w32notify_add_watch(
         &mut eval,
         vec![
             Value::string(directory.path().display().to_string()),
             Value::list(vec![Value::symbol("file-name"), Value::symbol("subtree")]),
-            Value::symbol("neovm-test-w32-rename-callback"),
+            callback,
         ],
     )
     .expect("add recursive Windows rename watch");
@@ -291,7 +324,7 @@ fn windows_recursive_watch_delivers_an_ordered_rename_pair() {
             .iter()
             .filter(|fields| {
                 matches!(
-                    fields.get(1).and_then(Value::as_symbol_name),
+                    fields.get(1).and_then(|value| value.as_symbol_name()),
                     Some("renamed-from" | "renamed-to")
                 )
             })
@@ -302,7 +335,7 @@ fn windows_recursive_watch_delivers_an_ordered_rename_pair() {
         .iter()
         .filter(|fields| {
             matches!(
-                fields.get(1).and_then(Value::as_symbol_name),
+                fields.get(1).and_then(|value| value.as_symbol_name()),
                 Some("renamed-from" | "renamed-to")
             )
         })

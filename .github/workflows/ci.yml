@@ -238,7 +238,7 @@ jobs:
         shell: bash
         run: >-
           cargo nextest run -p neovm-core --lib
-          -E 'test(file_notify)'
+          -E 'test(native_runtime_test)'
 
   linux-no-gstreamer-startup:
     name: startup without GStreamer (linux x86_64)
