@@ -703,7 +703,7 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
         if !self.mode.uses_concrete_font_geometry() {
             return None;
         }
-        let face = self.face(face_id)?.clone();
+        let face = self.face(face_id)?;
         let font = self
             .font_metrics
             .as_mut()?
@@ -721,7 +721,7 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
         if !self.mode.uses_concrete_font_geometry() {
             return None;
         }
-        let face = self.face(face_id)?.clone();
+        let face = self.face(face_id)?;
         let metrics = self.font_metrics.as_mut()?.font_metrics(
             &face.font_family,
             face.font_weight,
@@ -740,7 +740,7 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
         if !self.mode.uses_concrete_font_geometry() {
             return None;
         }
-        let face = self.face(face_id)?.clone();
+        let face = self.face(face_id)?;
         let metrics = self.font_metrics.as_mut()?.font_metrics(
             &face.font_family,
             face.font_weight,
