@@ -1466,6 +1466,38 @@ fn resolve_eol_cursor_excludes_positionless_newline_glyph() {
 }
 
 #[test]
+fn resolve_bare_newline_cursor_excludes_positionless_newline_glyph() {
+    // GNU set_cursor_from_row treats an empty line's sole newline glyph as
+    // the cursor cell itself (src/xdisp.c): point is on its left edge, never
+    // after it.  A bare-newline row covers no ordinary buffer glyphs, so its
+    // row range is empty even though append_space_for_newline materializes a
+    // terminal space for that newline.
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(1, 1, 80, Rect::new(0.0, 0.0, 640.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    write_char_to_current_row_with_provenance(
+        &mut builder,
+        ' ',
+        FaceId::new(0),
+        GlyphProvenance::line_end(),
+    );
+    builder
+        .edit_current_row_for_test(|row| {
+            row.start_charpos = 7;
+            row.end_charpos = 7;
+        })
+        .expect("current row");
+    builder.end_row();
+
+    assert_eq!(
+        CursorVisualColumnResolutionRequest::new(1, 0, 7)
+            .resolve(builder.cursor_visual_column_context()),
+        Some(0)
+    );
+    builder.end_window();
+}
+
+#[test]
 fn resolve_empty_line_cursor_preserves_gutter_before_line_end_fill() {
     // Line-number prefixes and line-end fill are both redisplay-owned in this
     // protocol.  GNU distinguishes their positions in the row: it advances

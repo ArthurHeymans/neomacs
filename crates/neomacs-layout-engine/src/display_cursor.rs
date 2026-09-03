@@ -521,8 +521,10 @@ impl CursorVisualColumnResolutionRequest {
         // us identify exactly the two line-end products we emit:
         //
         // 1. the same-face `:extend` suffix ending in a stretch glyph;
-        // 2. append_space_for_newline's one terminal space on a row that
-        //    actually spans buffer text (unlike the blank EOB gutter row).
+        // 2. append_space_for_newline's one terminal space.  Its typed
+        //    LineEnd provenance distinguishes it from a blank EOB gutter row;
+        //    a bare-newline row has an empty source range, so row range length
+        //    cannot make that distinction.
         let text_glyphs = &row.glyphs[GlyphArea::Text.index()];
         let mut text_end = text_glyphs.len();
         if let Some(fill) = text_glyphs.last()
@@ -546,8 +548,7 @@ impl CursorVisualColumnResolutionRequest {
                 text_end -= 1;
             }
         }
-        if row.end_charpos > row.start_charpos
-            && text_end > 0
+        if text_end > 0
             && matches!(
                 text_glyphs[text_end - 1].provenance,
                 GlyphProvenance::Redisplay(RedisplayGlyphProvenance::LineEnd)
