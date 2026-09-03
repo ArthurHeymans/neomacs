@@ -62,6 +62,52 @@ pub struct WindowId(pub u64);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FrameId(pub u64);
 
+/// GNU-compatible lifecycle state for a live frame.
+///
+/// GNU stores `visible` and `iconified` as separate bits, but only these three
+/// public states are valid.  Keeping the sum type here prevents callers from
+/// manufacturing the impossible `visible && iconified` combination and makes
+/// every projection choose its intended semantics explicitly.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FrameVisibility {
+    #[default]
+    Visible,
+    Iconified,
+    Invisible,
+}
+
+impl FrameVisibility {
+    pub const fn is_visible(self) -> bool {
+        matches!(self, Self::Visible)
+    }
+
+    pub const fn is_visible_or_iconified(self) -> bool {
+        matches!(self, Self::Visible | Self::Iconified)
+    }
+
+    pub const fn is_invisible(self) -> bool {
+        matches!(self, Self::Invisible)
+    }
+
+    pub fn from_lisp_value(value: Value) -> Self {
+        if value.is_nil() {
+            Self::Invisible
+        } else if value == Value::symbol("icon") {
+            Self::Iconified
+        } else {
+            Self::Visible
+        }
+    }
+
+    pub fn lisp_value(self) -> Value {
+        match self {
+            Self::Visible => Value::T,
+            Self::Iconified => Value::symbol("icon"),
+            Self::Invisible => Value::NIL,
+        }
+    }
+}
+
 /// Stable route to one leaf within a particular window-tree generation.
 ///
 /// Redisplay builds these routes once per frame attempt and then resolves each
@@ -3219,8 +3265,8 @@ pub struct Frame {
     /// active display backend. Wiring the dispatch is tracked as
     /// audit Phase 6.
     pub parameters: HashMap<Value, Value>,
-    /// Whether the frame is visible.
-    pub visible: bool,
+    /// Whether the frame is visible, iconified, or invisible.
+    pub visibility: FrameVisibility,
     /// Whether the menu / tab / tool bars are actually displayed and therefore
     /// occupy rows of the window text area (mirrors GNU realizing
     /// `FRAME_MENU_BAR_LINES` into `FRAME_TOP_MARGIN` only on a shown frame).
@@ -3399,7 +3445,7 @@ impl Frame {
                 params.insert(Value::symbol("minibuffer"), Value::T);
                 params
             },
-            visible: true,
+            visibility: FrameVisibility::Visible,
             // Set true only once an interactive frontend displays this frame.
             displays_chrome: false,
             title: Value::NIL,
@@ -3551,7 +3597,7 @@ impl Frame {
                 redisplay_f32_bits(self.font_pixel_size),
             ),
             device_scale_bits: self.device_scale_factor.to_bits(),
-            visible: self.visible,
+            visible: self.visibility.is_visible(),
             displays_chrome: self.displays_chrome,
             has_window_system: window_system.is_some(),
             window_system_symbol: window_system.and_then(Value::as_symbol_id),
@@ -5514,7 +5560,7 @@ impl FrameManager {
             let Some(frame) = self.frames.get(&frame_id) else {
                 return false;
             };
-            if !frame.visible {
+            if !frame.visibility.is_visible() {
                 return false;
             }
             current = self.frame_parent_id(frame_id);

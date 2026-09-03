@@ -1370,7 +1370,7 @@ fn render_frame_forest_returns_each_visible_native_window_tree_once() {
             .set_window_system(Some(Value::symbol("neo")));
     }
     mgr.get_mut(child).expect("child").parent_frame = Value::make_frame(first.0);
-    mgr.get_mut(hidden).expect("hidden frame").visible = false;
+    mgr.get_mut(hidden).expect("hidden frame").visibility = FrameVisibility::Invisible;
 
     let forest = mgr.render_frame_forest(
         RenderFrameScope::AllNativeWindowTrees,

@@ -183,6 +183,7 @@ struct RecordingDisplayHost {
     shown_child_frames: Rc<RefCell<Vec<crate::window::FrameId>>>,
     removed_child_frames: Rc<RefCell<Vec<crate::window::FrameId>>>,
     fullscreen_changes: Rc<RefCell<Vec<(crate::window::FrameId, FrameFullscreen)>>>,
+    visibility_changes: Rc<RefCell<Vec<(crate::window::FrameId, crate::window::FrameVisibility)>>>,
     geometry_hints:
         Rc<RefCell<Vec<(crate::window::FrameId, crate::window::GuiFrameGeometryHints)>>>,
     primary_size: Option<GuiFrameHostSize>,
@@ -267,6 +268,17 @@ impl DisplayHost for RecordingDisplayHost {
         self.fullscreen_changes
             .borrow_mut()
             .push((frame_id, fullscreen));
+        Ok(())
+    }
+
+    fn set_gui_frame_visibility(
+        &mut self,
+        frame_id: crate::window::FrameId,
+        visibility: crate::window::FrameVisibility,
+    ) -> Result<(), String> {
+        self.visibility_changes
+            .borrow_mut()
+            .push((frame_id, visibility));
         Ok(())
     }
 
@@ -5020,7 +5032,7 @@ fn x_create_frame_creates_live_frame_and_preserves_char_geometry_params() {
     assert_eq!(frame.name_runtime_string_owned(), "GUI");
     assert_eq!(frame.parameter("width"), Some(Value::fixnum(80)));
     assert_eq!(frame.parameter("height"), Some(Value::fixnum(25)));
-    assert!(!frame.visible);
+    assert_eq!(frame.visibility, crate::window::FrameVisibility::Invisible);
     assert_eq!(frame.char_width, 8.0);
     assert_eq!(frame.char_height, 16.0);
 }
@@ -5742,7 +5754,7 @@ fn make_frame_invisible_removes_gui_child_overlay_from_display_host() {
         .expect("make child frame invisible");
 
     let child = ev.frames.get(child_id).expect("child frame remains live");
-    assert!(!child.visible);
+    assert_eq!(child.visibility, crate::window::FrameVisibility::Invisible);
     assert_eq!(*removed_child_frames.borrow(), vec![child_id]);
 }
 
@@ -5782,7 +5794,7 @@ fn make_frame_visible_shows_gui_child_overlay_from_display_host() {
         .expect("make child frame visible");
 
     let child = ev.frames.get(child_id).expect("child frame remains live");
-    assert!(child.visible);
+    assert_eq!(child.visibility, crate::window::FrameVisibility::Visible);
     assert_eq!(*shown_child_frames.borrow(), vec![child_id]);
 }
 
@@ -5837,7 +5849,7 @@ fn timer_deferred_make_frame_invisible_removes_gui_child_overlay_from_display_ho
     ev.fire_pending_timers();
 
     let child = ev.frames.get(child_id).expect("child frame remains live");
-    assert!(!child.visible);
+    assert_eq!(child.visibility, crate::window::FrameVisibility::Invisible);
     assert_eq!(*removed_child_frames.borrow(), vec![child_id]);
 }
 
@@ -6265,6 +6277,51 @@ fn frame_builtins_accept_frame_handle_values() {
     assert_eq!(
         crate::emacs_core::builtins::symbols::builtin_raise_frame(vec![frame]).unwrap(),
         Value::NIL
+    );
+}
+
+#[test]
+fn iconify_top_level_tty_frame_is_a_noop() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let fid = super::ensure_selected_frame_id(&mut ev);
+    let frame = Value::make_frame(fid.0);
+
+    assert_eq!(
+        crate::emacs_core::frame::builtin_iconify_frame(&mut ev, vec![frame]).unwrap(),
+        Value::NIL
+    );
+    assert_eq!(
+        crate::emacs_core::frame::builtin_frame_visible_p(&mut ev, vec![frame]).unwrap(),
+        Value::T
+    );
+}
+
+#[test]
+fn iconify_top_level_gui_frame_reports_iconified_state() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let fid = super::ensure_selected_frame_id(&mut ev);
+    ev.frames
+        .get_mut(fid)
+        .expect("selected frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    let host = RecordingDisplayHost::new();
+    let visibility_changes = host.visibility_changes.clone();
+    ev.set_display_host(Box::new(host));
+    let frame = Value::make_frame(fid.0);
+
+    assert_eq!(
+        crate::emacs_core::frame::builtin_iconify_frame(&mut ev, vec![frame]).unwrap(),
+        Value::NIL
+    );
+    assert_eq!(
+        crate::emacs_core::frame::builtin_frame_visible_p(&mut ev, vec![frame]).unwrap(),
+        Value::symbol("icon")
+    );
+    assert_eq!(
+        *visibility_changes.borrow(),
+        vec![(fid, crate::window::FrameVisibility::Iconified)]
     );
 }
 

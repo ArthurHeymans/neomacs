@@ -1913,7 +1913,7 @@ fn redisplay_runs_resize_mini_frame_for_minibuffer_only_frame() {
         let frame = ev.frames.get_mut(frame_id).expect("created frame");
         frame.minibuffer_leaf = None;
         frame.minibuffer_window = Some(root_window_id);
-        frame.visible = true;
+        frame.visibility = crate::window::FrameVisibility::Visible;
     }
 
     ev.eval_str(

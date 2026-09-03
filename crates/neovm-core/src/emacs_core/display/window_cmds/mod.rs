@@ -21,8 +21,8 @@ use crate::emacs_core::xdisp::LineWrap;
 use crate::window::body::{WindowBodyAxis, WindowBodyCellSize, WindowBodyUnit};
 use crate::window::{
     CombinationLimit, CursorTypeSymbol, DeleteResize, FrameDivider, FrameFullscreen, FrameId,
-    FrameManager, FrameParam, FrameParamKey, Rect, SplitDirection, SplitPlacement, Window,
-    WindowBufferDisplayDefaults, WindowFringeDefaults, WindowId, WindowMargins,
+    FrameManager, FrameParam, FrameParamKey, FrameVisibility, Rect, SplitDirection, SplitPlacement,
+    Window, WindowBufferDisplayDefaults, WindowFringeDefaults, WindowId, WindowMargins,
     WindowScrollBarDefaults, is_valid_horizontal_scroll_bar_value,
     is_valid_vertical_scroll_bar_value, window_first_child_id, window_next_sibling_id,
     window_parent_id, window_prev_sibling_id,
@@ -216,10 +216,23 @@ fn frame_ids_for_all_frames_scope(
     let mut ids = match scope {
         AllFramesScope::BaseFrame => vec![base_fid],
         AllFramesScope::AllFrames => frames.frame_list(),
-        AllFramesScope::VisibleFrames | AllFramesScope::VisibleOrIconifiedFrames => frames
+        AllFramesScope::VisibleFrames => frames
             .frame_list()
             .into_iter()
-            .filter(|frame_id| frames.get(*frame_id).is_some_and(|frame| frame.visible))
+            .filter(|frame_id| {
+                frames
+                    .get(*frame_id)
+                    .is_some_and(|frame| frame.visibility.is_visible())
+            })
+            .collect(),
+        AllFramesScope::VisibleOrIconifiedFrames => frames
+            .frame_list()
+            .into_iter()
+            .filter(|frame_id| {
+                frames
+                    .get(*frame_id)
+                    .is_some_and(|frame| frame.visibility.is_visible_or_iconified())
+            })
             .collect(),
         AllFramesScope::SpecificFrame(frame_id) => vec![frame_id],
     };
@@ -5824,7 +5837,9 @@ pub(crate) fn make_frame_plain_on_terminal(
                                 top = n;
                             }
                         }
-                        "visibility" => visibility = Some(pair_cdr.is_truthy()),
+                        "visibility" => {
+                            visibility = Some(FrameVisibility::from_lisp_value(pair_cdr))
+                        }
                         "minibuffer" => minibuffer_param = Some(pair_cdr),
                         "undecorated" => undecorated = pair_cdr.is_truthy(),
                         "no-accept-focus" => no_accept_focus = pair_cdr.is_truthy(),
@@ -5897,7 +5912,7 @@ pub(crate) fn make_frame_plain_on_terminal(
             frame.char_width = char_width;
             frame.char_height = char_height;
             frame.font_pixel_size = font_pixel_size;
-            frame.visible = visibility.unwrap_or(frame.visible);
+            frame.visibility = visibility.unwrap_or(frame.visibility);
             frame.undecorated = undecorated;
             frame.no_accept_focus = no_accept_focus;
             frame.no_split = no_split;
@@ -5994,7 +6009,7 @@ pub(crate) fn make_frame_plain_on_terminal(
         }
         frame.set_parameter(Value::symbol("width"), Value::fixnum(i64::from(width)));
         frame.set_parameter(Value::symbol("height"), Value::fixnum(i64::from(height)));
-        frame.visible = visibility.unwrap_or(frame.visible);
+        frame.visibility = visibility.unwrap_or(frame.visibility);
         frame.undecorated = undecorated;
         frame.no_accept_focus = no_accept_focus;
         frame.no_split = no_split;
@@ -6022,7 +6037,7 @@ struct ParsedGuiFrameParams {
     title: Option<Value>,
     width: Option<FrameSizeParam>,
     height: Option<FrameSizeParam>,
-    visibility: Option<bool>,
+    visibility: Option<FrameVisibility>,
     parent_frame: Option<FrameId>,
     left: Option<i64>,
     top: Option<i64>,
@@ -6090,7 +6105,7 @@ fn parse_gui_frame_params(value: Option<&Value>) -> ParsedGuiFrameParams {
             "height" => {
                 parsed.height = parse_frame_size_param(pair_cdr).filter(|size| !size.is_zero());
             }
-            "visibility" => parsed.visibility = Some(pair_cdr.is_truthy()),
+            "visibility" => parsed.visibility = Some(FrameVisibility::from_lisp_value(pair_cdr)),
             "parent-frame" => {
                 if let Some(id) = pair_cdr.as_frame_id() {
                     parsed.parent_frame = Some(FrameId(id));
@@ -6338,7 +6353,7 @@ pub(crate) fn x_create_frame_impl(
         }
         frame.width = width_px;
         frame.height = height_px;
-        frame.visible = parsed.visibility.unwrap_or(frame.visible);
+        frame.visibility = parsed.visibility.unwrap_or(frame.visibility);
         frame.parent_frame = parent_frame_value;
         if let Some(z_order) = z_order {
             frame.z_order = z_order;
@@ -6447,7 +6462,9 @@ pub(crate) fn x_create_frame_impl(
         tracing::info!(
             frame_id = fid.0,
             parent_frame_id = parent_id.map(|parent| parent.0).unwrap_or(0),
-            visible = frames.get(fid).is_some_and(|frame| frame.visible),
+            visible = frames
+                .get(fid)
+                .is_some_and(|frame| frame.visibility.is_visible()),
             width_px,
             height_px,
             left = parsed.left.unwrap_or(0),
@@ -6502,9 +6519,9 @@ pub(crate) fn other_frames_in_state(
         .filter(|frame_id| *frame_id != deleting)
         .filter(|frame_id| eval.frames.frame_parent_id(*frame_id).is_none())
         .any(|frame_id| {
-            eval.frames
-                .get(frame_id)
-                .is_some_and(|frame| include_invisible || frame.visible)
+            eval.frames.get(frame_id).is_some_and(|frame| {
+                include_invisible || frame.visibility.is_visible_or_iconified()
+            })
         })
 }
 

@@ -25,7 +25,16 @@ use super::window_cmds::{
 use crate::buffer::{BufferId, BufferManager};
 use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 use crate::window::FrameManager;
-use crate::window::{FrameDivider, FrameFullscreen, FrameId, FrameParam, FrameParamKey};
+use crate::window::{
+    FrameDivider, FrameFullscreen, FrameId, FrameParam, FrameParamKey, FrameVisibility,
+};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum IconifyFrameAction {
+    Noop,
+    Iconify(FrameId),
+    MakeInvisible(FrameId),
+}
 
 /// `(frame-focus &optional FRAME)` -> frame receiving FRAME's keystrokes, or nil.
 pub(crate) fn builtin_frame_focus(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
@@ -105,10 +114,58 @@ pub(crate) fn builtin_iconify_frame(
     expect_max_args("iconify-frame", &args, 1)?;
     let fid = resolve_frame_id_in_state(frames, buffers, args.first(), "frame-live-p")?;
     let _frame = frames
-        .get_mut(fid)
+        .get(fid)
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
-    set_frame_visibility(eval, fid, false)?;
+    iconify_frame_in_state(eval, fid)?;
     Ok(Value::NIL)
+}
+
+fn iconify_frame_action(
+    eval: &super::eval::Context,
+    fid: FrameId,
+) -> Result<IconifyFrameAction, Flow> {
+    let frame = eval
+        .frames
+        .get(fid)
+        .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
+    let is_window_frame = frame.effective_window_system().is_some();
+
+    if frame.parent_frame.as_frame_id().is_some() {
+        let child_policy = eval
+            .obarray()
+            .symbol_value("iconify-child-frame")
+            .copied()
+            .unwrap_or(Value::NIL);
+        if child_policy.is_nil() {
+            return Ok(IconifyFrameAction::Noop);
+        }
+        if is_window_frame && child_policy == Value::symbol("iconify-top-level") {
+            let root = eval.frames.root_frame_id(fid).unwrap_or(fid);
+            return Ok(IconifyFrameAction::Iconify(root));
+        }
+        if child_policy == Value::symbol("make-invisible") {
+            return Ok(IconifyFrameAction::MakeInvisible(fid));
+        }
+    }
+
+    Ok(if is_window_frame {
+        IconifyFrameAction::Iconify(fid)
+    } else {
+        IconifyFrameAction::Noop
+    })
+}
+
+fn iconify_frame_in_state(eval: &mut super::eval::Context, fid: FrameId) -> Result<(), Flow> {
+    match iconify_frame_action(eval, fid)? {
+        IconifyFrameAction::Noop => Ok(()),
+        IconifyFrameAction::Iconify(target) => {
+            set_frame_visibility(eval, target, FrameVisibility::Iconified)
+        }
+        IconifyFrameAction::MakeInvisible(target) => {
+            builtin_make_frame_invisible(eval, vec![Value::make_frame(target.0)])?;
+            Ok(())
+        }
+    }
 }
 
 /// `(make-frame-invisible &optional FRAME FORCE)` -> nil.
@@ -156,7 +213,7 @@ pub(crate) fn builtin_make_frame_invisible(
         })?;
 
     if is_tty_child || is_window_frame {
-        set_frame_visibility(eval, fid, false)?;
+        set_frame_visibility(eval, fid, FrameVisibility::Invisible)?;
         if is_tty_child
             && eval
                 .frames
@@ -201,7 +258,7 @@ pub(crate) fn builtin_make_frame_visible(
     if eval.frames.get(fid).is_none() {
         return Err(signal("error", vec![Value::string("Frame not found")]));
     }
-    set_frame_visibility(eval, fid, true)?;
+    set_frame_visibility(eval, fid, FrameVisibility::Visible)?;
     let frame = eval
         .frames
         .get(fid)
@@ -298,7 +355,11 @@ pub(crate) fn builtin_visible_frame_list(
     frame_ids.sort_by_key(|fid| fid.0);
     let visible = frame_ids
         .into_iter()
-        .filter(|fid| frames.get(*fid).is_some_and(|frame| frame.visible))
+        .filter(|fid| {
+            frames
+                .get(*fid)
+                .is_some_and(|frame| frame.visibility.is_visible())
+        })
         .map(|fid| Value::make_frame(fid.0))
         .collect::<Vec<_>>();
     Ok(Value::list(visible))
@@ -1198,7 +1259,7 @@ pub(crate) fn builtin_frame_parameters(
     pairs.push(Value::cons(Value::symbol("height"), height));
     pairs.push(Value::cons(
         FrameParam::Visibility.symbol(),
-        Value::bool_val(frame.visible),
+        frame.visibility.lisp_value(),
     ));
     if frame.effective_window_system().is_none() {
         pairs.push(Value::cons(FrameParam::Font.symbol(), Value::string("tty")));
@@ -1503,7 +1564,17 @@ pub(crate) fn builtin_modify_frame_parameters(
                                 // Route through set_frame_visibility so the
                                 // display runtime is notified — mirrors
                                 // GNU's gui_set_visibility → Fmake_frame_invisible.
-                                set_frame_visibility(eval, fid, pair_cdr.is_truthy())?;
+                                match FrameVisibility::from_lisp_value(pair_cdr) {
+                                    FrameVisibility::Visible => {
+                                        set_frame_visibility(eval, fid, FrameVisibility::Visible)?
+                                    }
+                                    FrameVisibility::Iconified => {
+                                        iconify_frame_in_state(eval, fid)?
+                                    }
+                                    FrameVisibility::Invisible => {
+                                        set_frame_visibility(eval, fid, FrameVisibility::Invisible)?
+                                    }
+                                }
                             } else if let Some(frame) = eval.frames.get_mut(fid) {
                                 frame.set_known_parameter(FrameParam::Visibility, pair_cdr);
                             }
@@ -1779,7 +1850,7 @@ fn resolve_frame_position_parameters(
     )
 }
 
-/// `(frame-visible-p FRAME)` -> t or nil.
+/// `(frame-visible-p FRAME)` -> t, `icon`, or nil.
 pub(crate) fn builtin_frame_visible_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1803,7 +1874,7 @@ pub(crate) fn builtin_frame_visible_p(
             vec![Value::symbol("frame-live-p"), args[0]],
         )
     })?;
-    Ok(Value::bool_val(frame.visible))
+    Ok(frame.visibility.lisp_value())
 }
 
 /// `(framep OBJ)` -> t if OBJ is a frame object or frame id that exists.
@@ -2067,49 +2138,61 @@ pub(crate) fn request_live_gui_frame_resize_and_keep_pending(
 ///
 /// All callers — `iconify-frame`, `make-frame-invisible`,
 /// `make-frame-visible`, and `modify-frame-parameters` with `visibility`
-/// — must route through this function to guarantee the display runtime
-/// receives `RemoveChildFrame` when a GUI child frame becomes invisible.
+/// — must route through this function so the core state and the display host
+/// observe one atomic, typed transition.  Host failure leaves the core state
+/// unchanged; child frames use their compositor lifecycle while top-level GUI
+/// frames receive the complete native-window visibility state.
 pub(crate) fn set_frame_visibility(
     eval: &mut super::eval::Context,
     fid: FrameId,
-    visible: bool,
+    visibility: FrameVisibility,
 ) -> Result<(), Flow> {
-    let was_visible = eval.frames.get(fid).is_some_and(|f| f.visible);
-    let is_gui_child_frame = eval.frames.get(fid).is_some_and(|frame| {
-        frame.effective_window_system().is_some() && frame.parent_frame.as_frame_id().is_some()
-    });
+    let (previous, is_gui_frame, is_gui_child_frame) = eval
+        .frames
+        .get(fid)
+        .map(|frame| {
+            let is_gui_frame = frame.effective_window_system().is_some();
+            (
+                frame.visibility,
+                is_gui_frame,
+                is_gui_frame && frame.parent_frame.as_frame_id().is_some(),
+            )
+        })
+        .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
+    if previous == visibility {
+        return Ok(());
+    }
+
     if is_gui_child_frame {
         tracing::info!(
             frame_id = fid.0,
-            was_visible,
-            visible,
+            ?previous,
+            ?visibility,
             "child_frame_lifecycle: core_visibility_change"
         );
     }
-    if visible {
-        if let Some(frame) = eval.frames.get_mut(fid) {
-            frame.visible = true;
-            if frame.parent_frame.as_frame_id().is_some() {
-                eval.frames.raise_or_lower_child_frame(fid, true);
+
+    if is_gui_child_frame {
+        if let Some(host) = eval.display_host.as_mut() {
+            if visibility.is_visible() {
+                host.show_gui_child_frame(fid)
+            } else {
+                host.remove_gui_child_frame(fid)
             }
+            .map_err(|message| signal("error", vec![Value::string(message)]))?;
         }
-        if !was_visible
-            && is_gui_child_frame
-            && let Some(host) = eval.display_host.as_mut()
-        {
-            host.show_gui_child_frame(fid)
-                .map_err(|message| signal("error", vec![Value::string(message)]))?;
-        }
-    } else if was_visible {
-        if let Some(frame) = eval.frames.get_mut(fid) {
-            frame.visible = false;
-        }
-        // Notify display runtime: GUI child frames need RemoveChildFrame.
-        if is_gui_child_frame && let Some(host) = eval.display_host.as_mut() {
-            host.remove_gui_child_frame(fid)
-                .map_err(|message| signal("error", vec![Value::string(message)]))?;
-        }
+    } else if is_gui_frame && let Some(host) = eval.display_host.as_mut() {
+        host.set_gui_frame_visibility(fid, visibility)
+            .map_err(|message| signal("error", vec![Value::string(message)]))?;
     }
+
+    if let Some(frame) = eval.frames.get_mut(fid) {
+        frame.visibility = visibility;
+    }
+    if visibility.is_visible() && is_gui_child_frame {
+        eval.frames.raise_or_lower_child_frame(fid, true);
+    }
+    eval.invalidate_redisplay();
     Ok(())
 }
 
@@ -2161,7 +2244,7 @@ pub(crate) fn frame_parameter_value(
         FrameParamKey::Known(FrameParam::Title) => return frame.title_value(),
         FrameParamKey::Known(FrameParam::IconName) => return frame.icon_name_value(),
         FrameParamKey::Known(FrameParam::Visibility) => {
-            return if frame.visible { Value::T } else { Value::NIL };
+            return frame.visibility.lisp_value();
         }
         FrameParamKey::Known(FrameParam::Font) if frame.effective_window_system().is_none() => {
             return Value::string("tty");

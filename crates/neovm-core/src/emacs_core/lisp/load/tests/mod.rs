@@ -7879,7 +7879,7 @@ fn bootstrap_runtime_command_loop_cx_b_uses_recent_file_buffer_as_second_default
         if fid != frame_id
             && let Some(frame) = eval.frames.get_mut(fid)
         {
-            frame.visible = false;
+            frame.visibility = crate::window::FrameVisibility::Invisible;
         }
     }
 

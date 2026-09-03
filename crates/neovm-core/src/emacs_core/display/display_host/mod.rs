@@ -284,6 +284,13 @@ pub trait DisplayHost {
     ) -> Result<(), String> {
         Ok(())
     }
+    fn set_gui_frame_visibility(
+        &mut self,
+        _frame_id: crate::window::FrameId,
+        _visibility: crate::window::FrameVisibility,
+    ) -> Result<(), String> {
+        Ok(())
+    }
     fn set_gui_frame_title(
         &mut self,
         _frame_id: crate::window::FrameId,

@@ -116,13 +116,32 @@ impl RenderApp {
                     );
                 }
             }
-            WindowCommand::SetWindowMinimized { minimized } => {
+            WindowCommand::SetWindowVisibility { frame, visibility } => {
+                let emacs_frame_id = frame.raw_id();
                 if let Some(window) = self
                     .frame_windows
-                    .primary_window()
-                    .and_then(|ws| ws.window())
+                    .get_mut(emacs_frame_id)
+                    .and_then(|window_state| window_state.window())
                 {
-                    window.set_minimized(minimized);
+                    match visibility {
+                        crate::thread_comm::WindowVisibility::Visible => {
+                            window.set_visible(true);
+                            window.set_minimized(false);
+                        }
+                        crate::thread_comm::WindowVisibility::Iconified => {
+                            window.set_visible(true);
+                            window.set_minimized(true);
+                        }
+                        crate::thread_comm::WindowVisibility::Invisible => {
+                            window.set_minimized(false);
+                            window.set_visible(false);
+                        }
+                    }
+                } else {
+                    tracing::warn!(
+                        "SetWindowVisibility requested for unknown frame_id=0x{:x}",
+                        emacs_frame_id
+                    );
                 }
             }
             WindowCommand::SetWindowPosition { x, y } => {

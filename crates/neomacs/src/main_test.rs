@@ -3914,7 +3914,8 @@ fn configure_gnu_startup_state_marks_bootstrap_gui_frame_as_initial_frame() {
         .expect("hidden terminal frame");
 
     assert_eq!(
-        terminal_frame.visible, false,
+        terminal_frame.visibility,
+        FrameVisibility::Invisible,
         "GNU frame-initialize should delete a hidden terminal frame, not the opening GUI frame"
     );
     assert!(

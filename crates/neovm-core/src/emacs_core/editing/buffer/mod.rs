@@ -4574,7 +4574,7 @@ fn buffer_visible_in_visible_frame(
         let Some(frame) = frames.get(fid) else {
             return false;
         };
-        frame.visible
+        frame.visibility.is_visible()
             && frame.window_list().into_iter().any(|wid| {
                 frame
                     .find_window(wid)

@@ -921,13 +921,17 @@ fn render_command_set_window_fullscreen() {
 }
 
 #[test]
-fn render_command_set_window_minimized() {
-    let cmd = RenderCommand::Window(WindowCommand::SetWindowMinimized { minimized: true });
+fn render_command_set_window_visibility() {
+    let cmd = RenderCommand::Window(WindowCommand::SetWindowVisibility {
+        frame: FrameRef::Frame(42),
+        visibility: WindowVisibility::Iconified,
+    });
     match cmd {
-        RenderCommand::Window(WindowCommand::SetWindowMinimized { minimized }) => {
-            assert!(minimized)
+        RenderCommand::Window(WindowCommand::SetWindowVisibility { frame, visibility }) => {
+            assert_eq!(frame, FrameRef::Frame(42));
+            assert_eq!(visibility, WindowVisibility::Iconified);
         }
-        other => panic!("Expected SetWindowMinimized, got {:?}", other),
+        other => panic!("Expected SetWindowVisibility, got {:?}", other),
     }
 }
 

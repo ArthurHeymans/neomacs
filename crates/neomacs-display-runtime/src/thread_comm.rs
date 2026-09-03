@@ -278,6 +278,14 @@ pub enum WindowFullscreenMode {
     Maximized,
 }
 
+/// Native-window projection of GNU's visible/iconified/invisible frame state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowVisibility {
+    Visible,
+    Iconified,
+    Invisible,
+}
+
 /// Lifecycle commands for the render thread.
 #[derive(Debug)]
 pub enum LifecycleCommand {
@@ -322,8 +330,11 @@ pub enum WindowCommand {
     /// Show or hide the window manager's title bar and border -- the
     /// `undecorated` frame parameter.
     SetWindowDecorations { decorated: bool },
-    /// Minimize/iconify the window
-    SetWindowMinimized { minimized: bool },
+    /// Apply the complete visibility state to a specific GUI frame window.
+    SetWindowVisibility {
+        frame: FrameRef,
+        visibility: WindowVisibility,
+    },
     /// Set window position
     SetWindowPosition { x: i32, y: i32 },
     /// Request window inner size change

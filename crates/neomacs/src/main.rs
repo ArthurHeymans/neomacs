@@ -136,7 +136,7 @@ use neomacs_display_runtime::thread_comm::{
     AssetCommand, ClipboardCommand, ClipboardSelection, ConfigCommand, EmacsComms, FrameRef,
     FrameShaderAvailability, FrameShaderExecution, FrameShaderRequestId,
     InputEvent as DisplayInputEvent, LifecycleCommand, RenderCommand, SharedRenderCapabilities,
-    SurfaceSource, ThreadComms, UiCommand, WindowCommand, WindowFullscreenMode,
+    SurfaceSource, ThreadComms, UiCommand, WindowCommand, WindowFullscreenMode, WindowVisibility,
 };
 #[cfg(feature = "neo-term")]
 use neomacs_display_runtime::{
@@ -192,7 +192,9 @@ use neovm_core::emacs_core::terminal::pure::{
 use neovm_core::emacs_core::{Context, DisplayHost, GuiFrameHostRequest, PopupMenuRequest};
 use neovm_core::face::{FaceHeight, FontWeight, LFaceAttr};
 use neovm_core::heap_types::LispString;
-use neovm_core::window::{FrameDisplayIdentity, FrameFullscreen, FrameId, FrameParam, Window};
+use neovm_core::window::{
+    FrameDisplayIdentity, FrameFullscreen, FrameId, FrameParam, FrameVisibility, Window,
+};
 
 use image_catalog::AsyncImageCatalog;
 
@@ -1702,6 +1704,23 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             "failed to set GUI frame fullscreen mode",
         )?;
         Ok(())
+    }
+
+    fn set_gui_frame_visibility(
+        &mut self,
+        frame_id: neovm_core::window::FrameId,
+        visibility: FrameVisibility,
+    ) -> Result<(), String> {
+        let frame = self.frame_ref_for_gui_frame(frame_id);
+        let visibility = match visibility {
+            FrameVisibility::Visible => WindowVisibility::Visible,
+            FrameVisibility::Iconified => WindowVisibility::Iconified,
+            FrameVisibility::Invisible => WindowVisibility::Invisible,
+        };
+        self.send_render_command(
+            RenderCommand::Window(WindowCommand::SetWindowVisibility { frame, visibility }),
+            "failed to update GUI frame visibility",
+        )
     }
 
     fn set_gui_frame_undecorated(
@@ -4553,7 +4572,7 @@ fn bootstrap_buffers(
         frame.initial = initial_tty_frame;
         frame.width = width;
         frame.height = height;
-        frame.visible = true;
+        frame.visibility = FrameVisibility::Visible;
         if let Some(window_system) = display.window_system_symbol() {
             frame.set_window_system(Some(Value::symbol(window_system)));
             frame.install_gnu_gui_default_parameters();
@@ -4920,7 +4939,7 @@ fn ensure_gnu_startup_terminal_frame(eval: &mut Context, opening_frame_id: Frame
         .find(|candidate| {
             *candidate != opening_frame_id
                 && eval.frame_manager().get(*candidate).is_some_and(|frame| {
-                    !frame.visible && frame.effective_window_system().is_none()
+                    frame.visibility.is_invisible() && frame.effective_window_system().is_none()
                 })
         })
     {
@@ -4958,7 +4977,7 @@ fn ensure_gnu_startup_terminal_frame(eval: &mut Context, opening_frame_id: Frame
         seed_buffer_id,
     );
     if let Some(frame) = eval.frame_manager_mut().get_mut(terminal_frame_id) {
-        frame.visible = false;
+        frame.visibility = FrameVisibility::Invisible;
         frame.set_window_system(None);
         // Keep display-type and background-mode so defface spec
         // conditions like (class color) (background dark) match

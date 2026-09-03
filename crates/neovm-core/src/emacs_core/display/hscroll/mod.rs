@@ -378,7 +378,7 @@ pub(crate) fn update_auto_hscroll_before_redisplay(ctx: &mut Context) {
         let Some(frame) = ctx.frames.get(*frame_id) else {
             continue;
         };
-        if !frame.visible {
+        if !frame.visibility.is_visible() {
             continue;
         }
         let selected_window_id = frame.selected_window;
