@@ -18,6 +18,12 @@
 // comparisons. `--no-default-features` with neither explicit allocator feature
 // uses the system allocator. These affect Rust allocations, not linked C
 // libraries.
+// `cfg(not(test))`: `lib.rs` re-includes this file as `pub mod startup`, so a
+// test target that links the neomacs lib would otherwise declare a SECOND
+// `#[global_allocator]` and fail to compile ("conflicts with global allocator
+// in: neomacs"). The product binary is never built with `cfg(test)`, so its
+// allocator selection is untouched; test binaries use the system allocator.
+#[cfg(not(test))]
 cfg_select! {
     any(
         all(feature = "mimalloc", feature = "jemalloc"),
