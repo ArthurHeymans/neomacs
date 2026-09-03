@@ -94,8 +94,11 @@ the selected physical GPU, native decoder, compositor import, and display
 cadence remain part of the measurement. Supply a locally retained 3840x2160,
 60 fps input with `--video-file`; the harness hashes that file and records its
 absolute path, size, display environment, editor identity, and fixture hash in
-the run provenance. Its default 300 observation ticks give a 30-second sample
-after warmup.
+the run provenance. The GUI frontend dimensions define the requested video
+presentation size (1920x1080 by default), not a synthetic display size. The
+harness maximizes the real window and refuses to start decoding unless the
+actual window body can contain that presentation. Its default 300 observation
+ticks give a 30-second sample after warmup.
 
 A valid native-video run must observe GStreamer hardware-shared decoding,
 NV12 or P010 frames, borrowed native-surface import, wgpu composition, positive

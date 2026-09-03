@@ -8,16 +8,40 @@
 (defvar neomacs-perf-native-video--started-at nil)
 (defvar neomacs-perf-native-video--cpu-started-at nil)
 (defvar neomacs-perf-native-video--warmup-started-at nil)
+(defvar neomacs-perf-native-video--viewport-started-at nil)
+(defvar neomacs-perf-native-video--presentation-width nil)
+(defvar neomacs-perf-native-video--presentation-height nil)
 (defvar neomacs-perf-native-video--baseline nil)
 (defvar neomacs-perf-native-video--ticks 0)
 (defvar neomacs-perf-native-video--done nil)
 (defvar neomacs-perf-native-video--gate-process nil)
 (defvar neomacs-perf-native-video--gate-response "")
 (defvar neomacs-perf-native-video--sampling-enabled nil)
+(defvar neomacs-perf-native-video--viewport-timer nil)
+(defvar neomacs-perf-native-video--warmup-timer nil)
+(defvar neomacs-perf-native-video--sample-timer nil)
 
 (defun neomacs-perf-native-video--required-environment (name)
   (or (getenv name)
       (error "required performance environment variable %s is absent" name)))
+
+(defun neomacs-perf-native-video--positive-environment-integer (name)
+  (let* ((text (neomacs-perf-native-video--required-environment name))
+         (value (string-to-number text)))
+    (unless (> value 0)
+      (error "required performance environment variable %s is not positive: %S"
+             name text))
+    value))
+
+(defun neomacs-perf-native-video--cancel-timers ()
+  (dolist (timer (list neomacs-perf-native-video--viewport-timer
+                       neomacs-perf-native-video--warmup-timer
+                       neomacs-perf-native-video--sample-timer))
+    (when (timerp timer)
+      (cancel-timer timer)))
+  (setq neomacs-perf-native-video--viewport-timer nil
+        neomacs-perf-native-video--warmup-timer nil
+        neomacs-perf-native-video--sample-timer nil))
 
 (defun neomacs-perf-native-video--gate-filter (_process output)
   (setq neomacs-perf-native-video--gate-response
@@ -99,12 +123,18 @@
         (neomacs-perf-native-video--required-environment "NEOMACS_PERF_RESULT")
       (insert
        (json-serialize
-        `((schema_version . 1)
+        `((schema_version . 2)
           (scenario . "sustained-native-video")
           (status . ,status)
           (iterations . ,iterations)
           (elapsed_cpu_us . ,elapsed-cpu-us)
           (elapsed_wall_us . ,elapsed-wall-us)
+          (presentation_width_pixels
+           . ,neomacs-perf-native-video--presentation-width)
+          (presentation_height_pixels
+           . ,neomacs-perf-native-video--presentation-height)
+          (viewport_width_pixels . ,(window-body-width nil t))
+          (viewport_height_pixels . ,(window-body-height nil t))
           (backend . ,(symbol-name (plist-get session :backend)))
           (frame_format . ,(symbol-name (plist-get session :frame-format)))
           (compositor_import
@@ -182,6 +212,7 @@
     (status &optional snapshot error-message)
   (unless neomacs-perf-native-video--done
     (setq neomacs-perf-native-video--done t)
+    (neomacs-perf-native-video--cancel-timers)
     (let* ((snapshot
             (or snapshot
                 (ignore-errors
@@ -271,13 +302,55 @@
                (or (eq (plist-get gpu :status) 'unsupported)
                    (and (eq (plist-get gpu :status) 'enabled)
                         (> (or gpu-samples 0) 0))))
+          (when (timerp neomacs-perf-native-video--warmup-timer)
+            (cancel-timer neomacs-perf-native-video--warmup-timer))
+          (setq neomacs-perf-native-video--warmup-timer nil)
           (neomacs-perf-native-video--sampling-command "enable")
           (setq neomacs-perf-native-video--sampling-enabled t
                 neomacs-perf-native-video--baseline snapshot
                 neomacs-perf-native-video--cpu-started-at
                 (car (current-cpu-time))
                 neomacs-perf-native-video--started-at (float-time))
-          (run-at-time 0.1 0.1 #'neomacs-perf-native-video--sample))))
+          (setq neomacs-perf-native-video--sample-timer
+                (run-at-time
+                 0.1 0.1 #'neomacs-perf-native-video--sample)))))
+    (error
+     (neomacs-perf-native-video--finish
+      "error" nil (prin1-to-string error-data)))))
+
+(defun neomacs-perf-native-video--open-video (video-file)
+  (setq neomacs-perf-native-video--handle
+        (neomacs-video-insert
+         video-file
+         neomacs-perf-native-video--presentation-width
+         neomacs-perf-native-video--presentation-height
+         -1 t)
+        neomacs-perf-native-video--warmup-started-at (float-time))
+  (goto-char (point-min))
+  (redisplay t)
+  (setq neomacs-perf-native-video--warmup-timer
+        (run-at-time 0.05 0.05 #'neomacs-perf-native-video--warmup)))
+
+(defun neomacs-perf-native-video--await-viewport ()
+  (condition-case error-data
+      (let ((width (window-body-width nil t))
+            (height (window-body-height nil t)))
+        (cond
+         ((and (>= width neomacs-perf-native-video--presentation-width)
+               (>= height neomacs-perf-native-video--presentation-height))
+          (when (timerp neomacs-perf-native-video--viewport-timer)
+            (cancel-timer neomacs-perf-native-video--viewport-timer))
+          (setq neomacs-perf-native-video--viewport-timer nil)
+          (neomacs-perf-native-video--open-video
+           (neomacs-perf-native-video--required-environment
+            "NEOMACS_PERF_VIDEO_FILE")))
+         ((> (- (float-time) neomacs-perf-native-video--viewport-started-at)
+             5.0)
+          (error
+           "GUI viewport %dx%d cannot contain requested %dx%d video"
+           width height
+           neomacs-perf-native-video--presentation-width
+           neomacs-perf-native-video--presentation-height))))
     (error
      (neomacs-perf-native-video--finish
       "error" nil (prin1-to-string error-data)))))
@@ -289,14 +362,18 @@
               "NEOMACS_PERF_VIDEO_FILE")))
         (unless (file-readable-p video-file)
           (error "native-video input is unreadable: %s" video-file))
+        (setq neomacs-perf-native-video--presentation-width
+              (neomacs-perf-native-video--positive-environment-integer
+               "NEOMACS_PERF_VIDEO_WIDTH")
+              neomacs-perf-native-video--presentation-height
+              (neomacs-perf-native-video--positive-environment-integer
+               "NEOMACS_PERF_VIDEO_HEIGHT")
+              neomacs-perf-native-video--viewport-started-at (float-time))
         (switch-to-buffer (get-buffer-create "*Sustained Native Video*"))
         (erase-buffer)
-        (setq neomacs-perf-native-video--handle
-              (neomacs-video-insert video-file 1920 1080 -1 t)
-              neomacs-perf-native-video--warmup-started-at (float-time))
-        (goto-char (point-min))
-        (redisplay t)
-        (run-at-time 0.05 0.05 #'neomacs-perf-native-video--warmup))
+        (setq neomacs-perf-native-video--viewport-timer
+              (run-at-time
+               0 0.05 #'neomacs-perf-native-video--await-viewport)))
     (error
      (neomacs-perf-native-video--finish
       "error" nil (prin1-to-string error-data)))))

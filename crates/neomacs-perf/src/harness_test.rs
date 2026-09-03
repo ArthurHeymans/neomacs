@@ -546,12 +546,16 @@ fn sustained_native_video_promotes_pacing_gpu_pool_and_memory_metrics() {
         NonZeroU32::new(300).expect("non-zero literal"),
     );
     let raw_result = r#"{
-      "schema_version": 1,
+      "schema_version": 2,
       "scenario": "sustained-native-video",
       "status": "ok",
       "iterations": 300,
       "elapsed_cpu_us": 6000000,
       "elapsed_wall_us": 30000000,
+      "presentation_width_pixels": 1920,
+      "presentation_height_pixels": 1080,
+      "viewport_width_pixels": 3440,
+      "viewport_height_pixels": 1880,
       "backend": "gstreamer",
       "frame_format": "nv12",
       "compositor_import": "borrowed-native-surface",
@@ -608,6 +612,22 @@ fn sustained_native_video_promotes_pacing_gpu_pool_and_memory_metrics() {
     assert_eq!(metric(MetricName::AverageVideoGpuPassTime), 500.0);
     assert_eq!(metric(MetricName::VideoSurfacePoolReuses), 1793.0);
     assert_eq!(metric(MetricName::VideoGpuMemoryBytes), 24_883_200.0);
+
+    let undersized_viewport = raw_result.replace(
+        r#""viewport_width_pixels": 3440"#,
+        r#""viewport_width_pixels": 1280"#,
+    );
+    let rejected = PerfHarness::new(scratch.path())
+        .record_fixture_result(&request, &undersized_viewport)
+        .expect("persist geometrically invalid native-video result");
+    let RunVerdict::CorrectnessMismatch { mismatches } = rejected.artifact.verdict else {
+        panic!("an undersized viewport must not produce a benchmark sample")
+    };
+    assert!(
+        mismatches
+            .iter()
+            .any(|mismatch| mismatch.invariant == "presentation-fits-viewport")
+    );
 }
 
 #[test]
@@ -637,8 +657,10 @@ fn sustained_native_video_rejects_a_cpu_upload_fallback() {
         NonZeroU32::new(1).expect("non-zero literal"),
     );
     let raw_result = r#"{
-      "schema_version": 1, "scenario": "sustained-native-video", "status": "ok",
+      "schema_version": 2, "scenario": "sustained-native-video", "status": "ok",
       "iterations": 1, "elapsed_cpu_us": 1, "elapsed_wall_us": 100000,
+      "presentation_width_pixels": 1920, "presentation_height_pixels": 1080,
+      "viewport_width_pixels": 3440, "viewport_height_pixels": 1880,
       "backend": "gstreamer", "frame_format": "rgba8",
       "compositor_import": "cpu-upload", "presentation": "wgpu-composited",
       "decoded_frames": 2, "replaced_frames": 0, "late_dropped_frames": 0,

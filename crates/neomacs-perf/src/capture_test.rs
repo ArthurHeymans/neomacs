@@ -31,3 +31,9 @@ fn batch_is_direct_and_tui_names_its_adapter() {
         CaptureRoute::Adapter("PTY")
     );
 }
+
+#[test]
+fn direct_native_display_failures_are_not_described_as_adapter_failures() {
+    assert_eq!(CaptureRoute::Direct.process_role(), "workload process");
+    assert_eq!(CaptureRoute::Adapter("GUI").process_role(), "adapter");
+}

@@ -21,6 +21,14 @@ impl CaptureRoute {
             Frontend::Gui { .. } => Self::Adapter("GUI"),
         }
     }
+
+    /// Role of the process whose exit status the harness observes.
+    pub(crate) const fn process_role(self) -> &'static str {
+        match self {
+            Self::Direct => "workload process",
+            Self::Adapter(_) => "adapter",
+        }
+    }
 }
 
 #[cfg(test)]

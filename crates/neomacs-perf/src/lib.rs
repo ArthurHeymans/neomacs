@@ -7,6 +7,7 @@ mod comparison;
 mod counters;
 mod harness;
 mod host;
+mod native_video;
 mod profile;
 mod profile_gate;
 mod suite;

@@ -25,12 +25,14 @@ use crate::{
     artifact_store::{unix_time_ms, write_json_atomically},
     counters::PerfStatCapture,
     host::{collect_host_provenance, validate_machine_policy},
+    native_video::NativeVideoPresentationTarget,
     profile_gate::ProfileGate,
     scenario,
 };
 
 pub(crate) const ARTIFACT_SCHEMA_VERSION: u32 = 3;
 const SCENARIO_RESULT_SCHEMA_VERSION: u32 = 1;
+const NATIVE_VIDEO_RESULT_SCHEMA_VERSION: u32 = 2;
 const MX_TAB_COMPLETION_CANDIDATE_COUNT: u64 = 1024;
 const RUST_LSP_TYPING_OVERLAY_COUNT: u64 = 4;
 const RUST_LSP_TYPING_DIAGNOSTIC_COUNT: u64 = 4;
@@ -378,8 +380,9 @@ impl PerfHarness {
         if !output.status.success() {
             return context.infrastructure_failure(
                 format!(
-                    "{} adapter exited with status {}",
+                    "{} {} exited with status {}",
                     frontend_name(request.frontend()),
+                    capture_route.process_role(),
                     output.status
                 ),
                 files,
@@ -582,9 +585,8 @@ impl PerfHarness {
                     .to_string(),
             );
         }
-        if !matches!(request.frontend(), Frontend::Gui { .. }) {
-            return Err("sustained native-video performance requires the GUI frontend".to_string());
-        }
+        let presentation_target = NativeVideoPresentationTarget::from_frontend(request.frontend())
+            .map_err(|error| error.to_string())?;
         let video_file = request.video_file().ok_or_else(|| {
             "sustained-native-video requires --video-file pointing to a readable video".to_string()
         })?;
@@ -654,6 +656,8 @@ impl PerfHarness {
             video_file: video_file.to_string_lossy().into_owned(),
             video_file_sha256: sha256_file(&video_file)?,
             video_file_size_bytes: metadata.len(),
+            presentation_width_pixels: presentation_target.width(),
+            presentation_height_pixels: presentation_target.height(),
             display_environment: display_environment.clone(),
             gpu_frame_timing: "requested",
         };
@@ -679,6 +683,7 @@ impl PerfHarness {
             workload: PreparedWorkload::NativeVideo {
                 video_file,
                 display_environment,
+                presentation_target,
             },
         })
     }
@@ -1282,6 +1287,7 @@ enum PreparedWorkload {
     NativeVideo {
         video_file: PathBuf,
         display_environment: BTreeMap<String, String>,
+        presentation_target: NativeVideoPresentationTarget,
     },
 }
 
@@ -1397,11 +1403,20 @@ impl PreparedScenario {
         if let PreparedWorkload::NativeVideo {
             video_file,
             display_environment,
+            presentation_target,
         } = &self.workload
         {
             command
                 .envs(display_environment)
                 .env("NEOMACS_PERF_VIDEO_FILE", video_file)
+                .env(
+                    "NEOMACS_PERF_VIDEO_WIDTH",
+                    presentation_target.width().to_string(),
+                )
+                .env(
+                    "NEOMACS_PERF_VIDEO_HEIGHT",
+                    presentation_target.height().to_string(),
+                )
                 .env("NEOMACS_GPU_FRAME_TIMING", "1");
         }
     }
@@ -1469,7 +1484,10 @@ fn frontend_command(
             } else {
                 Command::new(request.editor())
             };
-            command.arg("-Q");
+            // Maximization is asynchronous on real window managers.  The
+            // fixture waits for and validates the resulting body dimensions
+            // before inserting the requested video presentation.
+            command.arg("-Q").arg("--maximized");
             command
         }
         Frontend::Gui { .. } => {
@@ -1993,6 +2011,9 @@ struct SustainedNativeVideoResult {
     iterations: u32,
     elapsed_cpu_us: u64,
     elapsed_wall_us: u64,
+    presentation_target: NativeVideoPresentationTarget,
+    viewport_width_pixels: u32,
+    viewport_height_pixels: u32,
     backend: VideoBenchmarkBackend,
     frame_format: VideoBenchmarkFrameFormat,
     compositor_import: VideoBenchmarkImport,
@@ -2034,6 +2055,10 @@ struct SustainedNativeVideoResultWire {
     iterations: u32,
     elapsed_cpu_us: u64,
     elapsed_wall_us: u64,
+    presentation_width_pixels: u32,
+    presentation_height_pixels: u32,
+    viewport_width_pixels: u32,
+    viewport_height_pixels: u32,
     backend: VideoBenchmarkBackend,
     frame_format: VideoBenchmarkFrameFormat,
     compositor_import: VideoBenchmarkImport,
@@ -2072,6 +2097,11 @@ impl TryFrom<SustainedNativeVideoResultWire> for SustainedNativeVideoResult {
     type Error = String;
 
     fn try_from(wire: SustainedNativeVideoResultWire) -> Result<Self, Self::Error> {
+        let presentation_target = NativeVideoPresentationTarget::from_frontend(Frontend::Gui {
+            width: wire.presentation_width_pixels,
+            height: wire.presentation_height_pixels,
+        })
+        .map_err(|error| error.to_string())?;
         Ok(Self {
             schema_version: wire.schema_version,
             scenario: wire.scenario,
@@ -2079,6 +2109,9 @@ impl TryFrom<SustainedNativeVideoResultWire> for SustainedNativeVideoResult {
             iterations: wire.iterations,
             elapsed_cpu_us: wire.elapsed_cpu_us,
             elapsed_wall_us: wire.elapsed_wall_us,
+            presentation_target,
+            viewport_width_pixels: wire.viewport_width_pixels,
+            viewport_height_pixels: wire.viewport_height_pixels,
             backend: wire.backend,
             frame_format: wire.frame_format,
             compositor_import: wire.compositor_import,
@@ -2463,6 +2496,8 @@ struct NativeVideoInputProvenanceManifest<'a> {
     video_file: String,
     video_file_sha256: String,
     video_file_size_bytes: u64,
+    presentation_width_pixels: u32,
+    presentation_height_pixels: u32,
     display_environment: BTreeMap<String, String>,
     gpu_frame_timing: &'a str,
 }
@@ -2855,7 +2890,7 @@ fn validate_sustained_native_video_result(
     mismatch(
         &mut mismatches,
         "scenario-result-schema",
-        SCENARIO_RESULT_SCHEMA_VERSION,
+        NATIVE_VIDEO_RESULT_SCHEMA_VERSION,
         result.schema_version,
     );
     mismatch(
@@ -2876,6 +2911,36 @@ fn validate_sustained_native_video_result(
         request.iterations.get(),
         result.iterations,
     );
+    let requested_target = NativeVideoPresentationTarget::from_frontend(request.frontend())
+        .expect("native-video preparation rejects a non-GUI or zero-sized frontend");
+    mismatch(
+        &mut mismatches,
+        "presentation-width",
+        requested_target.width(),
+        result.presentation_target.width(),
+    );
+    mismatch(
+        &mut mismatches,
+        "presentation-height",
+        requested_target.height(),
+        result.presentation_target.height(),
+    );
+    if result.viewport_width_pixels < result.presentation_target.width()
+        || result.viewport_height_pixels < result.presentation_target.height()
+    {
+        mismatches.push(CorrectnessMismatch {
+            invariant: "presentation-fits-viewport".to_string(),
+            expected: format!(
+                "viewport at least {}x{}",
+                result.presentation_target.width(),
+                result.presentation_target.height()
+            ),
+            actual: format!(
+                "{}x{}",
+                result.viewport_width_pixels, result.viewport_height_pixels
+            ),
+        });
+    }
     mismatch(
         &mut mismatches,
         "backend",
