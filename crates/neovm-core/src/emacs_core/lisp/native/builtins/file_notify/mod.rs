@@ -10,7 +10,7 @@ mod registry;
 pub(super) use lisp::file_notify_error;
 use model::{
     Backend as FileNotifyBackend, BackendEvent as FileNotifyEvent, DrainBatch, FileWatch,
-    WatchActivity, WatchId,
+    WatchActivity, WatchId, WatchIdAllocator,
 };
 use registry::WatchRegistry;
 
@@ -107,7 +107,7 @@ pub(crate) fn drain_file_notify_events(
     let count = events.len();
 
     for (event, callback) in events {
-        let raw_event = event.into_lisp();
+        let raw_event = event.into_lisp(ctx);
         ctx.queue_special_event(Value::list(vec![
             Value::symbol("file-notify"),
             raw_event,

@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::ptr;
 use std::thread::JoinHandle;
 use windows_sys::Win32::Foundation::{
-    ERROR_OPERATION_ABORTED, GetLastError, HANDLE, INVALID_HANDLE_VALUE, WAIT_FAILED, WAIT_OBJECT_0,
+    ERROR_OPERATION_ABORTED, HANDLE, INVALID_HANDLE_VALUE, WAIT_FAILED, WAIT_OBJECT_0,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_FLAG_OVERLAPPED,
@@ -59,7 +59,7 @@ impl Worker {
         let directory_handle = open_directory(&directory)?;
         let io_event = create_event()?;
         let stop_event = create_event()?;
-        let stop_event_raw = stop_event.as_raw_handle() as usize;
+        let worker_stop_event = stop_event.try_clone().map_err(|error| error.to_string())?;
 
         let join = std::thread::Builder::new()
             .name("neomacs-w32notify".to_owned())
@@ -67,7 +67,7 @@ impl Worker {
                 run(
                     directory_handle,
                     io_event,
-                    stop_event_raw,
+                    worker_stop_event,
                     watched_name,
                     recursive,
                     native_filter,
@@ -86,8 +86,8 @@ impl Worker {
 
 impl Drop for Worker {
     fn drop(&mut self) {
-        // SAFETY: this controller owns the event handle until `join` completes;
-        // the worker only borrows its raw value during that interval.
+        // SAFETY: this controller owns the event handle. The worker owns a
+        // duplicate referring to the same event object until `join` completes.
         unsafe {
             SetEvent(self.stop_event.as_raw_handle() as HANDLE);
         }
@@ -100,7 +100,7 @@ impl Drop for Worker {
 fn run(
     directory: OwnedHandle,
     io_event: OwnedHandle,
-    stop_event: usize,
+    stop_event: OwnedHandle,
     watched_name: Option<PathBuf>,
     recursive: bool,
     native_filter: u32,
@@ -110,7 +110,7 @@ fn run(
 ) {
     let directory_raw = directory.as_raw_handle() as HANDLE;
     let io_event_raw = io_event.as_raw_handle() as HANDLE;
-    let stop_event_raw = stop_event as HANDLE;
+    let stop_event_raw = stop_event.as_raw_handle() as HANDLE;
     let handles = [stop_event_raw, io_event_raw];
     let mut buffer = vec![0_u8; BUFFER_CAPACITY];
 
@@ -119,66 +119,47 @@ fn run(
             hEvent: io_event_raw,
             ..OVERLAPPED::default()
         };
-        // SAFETY: all pointers reference live, writable storage until the
-        // overlapped request completes or is cancelled below.
-        let started = unsafe {
-            ReadDirectoryChangesW(
-                directory_raw,
-                buffer.as_mut_ptr().cast::<c_void>(),
-                buffer.len() as u32,
-                if recursive { 1 } else { 0 },
-                native_filter,
-                ptr::null_mut(),
-                &mut overlapped,
-                None,
-            )
+        let mut pending = match PendingDirectoryRead::start(
+            directory_raw,
+            &mut buffer,
+            &mut overlapped,
+            recursive,
+            native_filter,
+        ) {
+            Ok(pending) => pending,
+            Err(error) => {
+                fail(&activity, &events, error.to_string());
+                return;
+            }
         };
-        if started == 0 {
-            fail(
-                &activity,
-                &events,
-                std::io::Error::last_os_error().to_string(),
-            );
-            return;
-        }
 
         // SAFETY: both event handles stay owned for the full wait.
         let ready = unsafe { WaitForMultipleObjects(2, handles.as_ptr(), 0, INFINITE) };
         if ready == WAIT_OBJECT_0 {
-            // SAFETY: cancelling and waiting on this exact live OVERLAPPED
-            // keeps its stack storage and buffer alive through completion.
-            unsafe {
-                CancelIoEx(directory_raw, &overlapped);
-                let mut ignored = 0;
-                GetOverlappedResult(directory_raw, &overlapped, &mut ignored, 1);
-            }
+            // `pending` cancels and joins the I/O operation before its
+            // borrowed OVERLAPPED and buffer can leave scope.
             return;
         }
         if ready == WAIT_FAILED || ready != WAIT_OBJECT_0 + 1 {
-            fail(
-                &activity,
-                &events,
-                std::io::Error::last_os_error().to_string(),
-            );
+            let error = if ready == WAIT_FAILED {
+                std::io::Error::last_os_error().to_string()
+            } else {
+                format!("unexpected wait result {ready}")
+            };
+            fail(&activity, &events, error);
             return;
         }
 
-        let mut bytes = 0;
-        // SAFETY: the I/O event is signalled, and OVERLAPPED and buffer are
-        // still alive and unchanged since ReadDirectoryChangesW started.
-        if unsafe { GetOverlappedResult(directory_raw, &overlapped, &mut bytes, 0) } == 0 {
-            // SAFETY: GetLastError immediately follows the failed Win32 call.
-            let code = unsafe { GetLastError() };
-            if code == ERROR_OPERATION_ABORTED {
+        let bytes = match pending.complete() {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                if error.raw_os_error() == Some(ERROR_OPERATION_ABORTED as i32) {
+                    return;
+                }
+                fail(&activity, &events, error.to_string());
                 return;
             }
-            fail(
-                &activity,
-                &events,
-                std::io::Error::from_raw_os_error(code as i32).to_string(),
-            );
-            return;
-        }
+        };
         if bytes == 0 {
             if events.publish(WorkerMessage::Overflow(watch_id.clone())) == PublishOutcome::Closed {
                 return;
@@ -186,7 +167,7 @@ fn run(
             continue;
         }
 
-        let decoded = match codec::decode(&buffer[..bytes as usize]) {
+        let decoded = match codec::decode(pending.completed_bytes(bytes)) {
             Ok(decoded) => decoded,
             Err(error) => {
                 tracing::warn!(%error, "malformed Windows file-notification batch; rescanning");
@@ -211,6 +192,87 @@ fn run(
                 return;
             }
         }
+    }
+}
+
+/// Owns Rust's borrows for one outstanding `ReadDirectoryChangesW` request.
+///
+/// The kernel may access both buffers until `GetOverlappedResult` observes
+/// completion. Drop cancels and waits, making early returns and future edits
+/// unable to free those buffers while the operation is still pending.
+struct PendingDirectoryRead<'a> {
+    directory: HANDLE,
+    overlapped: &'a mut OVERLAPPED,
+    buffer: &'a mut [u8],
+    pending: bool,
+}
+
+impl<'a> PendingDirectoryRead<'a> {
+    fn start(
+        directory: HANDLE,
+        buffer: &'a mut [u8],
+        overlapped: &'a mut OVERLAPPED,
+        recursive: bool,
+        native_filter: u32,
+    ) -> std::io::Result<Self> {
+        // SAFETY: the returned guard borrows both writable buffers and waits
+        // for cancellation/completion before releasing either borrow.
+        let started = unsafe {
+            ReadDirectoryChangesW(
+                directory,
+                buffer.as_mut_ptr().cast::<c_void>(),
+                buffer.len() as u32,
+                if recursive { 1 } else { 0 },
+                native_filter,
+                ptr::null_mut(),
+                overlapped,
+                None,
+            )
+        };
+        if started == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(Self {
+            directory,
+            overlapped,
+            buffer,
+            pending: true,
+        })
+    }
+
+    fn complete(&mut self) -> std::io::Result<usize> {
+        let mut bytes = 0;
+        // SAFETY: this guard exclusively borrows the exact OVERLAPPED and
+        // buffer supplied when the operation started.
+        let completed =
+            unsafe { GetOverlappedResult(self.directory, self.overlapped, &mut bytes, 0) };
+        if completed == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        self.pending = false;
+        Ok(bytes as usize)
+    }
+
+    fn completed_bytes(&self, bytes: usize) -> &[u8] {
+        assert!(!self.pending, "file-notify I/O is still pending");
+        &self.buffer[..bytes]
+    }
+}
+
+impl Drop for PendingDirectoryRead<'_> {
+    fn drop(&mut self) {
+        if !self.pending {
+            return;
+        }
+        // SAFETY: this guard owns the outstanding operation's borrows. Waiting
+        // here keeps both allocations alive until the kernel has stopped using
+        // them, whether cancellation succeeds or races with completion.
+        unsafe {
+            CancelIoEx(self.directory, self.overlapped);
+            let mut ignored = 0;
+            GetOverlappedResult(self.directory, self.overlapped, &mut ignored, 1);
+        }
+        self.pending = false;
     }
 }
 

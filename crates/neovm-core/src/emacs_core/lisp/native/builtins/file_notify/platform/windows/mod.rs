@@ -1,5 +1,7 @@
 #[cfg(target_os = "windows")]
-use super::super::{DrainBatch, FileNotifyBackend, FileWatch, WatchActivity, file_notify_error};
+use super::super::{
+    DrainBatch, FileNotifyBackend, FileWatch, WatchActivity, WatchIdAllocator, file_notify_error,
+};
 use super::super::{FileNotifyEvent, WatchId};
 #[cfg(target_os = "windows")]
 use crate::emacs_core::error::Flow;
@@ -118,13 +120,13 @@ impl FileNotifyEvent for W32Event {
         &self.watch_id
     }
 
-    fn into_lisp(self) -> Value {
+    fn into_lisp(self, ctx: &crate::emacs_core::eval::Context) -> Value {
         // GNU w32notify events are `(DESCRIPTOR ACTION FILE)` and use a
         // pointer-like integer as the opaque descriptor.
         Value::list(vec![
             Value::fixnum(self.watch_id.slot()),
             Value::symbol(self.action.as_lisp_name()),
-            Value::string(self.path.display().to_string()),
+            super::super::lisp::file_name_to_lisp(ctx, &self.path),
         ])
     }
 }
@@ -147,7 +149,7 @@ mod native {
         tx: Option<DeliverySender<WorkerMessage>>,
         rx: Option<DeliveryReceiver<WorkerMessage>>,
         watches: Vec<W32Watch>,
-        next_id: i64,
+        ids: WatchIdAllocator,
     }
 
     impl W32NotifyBackend {
@@ -158,15 +160,6 @@ mod native {
             let (tx, rx) = delivery::channel(notifier);
             self.tx = Some(tx);
             self.rx = Some(rx);
-        }
-
-        fn allocate_id(&mut self) -> i64 {
-            let id = self.next_id;
-            self.next_id = self
-                .next_id
-                .checked_add(1)
-                .expect("file notification descriptor space exhausted");
-            id
         }
     }
 
@@ -188,7 +181,7 @@ mod native {
                     Some(Value::string(path.display().to_string())),
                 ));
             }
-            let descriptor = WatchId::new(self.allocate_id(), 0);
+            let descriptor = self.ids.allocate();
             let activity = WatchActivity::active();
             let worker = Worker::start(
                 path,

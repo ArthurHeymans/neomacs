@@ -26,7 +26,7 @@ fn inactive_native_watch_terminates_without_a_queued_data_event() {
             native_descriptor: 5,
             activity,
         }],
-        next_id: 12,
+        ids: WatchIdAllocator::default(),
     };
 
     assert!(!backend.valid_p(&watch_id));
@@ -34,6 +34,62 @@ fn inactive_native_watch_terminates_without_a_queued_data_event() {
     assert!(batch.events.is_empty());
     assert_eq!(batch.terminated, [watch_id]);
     assert!(!backend.has_watches());
+}
+
+#[test]
+fn stale_native_descriptor_event_does_not_target_a_reused_watch() {
+    let old_activity = WatchActivity::active();
+    old_activity.terminate();
+    let new_activity = WatchActivity::active();
+    let backend = InotifyBackend {
+        worker: None,
+        watches: vec![InotifyWatch {
+            common: FileWatch {
+                id: WatchId::new(12, 0),
+                path: PathBuf::from("new-watch"),
+                request: InotifyRequest::new(vec!["ignored".to_owned()]),
+            },
+            native_descriptor: 5,
+            activity: new_activity,
+        }],
+        ids: WatchIdAllocator::default(),
+    };
+
+    let translated = backend.translate_event(NativeEvent {
+        descriptor: 5,
+        activity: Some(old_activity),
+        mask: EventMask::IGNORED,
+        cookie: 0,
+        name: None,
+    });
+
+    assert!(translated.is_empty());
+}
+
+#[test]
+fn event_file_name_is_decoded_on_the_evaluator_without_loss() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let raw_name = vec![b'n', 0xff, b'm', b'e'];
+    let event = InotifyEvent {
+        watch_id: WatchId::new(17, 0),
+        aspects: vec!["create"],
+        path: PathBuf::from(std::ffi::OsString::from_vec(raw_name.clone())),
+        cookie: 0,
+    };
+    let mut eval = crate::test_utils::runtime_startup_context();
+    eval.eval_str("(setq file-name-coding-system nil default-file-name-coding-system nil)")
+        .expect("select identity file-name decoding");
+
+    let fields = crate::emacs_core::value::list_to_vec(&event.into_lisp(&eval))
+        .expect("inotify event is a proper list");
+    assert_eq!(
+        fields[2]
+            .as_lisp_string()
+            .expect("event file name is a string")
+            .as_bytes(),
+        raw_name
+    );
 }
 
 #[test]

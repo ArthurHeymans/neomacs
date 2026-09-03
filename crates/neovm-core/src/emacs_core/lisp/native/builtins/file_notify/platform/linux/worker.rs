@@ -22,6 +22,7 @@ const INOTIFY_KEY: usize = 1;
 #[derive(Clone, Debug)]
 pub(super) struct NativeEvent {
     pub(super) descriptor: i32,
+    pub(super) activity: Option<WatchActivity>,
     pub(super) mask: EventMask,
     pub(super) cookie: u32,
     pub(super) name: Option<OsString>,
@@ -167,11 +168,19 @@ fn worker_loop(
                         any = true;
                         let descriptor = event.wd.get_watch_descriptor_id();
                         let terminal = event.mask.contains(EventMask::IGNORED);
-                        if terminal && let Some((_, activity)) = descriptors.remove(&descriptor) {
-                            activity.terminate();
-                        }
+                        let activity = if terminal {
+                            descriptors.remove(&descriptor).map(|(_, activity)| {
+                                activity.terminate();
+                                activity
+                            })
+                        } else {
+                            descriptors
+                                .get(&descriptor)
+                                .map(|(_, activity)| activity.clone())
+                        };
                         events.publish(Ok(NativeEvent {
                             descriptor,
+                            activity,
                             mask: event.mask,
                             cookie: event.cookie,
                             name: event.name.map(ToOwned::to_owned),

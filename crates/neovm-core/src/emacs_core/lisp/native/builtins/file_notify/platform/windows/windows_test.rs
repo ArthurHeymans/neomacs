@@ -59,7 +59,8 @@ fn w32_request_parsing_and_lisp_event_shape_match_gnu() {
         action: W32Action::RenamedTo,
         path: PathBuf::from(r"nested\new.txt"),
     };
-    let fields = crate::emacs_core::value::list_to_vec(&event.into_lisp())
+    let eval = crate::test_utils::runtime_startup_context();
+    let fields = crate::emacs_core::value::list_to_vec(&event.into_lisp(&eval))
         .expect("w32 event is a proper list");
     assert_eq!(
         fields,

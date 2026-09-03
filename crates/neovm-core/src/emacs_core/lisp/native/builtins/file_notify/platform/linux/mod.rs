@@ -7,7 +7,7 @@
 
 use super::super::{
     DrainBatch, FileNotifyBackend, FileNotifyEvent, FileWatch, WatchActivity, WatchId,
-    file_notify_error,
+    WatchIdAllocator, file_notify_error,
 };
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::process::WaitNotifier;
@@ -132,12 +132,12 @@ impl FileNotifyEvent for InotifyEvent {
         &self.watch_id
     }
 
-    fn into_lisp(self) -> Value {
+    fn into_lisp(self, ctx: &crate::emacs_core::eval::Context) -> Value {
         // GNU inotify events are `(DESCRIPTOR ASPECTS NAME COOKIE)`.
         Value::list(vec![
             self.watch_id.to_inotify_lisp(),
             Value::list(self.aspects.into_iter().map(Value::symbol).collect()),
-            Value::string(self.path.display().to_string()),
+            super::super::lisp::file_name_to_lisp(ctx, &self.path),
             Value::fixnum(i64::from(self.cookie)),
         ])
     }
@@ -154,7 +154,7 @@ struct InotifyWatch {
 pub(in super::super) struct InotifyBackend {
     worker: Option<Worker>,
     watches: Vec<InotifyWatch>,
-    next_id: i64,
+    ids: WatchIdAllocator,
 }
 
 impl InotifyBackend {
@@ -165,15 +165,6 @@ impl InotifyBackend {
             })?);
         }
         Ok(self.worker.as_mut().expect("worker was initialized"))
-    }
-
-    fn allocate_id(&mut self) -> i64 {
-        let id = self.next_id;
-        self.next_id = self
-            .next_id
-            .checked_add(1)
-            .expect("file notification descriptor space exhausted");
-        id
     }
 
     fn aspects(mask: EventMask) -> Vec<&'static str> {
@@ -206,7 +197,14 @@ impl InotifyBackend {
         let queue_overflow = event.mask.contains(EventMask::Q_OVERFLOW);
         self.watches
             .iter()
-            .filter(|watch| queue_overflow || watch.native_descriptor == event.descriptor)
+            .filter(|watch| {
+                queue_overflow
+                    || (watch.native_descriptor == event.descriptor
+                        && event
+                            .activity
+                            .as_ref()
+                            .is_some_and(|activity| activity.same_registration(&watch.activity)))
+            })
             .filter(|watch| watch.common.request.accepts(event.mask))
             .map(|watch| InotifyEvent {
                 watch_id: watch.common.id.clone(),
@@ -260,7 +258,7 @@ impl FileNotifyBackend for InotifyBackend {
                 ));
             }
         };
-        let descriptor = WatchId::new(self.allocate_id(), 0);
+        let descriptor = self.ids.allocate();
         self.watches.push(InotifyWatch {
             common: FileWatch {
                 id: descriptor.clone(),
@@ -281,18 +279,18 @@ impl FileNotifyBackend for InotifyBackend {
         else {
             return Ok(false);
         };
-        let removed = self.watches.remove(index);
-        if !self
-            .watches
-            .iter()
-            .any(|watch| watch.native_descriptor == removed.native_descriptor)
-        {
+        let native_descriptor = self.watches[index].native_descriptor;
+        let remove_native = !self.watches.iter().enumerate().any(|(other_index, watch)| {
+            other_index != index && watch.native_descriptor == native_descriptor
+        });
+        if remove_native {
             self.worker
                 .as_ref()
                 .expect("a live watch has a worker")
-                .remove(removed.native_descriptor)
+                .remove(native_descriptor)
                 .map_err(|error| file_notify_error("Could not rm watch", Some(error), None))?;
         }
+        self.watches.remove(index);
         if self.watches.is_empty() {
             self.worker = None;
         }

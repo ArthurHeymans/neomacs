@@ -42,6 +42,26 @@ impl WatchId {
     }
 }
 
+/// Monotonic logical identity source shared by every native backend.
+///
+/// Native descriptors may be reused; logical slots are never reused within an
+/// evaluator lifetime, so stale events cannot alias a later registration.
+#[derive(Default)]
+pub(super) struct WatchIdAllocator {
+    next_slot: i64,
+}
+
+impl WatchIdAllocator {
+    pub(super) fn allocate(&mut self) -> WatchId {
+        let slot = self.next_slot;
+        self.next_slot = self
+            .next_slot
+            .checked_add(1)
+            .expect("file notification descriptor space exhausted");
+        WatchId::new(slot, 0)
+    }
+}
+
 /// Shared monotonic native-watch lifecycle.
 ///
 /// A worker flips this token before publishing a terminal event. The
@@ -62,6 +82,10 @@ impl WatchActivity {
     pub(super) fn is_active(&self) -> bool {
         self.0.load(Ordering::Acquire)
     }
+
+    pub(super) fn same_registration(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -73,7 +97,7 @@ pub(super) struct FileWatch<Request> {
 
 pub(super) trait BackendEvent {
     fn watch_id(&self) -> &WatchId;
-    fn into_lisp(self) -> Value;
+    fn into_lisp(self, ctx: &crate::emacs_core::eval::Context) -> Value;
 }
 
 /// One atomic handoff from a native backend to the evaluator.

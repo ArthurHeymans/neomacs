@@ -49,7 +49,7 @@ mod native {
     };
     use super::super::super::{
         DrainBatch, FileNotifyBackend, FileNotifyEvent, FileWatch, WatchActivity, WatchId,
-        file_notify_error,
+        WatchIdAllocator, file_notify_error,
     };
     use super::*;
     use crate::emacs_core::error::Flow;
@@ -91,7 +91,7 @@ mod native {
             &self.watch_id
         }
 
-        fn into_lisp(self) -> Value {
+        fn into_lisp(self, ctx: &crate::emacs_core::eval::Context) -> Value {
             // GNU kqueue events use a bare-fixnum descriptor and have no
             // trailing cookie (`kqueue_generate_event`, src/kqueue.c:94-104).
             let mut fields = vec![
@@ -102,10 +102,10 @@ mod native {
                         .map(|action| Value::symbol(action.as_lisp_name()))
                         .collect(),
                 ),
-                Value::string(self.path.display().to_string()),
+                super::super::super::lisp::file_name_to_lisp(ctx, &self.path),
             ];
             if let Some(file1) = self.file1 {
-                fields.push(Value::string(file1.display().to_string()));
+                fields.push(super::super::super::lisp::file_name_to_lisp(ctx, &file1));
             }
             Value::list(fields)
         }
@@ -505,19 +505,10 @@ mod native {
     pub(crate) struct KqueueBackend {
         worker: Option<Worker>,
         watches: Vec<KqueueWatch>,
-        next_id: i64,
+        ids: WatchIdAllocator,
     }
 
     impl KqueueBackend {
-        fn allocate_id(&mut self) -> i64 {
-            let id = self.next_id;
-            self.next_id = self
-                .next_id
-                .checked_add(1)
-                .expect("file notification descriptor space exhausted");
-            id
-        }
-
         fn ensure_worker(&mut self, notifier: Option<WaitNotifier>) -> Result<&mut Worker, Flow> {
             if self.worker.is_none() {
                 self.worker = Some(Worker::start(notifier)?);
@@ -573,7 +564,7 @@ mod native {
             let actions = request.actions;
             let is_directory = path.is_dir();
             let fd = Self::open_watch(path)?;
-            let watch_id = WatchId::new(self.allocate_id(), 0);
+            let watch_id = self.ids.allocate();
             let activity = WatchActivity::active();
             let native_descriptor = self
                 .ensure_worker(notifier)?
@@ -630,13 +621,14 @@ mod native {
             else {
                 return Ok(false);
             };
-            let removed = self.watches.remove(index);
+            let native_descriptor = self.watches[index].native_descriptor;
             let _worker_had_watch = self
                 .worker
                 .as_ref()
                 .expect("a live watch has a worker")
-                .remove(removed.native_descriptor)
+                .remove(native_descriptor)
                 .map_err(|error| file_notify_error("Cannot remove watch", Some(error), None))?;
+            self.watches.remove(index);
             if self.watches.is_empty() {
                 self.worker = None;
             }

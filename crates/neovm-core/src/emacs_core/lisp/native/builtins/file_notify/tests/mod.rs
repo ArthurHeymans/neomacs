@@ -45,7 +45,7 @@ impl FileNotifyEvent for LifecycleTestEvent {
         &self.0
     }
 
-    fn into_lisp(self) -> Value {
+    fn into_lisp(self, _ctx: &crate::emacs_core::eval::Context) -> Value {
         unreachable!("the lifecycle test does not encode events")
     }
 }
