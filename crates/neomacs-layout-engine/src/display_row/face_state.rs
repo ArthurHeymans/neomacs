@@ -583,7 +583,11 @@ pub(crate) struct DisplayRowGlyphMeasurer<'a> {
 
 struct DisplayRowTextRunAdvancePolicy<'measurer, 'fonts> {
     measurer: &'measurer mut DisplayRowGlyphMeasurer<'fonts>,
-    face: DisplayRowFace,
+    /// Borrowed from the measurer's realized-face slice, as GNU's
+    /// `FACE_FROM_ID` hands out a `struct face *` into the frame's face
+    /// cache.  `DisplayRowFace` owns four `String`s, so copying one per
+    /// glyph cost more than the measurement it fed.
+    face: &'fonts DisplayRowFace,
     fallback_char_width_px: f32,
 }
 
@@ -591,7 +595,7 @@ impl DisplayTextRunAdvancePolicy for DisplayRowTextRunAdvancePolicy<'_, '_> {
     fn ordinary_advance_px(&mut self, ch: char) -> f32 {
         let columns = crate::composition::base_width_cols(ch).max(1);
         self.measurer
-            .glyph_advance_for_face(&self.face, ch, columns, self.fallback_char_width_px)
+            .glyph_advance_for_face(self.face, ch, columns, self.fallback_char_width_px)
     }
 
     fn shape_span(&mut self, text: &str) -> Vec<crate::font::metrics::ShapedGlyph> {
@@ -652,7 +656,7 @@ impl<'a> DisplayRowGlyphMeasurer<'a> {
         )
     }
 
-    fn face(&self, face_id: FaceId) -> Option<&DisplayRowFace> {
+    fn face(&self, face_id: FaceId) -> Option<&'a DisplayRowFace> {
         self.faces.iter().find(|face| face.face_id == face_id)
     }
 
@@ -687,8 +691,8 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             return Some(0.0);
         }
 
-        let face = self.face(face_id)?.clone();
-        Some(self.glyph_advance_for_face(&face, ch, columns, fallback_advance_px))
+        let face = self.face(face_id)?;
+        Some(self.glyph_advance_for_face(face, ch, columns, fallback_advance_px))
     }
 
     fn glyph_vertical_metrics_px(
@@ -764,7 +768,7 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             return DisplayTextRunMeasurement::PerChar;
         }
 
-        let Some(face) = self.face(face_id).cloned() else {
+        let Some(face) = self.face(face_id) else {
             return DisplayTextRunMeasurement::PerChar;
         };
         if self.font_metrics.is_none() {
@@ -917,14 +921,14 @@ impl DisplayRowGlyphMeasurementFace {
         columns: u8,
         fallback_advance_px: f32,
     ) -> f32 {
-        let faces = [self.face.clone()];
+        let faces = std::slice::from_ref(&self.face);
         let font_metrics = if self.mode.uses_concrete_font_geometry() {
             font_metrics.as_mut()
         } else {
             None
         };
         let mut measurer = DisplayRowGlyphMeasurer::with_mode(
-            &faces,
+            faces,
             font_metrics,
             self.fallback_char_width,
             self.quantization,
@@ -956,9 +960,9 @@ impl DisplayRowGlyphMeasurementFace {
         if !self.mode.uses_concrete_font_geometry() {
             return DisplayTextRunMeasurement::PerChar;
         }
-        let faces = [self.face.clone()];
+        let faces = std::slice::from_ref(&self.face);
         let mut measurer = DisplayRowGlyphMeasurer::with_mode(
-            &faces,
+            faces,
             font_metrics.as_mut(),
             self.fallback_char_width,
             self.quantization,
