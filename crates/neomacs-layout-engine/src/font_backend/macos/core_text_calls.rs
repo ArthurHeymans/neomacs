@@ -148,12 +148,29 @@ fn all_fonts() -> Vec<CFRetained<CTFont>> {
 
 fn family_fonts(family: &str) -> Vec<CFRetained<CTFont>> {
     let collection = available_collection();
-    let family = CFString::from_str(family);
+    let requested_family = family;
+    let family = CFString::from_str(requested_family);
     // SAFETY: no options dictionary is supplied and CoreText documents this
     // result as CTFontDescriptor values.
     let descriptors = unsafe { collection.matching_font_descriptors_for_family(&family, None) }
         .map(|values| unsafe { CFRetained::cast_unchecked::<CFArray<CTFontDescriptor>>(values) });
-    descriptors.map_or_else(Vec::new, fonts_from_descriptors)
+    let mut fonts = descriptors.map_or_else(Vec::new, fonts_from_descriptors);
+    if fonts.is_empty() {
+        // Apple's generic UI fonts can have hidden family names (for example
+        // the result of `UserFixedPitch`) which are valid CTFont names but do
+        // not appear in the public collection's family lookup. `with_name`
+        // returns a best match even for a missing name, so accept it only when
+        // the resulting family proves that the request was exact.
+        let font = unsafe { CTFont::with_name(&family, 0.0, ptr::null()) };
+        let resolved_family = unsafe { font.family_name() }.to_string();
+        let is_available_family = available_family_names()
+            .iter()
+            .any(|available| available.eq_ignore_ascii_case(requested_family));
+        if is_available_family || resolved_family.eq_ignore_ascii_case(requested_family) {
+            fonts.push(font);
+        }
+    }
+    fonts
 }
 
 fn cascade_fonts(family: &str, languages: &[String]) -> Vec<CFRetained<CTFont>> {

@@ -178,11 +178,12 @@ use neovm_core::emacs_core::display_host::{
 #[cfg(feature = "video")]
 use neovm_core::emacs_core::eval::VideoResolveSource;
 use neovm_core::emacs_core::eval::{
-    FontOtfCapability, FontSpecResolveRequest, GuiFrameHostSize, ResolvedFontMatch,
-    ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedOpenedFont, ResolvedSurface, ResolvedVideo,
-    ResolvedWebKit, ShaderSurfaceContent, ShaderSurfaceCreateRequest, ShaderSurfaceLanguage,
-    ShaderSurfaceUniformInit, SurfaceChannelKind, SurfaceResolveRequest, VideoResolveRequest,
-    WebKitResolveRequest, WebKitResolveSource,
+    FontEntityMetricsRequest, FontOtfCapability, FontSpecResolveRequest, GuiFrameHostSize,
+    ResolvedFontEntityMetrics, ResolvedFontMatch, ResolvedFontSpecMatch, ResolvedFrameFont,
+    ResolvedOpenedFont, ResolvedSurface, ResolvedVideo, ResolvedWebKit, ShaderSurfaceContent,
+    ShaderSurfaceCreateRequest, ShaderSurfaceLanguage, ShaderSurfaceUniformInit,
+    SurfaceChannelKind, SurfaceResolveRequest, VideoResolveRequest, WebKitResolveRequest,
+    WebKitResolveSource,
 };
 use neovm_core::emacs_core::image_catalog::{ImageCatalog, ImageResolveRequest, ReadyImage};
 use neovm_core::emacs_core::load::{
@@ -1975,6 +1976,76 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             file, face_index, pixel_size, wght,
         )
         .map(core_font_px_metrics))
+    }
+
+    fn probe_font_entity_metrics(
+        &mut self,
+        request: FontEntityMetricsRequest,
+    ) -> Result<Option<ResolvedFontEntityMetrics>, String> {
+        let pixel_size = request.pixel_size.max(1);
+        let family = request
+            .family
+            .as_ref()
+            .and_then(LispString::as_utf8_str)
+            .and_then(neomacs_layout_engine::font_backend::FontFamilyName::new);
+        let mut query = neomacs_layout_engine::font::resolver::FontEntityQuery::new(family);
+        if let Some(registry) = request.registry.as_ref().and_then(LispString::as_utf8_str) {
+            query = query.with_registry(registry);
+        }
+        if let Some(postscript_name) = request
+            .postscript_name
+            .as_ref()
+            .and_then(LispString::as_utf8_str)
+        {
+            query = query.with_postscript_name(postscript_name);
+        }
+        if let Some(weight) = request.weight {
+            query = query.with_weight(weight.css_weight());
+        }
+        if let Some(slant) = request.slant {
+            query = query.with_slant(slant);
+        }
+        if let Some(width) = request.width {
+            query = query.with_width(width);
+        }
+
+        if let Some(opened) = self
+            .synchronized_font_metrics()
+            .open_font_entity(&query, pixel_size)
+        {
+            let file = opened
+                .entity
+                .matched
+                .file_path()
+                .map(|file| LispString::from_utf8(file));
+            let capability = font_otf_capability_for_asset(&opened.entity.matched.asset);
+            return Ok(Some(ResolvedFontEntityMetrics {
+                metrics: core_font_px_metrics(opened.metrics),
+                file,
+                capability,
+            }));
+        }
+
+        // Compatibility fallback for callers that only have a standalone
+        // font file. Native entities must take the path above so a collection
+        // face or named variation is not silently reopened as face zero.
+        let Some(file) = request.file.as_ref().and_then(LispString::as_utf8_str) else {
+            return Ok(None);
+        };
+        let Some(metrics) = neomacs_layout_engine::font::probe::probe_font_px_metrics(
+            file,
+            0,
+            pixel_size,
+            request.weight.map(|weight| f32::from(weight.css_weight())),
+        ) else {
+            return Ok(None);
+        };
+        let capability = font_otf_capability_for_file(file, 0);
+        Ok(Some(ResolvedFontEntityMetrics {
+            metrics: core_font_px_metrics(metrics),
+            file: request.file,
+            capability,
+        }))
     }
 
     fn font_otf_capability(
@@ -4276,27 +4347,49 @@ fn font_otf_capability_for_file(
     file: &str,
     face_index: u32,
 ) -> Option<neovm_core::emacs_core::eval::FontOtfCapability> {
-    neomacs_layout_engine::font::probe::otf_capability(file, face_index).map(|caps| {
-        let side = |scripts: Vec<neomacs_layout_engine::font::probe::OtfScript>| {
-            scripts
-                .into_iter()
-                .map(|script| {
-                    (
-                        script.tag,
-                        script
-                            .lang_syses
-                            .into_iter()
-                            .map(|lang| (lang.tag, lang.features))
-                            .collect(),
-                    )
-                })
-                .collect()
-        };
-        neovm_core::emacs_core::eval::FontOtfCapability {
-            gsub: side(caps.gsub),
-            gpos: side(caps.gpos),
+    neomacs_layout_engine::font::probe::otf_capability(file, face_index)
+        .map(core_font_otf_capability)
+}
+
+fn font_otf_capability_for_asset(
+    asset: &neomacs_display_protocol::font::FontOutlineAsset,
+) -> Option<neovm_core::emacs_core::eval::FontOtfCapability> {
+    match asset {
+        neomacs_display_protocol::font::FontOutlineAsset::File(file) => {
+            font_otf_capability_for_file(file.path(), file.face_index())
         }
-    })
+        neomacs_display_protocol::font::FontOutlineAsset::Memory(memory) => {
+            neomacs_layout_engine::font::probe::otf_capability_from_bytes(
+                memory.bytes(),
+                memory.face_index(),
+            )
+            .map(core_font_otf_capability)
+        }
+    }
+}
+
+fn core_font_otf_capability(
+    caps: neomacs_layout_engine::font::probe::OtfCapability,
+) -> neovm_core::emacs_core::eval::FontOtfCapability {
+    let side = |scripts: Vec<neomacs_layout_engine::font::probe::OtfScript>| {
+        scripts
+            .into_iter()
+            .map(|script| {
+                (
+                    script.tag,
+                    script
+                        .lang_syses
+                        .into_iter()
+                        .map(|lang| (lang.tag, lang.features))
+                        .collect(),
+                )
+            })
+            .collect()
+    };
+    neovm_core::emacs_core::eval::FontOtfCapability {
+        gsub: side(caps.gsub),
+        gpos: side(caps.gpos),
+    }
 }
 
 fn core_font_px_metrics(

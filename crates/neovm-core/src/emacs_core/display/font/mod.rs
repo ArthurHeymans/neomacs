@@ -2963,30 +2963,58 @@ fn gnu_style_first_name(
 /// font's metrics — the tiny pixelsize=1 numbers — not the frame's realized
 /// font. Names: element 0 is the entity XLFD with the probed pixel size,
 /// element 1 the fontconfig-style name `font_unparse_fcname` builds.
-fn font_info_vector_for_entity(eval: &mut super::eval::Context, entity: &Value) -> Option<Value> {
+fn font_info_vector_for_entity(
+    eval: &mut super::eval::Context,
+    frame_id: crate::window::FrameId,
+    entity: &Value,
+) -> Option<Value> {
     let elems = entity.as_vector_data()?.clone();
-    let file_value = font_vector_get_flexible(&elems, "file").filter(|value| value.is_string())?;
-    let file = file_value.as_utf8_str()?.to_owned();
     let px = font_vector_get_flexible(&elems, "size")
         .and_then(|value| match value.kind() {
             ValueKind::Fixnum(n) if n > 0 => Some(n as u32),
             _ => None,
         })
         .unwrap_or(0);
-    // Variable fonts: probe the value's weight instance (OT wght axis units
-    // are CSS weights).
-    let wght = font_vector_get_flexible(&elems, "weight")
-        .and_then(|value| value.as_symbol_name())
-        .and_then(|name| name.trim_start_matches(':').parse::<FontWeight>().ok())
-        .map(|weight| f32::from(weight.css_weight()));
-    let probe = eval
+    let text_field = |name| {
+        font_vector_get_flexible(&elems, name).and_then(|value| font_value_text_lisp_string(&value))
+    };
+    let opened = eval
         .display_host
         .as_mut()
-        .and_then(|host| host.probe_font_px_metrics(&file, 0, px, wght).ok())
+        .and_then(|host| {
+            host.probe_font_entity_metrics(super::eval::FontEntityMetricsRequest {
+                frame_id,
+                family: text_field("family"),
+                registry: text_field("registry"),
+                file: text_field("file"),
+                postscript_name: text_field("postscript-name"),
+                weight: font_vector_get_flexible(&elems, "weight").and_then(font_weight_from_value),
+                slant: font_vector_get_flexible(&elems, "slant").and_then(font_slant_from_value),
+                width: font_vector_get_flexible(&elems, "width")
+                    .and_then(|value| value.as_symbol_name().and_then(FontWidth::from_symbol)),
+                pixel_size: px,
+            })
+            .ok()
+        })
         .flatten()?;
+    let probe = opened.metrics;
+    let file_value = opened
+        .file
+        .map(Value::heap_string)
+        .or_else(|| font_vector_get_flexible(&elems, "file").filter(|value| value.is_string()))
+        .unwrap_or(Value::NIL);
     // Element 14: (opentype GSUB . GPOS) like GNU's
     // `Fcons (Qopentype, otf_capability (font))` (font.c Ffont_info).
-    let capability = otf_capability_lisp(eval, &file);
+    let capability = opened
+        .capability
+        .as_ref()
+        .map(otf_capability_to_lisp)
+        .or_else(|| {
+            file_value
+                .as_utf8_str()
+                .map(|file| otf_capability_lisp(eval, file))
+        })
+        .unwrap_or(Value::NIL);
 
     let (
         foundry,
@@ -3507,7 +3535,7 @@ pub(crate) fn font_info(eval: &mut super::eval::Context, args: Vec<Value>) -> Ev
         // font-at object is already opened at its pixel size) and reports
         // the OPENED font's metrics; only fall back to the frame font when
         // the value can't be probed (no file, unreadable, ...).
-        if let Some(info) = font_info_vector_for_entity(eval, &args[0]) {
+        if let Some(info) = font_info_vector_for_entity(eval, frame_id, &args[0]) {
             return Ok(info);
         }
     }

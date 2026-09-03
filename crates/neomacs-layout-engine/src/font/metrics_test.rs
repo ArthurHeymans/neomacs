@@ -584,6 +584,7 @@ fn frame_cell_geometry_reuses_the_effective_size_from_its_metric_observation() {
     assert_eq!(geometry.font_size.get(), effective_size);
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn selected_font_probe_observes_vertical_and_advance_metrics_at_one_size() {
     let mut service = FontMetricsService::new();
@@ -735,6 +736,7 @@ fn font_metrics_cached() {
     assert_eq!(m1.line_height, m2.line_height);
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn font_metrics_match_selected_font_face_table_metrics() {
     let mut svc = make_svc();
@@ -769,7 +771,28 @@ fn font_metrics_match_selected_font_face_table_metrics() {
     );
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "macos")]
+#[test]
+fn font_metrics_match_the_selected_core_text_face() {
+    let mut svc = make_svc();
+    let family = "monospace";
+    let weight = 400;
+    let italic = false;
+    let font_size = 14.0;
+    let expected = svc
+        .platform_primary_match(family, weight, italic, font_size)
+        .and_then(|matched| matched.pixel_metrics(font_size))
+        .expect("CoreText selected-face metrics");
+
+    let actual = svc.font_metrics(family, weight, italic, font_size);
+
+    assert_eq!(actual.ascent, expected.ascent as f32);
+    assert_eq!(actual.descent, expected.descent as f32);
+    assert_eq!(actual.line_height, expected.height as f32);
+    assert_eq!(actual.space_width, expected.space_width as f32);
+}
+
+#[cfg(target_os = "linux")]
 #[test]
 fn selected_face_vertical_metrics_use_the_gnu_freetype_probe() {
     let mut svc = make_svc();
@@ -820,6 +843,7 @@ struct FixedPrimaryFontBackend {
     file: String,
     face_index: u32,
     slant: FontSlant,
+    size: crate::font_backend::PlatformFontSize,
 }
 
 #[cfg(unix)]
@@ -1037,7 +1061,7 @@ impl crate::font_backend::FontBackend for FixedPrimaryFontBackend {
                     width: Some(query.requested_width),
                     spacing: Some(100),
                     design_metrics: None,
-                    size: crate::font_backend::PlatformFontSize::Unknown,
+                    size: self.size,
                 },
             ),
         }]
@@ -1119,6 +1143,7 @@ fn explicit_primary_font_uses_fontconfig_static_file_when_cosmic_would_fallback(
             file: target.clone(),
             face_index: 0,
             slant: FontSlant::Normal,
+            size: crate::font_backend::PlatformFontSize::Scalable,
         }));
     let resolved = svc
         .resolved_font_for_char(' ', requested_family, 400, false, 10.0)
@@ -1130,7 +1155,7 @@ fn explicit_primary_font_uses_fontconfig_static_file_when_cosmic_would_fallback(
     );
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 fn resolved_face_preserves_an_exact_freetype_bitmap_realization() {
     use neomacs_display_protocol::font::{FontReplay, GlyphSampling};
@@ -1142,6 +1167,7 @@ fn resolved_face_preserves_an_exact_freetype_bitmap_realization() {
             file: fixture.clone(),
             face_index: 0,
             slant: FontSlant::Normal,
+            size: crate::font_backend::PlatformFontSize::Unknown,
         }));
     let resolved = svc
         .resolved_font_for_face("Spleen", 400, false, 16.0)
@@ -1173,7 +1199,7 @@ fn resolved_face_preserves_an_exact_freetype_bitmap_realization() {
     assert!(selected.glyph_code.is_some());
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 fn fixed_bitmap_clusters_publish_exact_freetype_glyph_ids() {
     let fixture = test_font_path(neomacs_test_fonts::spleen_2_2_0().bdf());
@@ -1183,6 +1209,7 @@ fn fixed_bitmap_clusters_publish_exact_freetype_glyph_ids() {
             file: fixture,
             face_index: 0,
             slant: FontSlant::Normal,
+            size: crate::font_backend::PlatformFontSize::Unknown,
         }));
 
     let (glyphs, fonts) = svc
@@ -1202,7 +1229,7 @@ fn fixed_bitmap_clusters_publish_exact_freetype_glyph_ids() {
     assert!(glyphs.iter().all(|glyph| glyph.glyph_id.get() > 0));
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 fn bitmap_cluster_never_substitutes_notdef_for_an_uncovered_scalar() {
     let fixture = test_font_path(neomacs_test_fonts::spleen_2_2_0().bdf());
@@ -1212,6 +1239,7 @@ fn bitmap_cluster_never_substitutes_notdef_for_an_uncovered_scalar() {
             file: fixture,
             face_index: 0,
             slant: FontSlant::Normal,
+            size: crate::font_backend::PlatformFontSize::Unknown,
         }));
 
     let (glyphs, _) = svc
@@ -1224,7 +1252,7 @@ fn bitmap_cluster_never_substitutes_notdef_for_an_uncovered_scalar() {
     );
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 fn bitmap_realization_publishes_the_selected_strikes_effective_logical_size() {
     let fixture = test_font_path(neomacs_test_fonts::spleen_2_2_0().otb());
@@ -1234,6 +1262,7 @@ fn bitmap_realization_publishes_the_selected_strikes_effective_logical_size() {
             file: fixture,
             face_index: 0,
             slant: FontSlant::Normal,
+            size: crate::font_backend::PlatformFontSize::Unknown,
         }));
 
     let resolved = svc
@@ -1253,6 +1282,7 @@ fn resolved_face_preserves_an_exact_decoded_woff_realization() {
             file: fixture.clone(),
             face_index: 0,
             slant: FontSlant::Normal,
+            size: crate::font_backend::PlatformFontSize::Scalable,
         }));
     let platform = svc
         .platform_primary_match("Spleen 8x16", 400, false, 16.0)
@@ -1402,7 +1432,7 @@ fn resolved_font_ids_name_a_complete_realized_instance() {
     );
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 fn ascii_character_resolution_keeps_primary_face_that_lacks_the_glyph() {
     let mut svc = make_svc();
@@ -1428,6 +1458,7 @@ fn ascii_character_resolution_keeps_primary_face_that_lacks_the_glyph() {
             file: file.clone(),
             face_index,
             slant: FontSlant::Normal,
+            size: crate::font_backend::PlatformFontSize::Scalable,
         }));
 
     let expected_metrics = crate::font::probe::probe_font_px_metrics(&file, face_index, 10, None)
@@ -1471,6 +1502,7 @@ fn font_at_preserves_reverse_slant_from_platform_selection() {
             file,
             face_index,
             slant: FontSlant::ReverseOblique,
+            size: crate::font_backend::PlatformFontSize::Scalable,
         }));
 
     let selected = svc
@@ -1486,7 +1518,7 @@ fn font_at_preserves_reverse_slant_from_platform_selection() {
     assert_eq!(selected.slant, FontSlant::ReverseOblique);
 }
 
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(target_os = "linux")]
 #[test]
 fn installed_symbols_only_primary_font_uses_fontconfig_metrics_without_ascii_fallback() {
     let family = "Symbols Nerd Font Mono";
@@ -1533,7 +1565,7 @@ fn char_width_bold_vs_normal() {
     assert!(w_bold > 0.0, "bold width should be positive");
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 fn installed_iosevka_digit_advance_is_fixed_across_weights() {
     let resolver = crate::font::resolver::FontResolver::new(Box::new(
@@ -1969,10 +2001,24 @@ fn explicit_mono_family_cjk_matches_renderer_across_face_matrix_sizes() {
 #[test]
 fn select_font_for_char_reports_realized_face_metadata() {
     let mut svc = make_svc();
+    let expected = svc
+        .font_resolver
+        .resolve_for_char(
+            "JetBrains Mono",
+            '好',
+            800,
+            FontSlant::Normal,
+            FontWidth::Normal,
+            svc.selection_size(24.0),
+        )
+        .expect("native fallback face");
     let selected = svc
         .select_font_for_char('好', "JetBrains Mono", 800, false, 24.0)
         .expect("selected font for fallback char");
-    assert_eq!(selected.resolved.weight, 800);
+    assert_eq!(
+        selected.resolved.weight,
+        expected.metadata.weight.unwrap_or(400)
+    );
     assert!(selected.metrics.pixel_size > 0);
     assert!(selected.glyph_code.is_some());
 }
@@ -2574,24 +2620,35 @@ fn shape_run_empty_text_is_empty() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn resolved_font_for_face_yields_exact_file_identity() {
+fn resolved_font_for_face_yields_an_exact_replayable_identity() {
+    use neomacs_display_protocol::font::FontOutlineAsset;
+
     let mut svc = make_svc();
     let font = svc
         .resolved_font_for_face("Monospace", 400, false, 24.0)
         .expect("monospace face resolves to a concrete font");
-    let path = font
-        .identity
-        .file_path
-        .as_deref()
-        .expect("fontconfig faces carry a file path");
-    assert!(
-        std::path::Path::new(path).is_absolute(),
-        "font file path must be absolute: {path}"
-    );
-    assert_eq!(
-        font.identity.stable_key,
-        format!("{path}#{}", font.identity.backend_selector())
-    );
+    match font
+        .replay
+        .outline_asset()
+        .expect("scalable font has an outline replay asset")
+    {
+        FontOutlineAsset::File(asset) => {
+            assert!(
+                std::path::Path::new(asset.path()).is_absolute(),
+                "font file path must be absolute: {}",
+                asset.path()
+            );
+            assert_eq!(
+                font.identity.stable_key,
+                format!("{}#{}", asset.path(), asset.face_index())
+            );
+        }
+        FontOutlineAsset::Memory(asset) => {
+            assert_eq!(asset.key(), font.identity.stable_key);
+            assert_eq!(asset.face_index(), font.identity.backend_selector());
+            assert!(!asset.bytes().is_empty());
+        }
+    }
     assert_eq!(
         font.source,
         neomacs_display_protocol::font::FontResolutionSource::FacePrimary
@@ -2641,7 +2698,7 @@ fn portable_metric_fallback_stays_on_the_selected_face() {
     assert!(metrics.average_width > 0);
 }
 
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(target_os = "linux")]
 #[test]
 #[tracing_test::traced_test]
 fn resolved_font_for_face_preserves_platform_named_instance() {
@@ -2755,7 +2812,7 @@ fn resolved_font_for_face_preserves_platform_named_instance() {
     );
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 fn scaled_noto_cjk_bold_ascii_advances_match_gnu_device_glyph_metrics() {
     // GNU Emacs 31's Cairo/FreeType display of the real journal heading at
@@ -2875,7 +2932,7 @@ fn realize_frame_fonts_publishes_face_identity_and_table() {
     );
 }
 
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(target_os = "linux")]
 #[test]
 #[tracing_test::traced_test]
 fn realize_frame_fonts_resolves_an_installed_symbols_only_primary_face() {
@@ -3048,7 +3105,7 @@ fn realize_frame_char_fonts_stamps_cjk_fallback() {
     );
 }
 
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(target_os = "linux")]
 #[test]
 #[tracing_test::traced_test]
 fn resolved_font_for_char_preserves_platform_collection_face() {
@@ -3077,7 +3134,7 @@ fn resolved_font_for_char_preserves_platform_collection_face() {
     );
 }
 
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(target_os = "linux")]
 #[test]
 fn resolved_font_for_char_treats_platform_identity_as_authoritative() {
     let platform =

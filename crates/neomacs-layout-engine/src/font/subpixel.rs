@@ -22,11 +22,11 @@ impl FontconfigSubpixelOrder {
 }
 
 pub fn default_subpixel_order() -> FontconfigSubpixelOrder {
-    #[cfg(all(unix, not(target_os = "macos")))]
+    #[cfg(target_os = "linux")]
     {
         crate::font::fontconfig::default_subpixel_order()
     }
-    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    #[cfg(not(target_os = "linux"))]
     {
         FontconfigSubpixelOrder::Unknown
     }

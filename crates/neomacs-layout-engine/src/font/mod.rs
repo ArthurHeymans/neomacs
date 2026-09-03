@@ -2,7 +2,7 @@
 
 pub mod catalog;
 pub mod font_match;
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(target_os = "linux")]
 pub mod fontconfig;
 pub(crate) mod frame_metrics;
 pub mod metrics;

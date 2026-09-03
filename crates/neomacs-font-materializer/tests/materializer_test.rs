@@ -1,4 +1,4 @@
-#![cfg(any(unix, windows))]
+#![cfg(any(windows, target_os = "linux"))]
 
 use neomacs_display_protocol::geometry::DeviceScale;
 use neomacs_font_materializer::RasterPixels;

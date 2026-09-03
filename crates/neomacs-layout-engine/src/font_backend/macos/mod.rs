@@ -58,18 +58,17 @@ impl FontBackend for CoreTextBackend {
                     width: Some(candidate.width),
                     spacing: Some(candidate.spacing),
                     design_metrics: None,
-                    size: if candidate.path.is_some() {
-                        super::PlatformFontSize::Unknown
-                    } else {
-                        // URL-less CoreText entities are native scalable fonts.
-                        // Their table bytes are copied only if shared policy
-                        // selects this candidate.
-                        super::PlatformFontSize::Scalable
-                    },
+                    // CoreText is the authority for the macOS catalog. Every
+                    // candidate it exposes is replayed as an outline/color
+                    // font through its file or copied SFNT tables; unsupported
+                    // legacy bitmap files never enter the candidate set.
+                    size: super::PlatformFontSize::Scalable,
                 };
-                let matched = if let Some(path) = candidate.path {
-                    let face_index = self
-                        .file_face_index_for_postscript_name(&path, &candidate.postscript_name)?;
+                let file_face = candidate.path.as_ref().and_then(|path| {
+                    self.file_face_index_for_postscript_name(path, &candidate.postscript_name)
+                        .map(|face_index| (path.clone(), face_index))
+                });
+                let matched = if let Some((path, face_index)) = file_face {
                     PlatformFontCandidate::from_platform_file(
                         FontBackendKind::CoreText,
                         &path,
@@ -79,6 +78,11 @@ impl FontBackend for CoreTextBackend {
                         metadata,
                     )?
                 } else {
+                    // A CoreText URL is only a usable cross-thread identity
+                    // when its exact collection face can be proven. If the
+                    // container is opaque to ttf-parser, retain the native
+                    // identity and copy the selected face's SFNT tables after
+                    // shared policy chooses it.
                     let stable_key = format!("coretext:{}#0", candidate.postscript_name);
                     PlatformFontCandidate {
                         identity: ResolvedFontIdentity::from_native_with_variations(

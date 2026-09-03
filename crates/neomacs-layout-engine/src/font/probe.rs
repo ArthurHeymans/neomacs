@@ -19,10 +19,10 @@
 //! concrete font files; if a future font/hinting configuration diverges,
 //! the tests say so instead of the probe silently guessing.
 //!
-//! The FreeType-backed probes live in a `cfg_select!` block: the real
-//! implementations are compiled and used on `cfg(unix)` — i.e. BOTH Linux
-//! and macOS — while only Windows (`cfg(not(unix))`, no system FreeType)
-//! gets the `None`/empty stubs, so callers compile unchanged everywhere.
+//! The FreeType-backed probes live in a `cfg_select!` block and compile only
+//! with the Fontconfig adapter. macOS gets metrics from CoreText, while targets
+//! without this implementation receive `None`/empty results so shared callers
+//! compile unchanged.
 //! The GSUB/GPOS `otf_capability` reader uses ttf-parser and is fully
 //! cross-platform (all three).
 
@@ -76,10 +76,10 @@ impl DeviceAsciiAdvances {
     }
 }
 
-// Real FreeType impls on `cfg(unix)` (Linux and macOS); only Windows
-// (`cfg(not(unix))`) gets the stubs.
+// Real FreeType implementations accompany the Fontconfig adapter. In
+// particular, macOS must not reopen CoreText selections through FreeType.
 std::cfg_select! {
-    unix => {
+    target_os = "linux" => {
         use freetype::Library;
         use freetype::face::LoadFlag;
 
@@ -345,7 +345,7 @@ std::cfg_select! {
         mod tests;
     }
     _ => {
-        /// Non-unix stub: no FreeType, so no px-metric probe.
+        /// Target without the Fontconfig/FreeType probe.
         pub fn probe_font_px_metrics(
             _file: &str,
             _face_index: u32,
@@ -364,7 +364,7 @@ std::cfg_select! {
             None
         }
 
-        /// Non-unix stub: no FreeType, so no named-instance enumeration.
+        /// Target without the FreeType probe: no named-instance enumeration.
         pub fn named_instance_wght_values(_file: &str, _face_index: u32) -> Vec<u16> {
             Vec::new()
         }
@@ -410,6 +410,10 @@ pub struct OtfCapability {
 
 pub fn otf_capability(file: &str, face_index: u32) -> Option<OtfCapability> {
     let data = std::fs::read(file).ok()?;
+    otf_capability_from_bytes(&data, face_index)
+}
+
+pub fn otf_capability_from_bytes(data: &[u8], face_index: u32) -> Option<OtfCapability> {
     let face = ttf_parser::Face::parse(&data, face_index).ok()?;
     let tables = face.tables();
     Some(OtfCapability {

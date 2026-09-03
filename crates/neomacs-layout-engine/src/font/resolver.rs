@@ -31,6 +31,7 @@ pub struct FontEntityQuery {
     family: Option<FontFamilyName>,
     registry: Option<String>,
     language: Option<String>,
+    postscript_name: Option<String>,
     weight: Option<u16>,
     slant: Option<FontSlant>,
     width: Option<FontWidth>,
@@ -51,6 +52,11 @@ impl FontEntityQuery {
 
     pub fn with_language(mut self, language: impl Into<String>) -> Self {
         self.language = non_empty_query_text(language.into());
+        self
+    }
+
+    pub fn with_postscript_name(mut self, postscript_name: impl Into<String>) -> Self {
+        self.postscript_name = non_empty_query_text(postscript_name.into());
         self
     }
 
@@ -80,6 +86,13 @@ fn non_empty_query_text(value: String) -> Option<String> {
 pub struct ResolvedFontEntity {
     pub matched: PlatformFontMatch,
     pub registry: Option<String>,
+}
+
+/// One font entity opened through its owning platform backend.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OpenedFontEntity {
+    pub entity: ResolvedFontEntity,
+    pub metrics: crate::font::probe::FontPxMetrics,
 }
 
 /// GNU's post-enumeration entity filtering policy.  The NT GUI deliberately
@@ -249,6 +262,39 @@ impl FontResolver {
             matched: selected,
             registry: Some("iso10646-1".to_owned()),
         })
+    }
+
+    /// Open one selected entity through its owning backend for `font-info`.
+    /// Native design metrics win; Linux falls back to probing the exact
+    /// Fontconfig/FreeType identity selected above.
+    pub fn open_entity(
+        &self,
+        query: &FontEntityQuery,
+        pixel_size: u32,
+    ) -> Option<OpenedFontEntity> {
+        let mut entity = self.resolve_entity(query)?;
+        entity.matched = self.with_native_metrics(entity.matched);
+        let pixel_size = pixel_size.max(1);
+        let metrics = entity
+            .matched
+            .pixel_metrics(pixel_size as f32)
+            .or_else(|| {
+                let identity = &entity.matched.identity;
+                let file = identity.file_path.as_deref()?;
+                let explicit_weight = identity
+                    .variation_coords
+                    .iter()
+                    .find(|coord| coord.tag() == u32::from_be_bytes(*b"wght"))
+                    .map(|coord| coord.value())
+                    .or_else(|| query.weight.map(f32::from));
+                crate::font::probe::probe_font_px_metrics(
+                    file,
+                    identity.freetype_selector()?,
+                    pixel_size,
+                    explicit_weight,
+                )
+            })?;
+        Some(OpenedFontEntity { entity, metrics })
     }
 
     /// Resolve a primary face from candidates in one concrete family.
@@ -600,7 +646,14 @@ fn entity_matches_query(
     query: &FontEntityQuery,
     policy: FontEntityMatchPolicy,
 ) -> bool {
-    query
+    query.postscript_name.as_ref().is_none_or(|requested| {
+        candidate
+            .matched
+            .identity
+            .postscript_name
+            .as_ref()
+            .is_some_and(|actual| actual.eq_ignore_ascii_case(requested))
+    }) && query
         .weight
         .is_none_or(|weight| policy.weight_matches(weight, candidate.matched.weight()))
         && query

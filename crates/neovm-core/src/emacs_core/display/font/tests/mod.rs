@@ -2,8 +2,9 @@ use super::*;
 use crate::buffer::{Buffer, CharPos0};
 use crate::emacs_core::display_host::{AvailableFontFamilyName, FontResolveRequest, FrameFontSize};
 use crate::emacs_core::eval::{
-    Context, DisplayHost, FontOtfCapability, FontPxProbeResult, FontSpecResolveRequest,
-    GuiFrameHostRequest, ResolvedFontMatch, ResolvedFontSpecMatch,
+    Context, DisplayHost, FontEntityMetricsRequest, FontOtfCapability, FontPxProbeResult,
+    FontSpecResolveRequest, GuiFrameHostRequest, ResolvedFontEntityMetrics, ResolvedFontMatch,
+    ResolvedFontSpecMatch,
 };
 use crate::emacs_core::value::ValueKind;
 use crate::emacs_core::xfaces::*;
@@ -395,6 +396,11 @@ struct CapturingFindFontDisplayHost {
     matched: Option<ResolvedFontSpecMatch>,
 }
 
+struct NativeFontEntityDisplayHost {
+    request: Rc<RefCell<Option<FontEntityMetricsRequest>>>,
+    result: ResolvedFontEntityMetrics,
+}
+
 struct FontFamilyListDisplayHost {
     requested_frame: Rc<RefCell<Option<FrameId>>>,
     families: Vec<AvailableFontFamilyName>,
@@ -436,6 +442,24 @@ impl DisplayHost for CapturingFindFontDisplayHost {
     }
 }
 
+impl DisplayHost for NativeFontEntityDisplayHost {
+    fn realize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn probe_font_entity_metrics(
+        &mut self,
+        request: FontEntityMetricsRequest,
+    ) -> Result<Option<ResolvedFontEntityMetrics>, String> {
+        *self.request.borrow_mut() = Some(request);
+        Ok(Some(self.result.clone()))
+    }
+}
+
 fn bootstrap_eval_all(src: &str) -> Vec<String> {
     runtime_startup_eval_all(src)
 }
@@ -459,6 +483,63 @@ fn font_spec_basic() {
     .unwrap();
     assert!(is_font_spec(&spec));
     assert!(fontp(vec![spec]).unwrap().is_truthy());
+}
+
+#[test]
+fn font_info_opens_a_native_entity_without_a_file() {
+    crate::test_utils::init_test_tracing();
+    let request = Rc::new(RefCell::new(None));
+    let mut eval = crate::emacs_core::Context::new();
+    ensure_selected_gui_frame(&mut eval);
+    eval.set_display_host(Box::new(NativeFontEntityDisplayHost {
+        request: Rc::clone(&request),
+        result: ResolvedFontEntityMetrics {
+            metrics: FontPxProbeResult {
+                pixel_size: 1,
+                height: 2,
+                ascent: 1,
+                descent: 1,
+                max_width: 1,
+                space_width: 1,
+                average_width: 1,
+            },
+            file: None,
+            capability: None,
+        },
+    }));
+    let entity = build_font_entity_for_spec_match(&ResolvedFontSpecMatch {
+        foundry: None,
+        family: LispString::from_utf8("Menlo"),
+        registry: Some(LispString::from_utf8("iso10646-1")),
+        file: None,
+        weight: Some(FontWeight::NORMAL),
+        slant: Some(FontSlant::Normal),
+        width: Some(crate::face::FontWidth::Normal),
+        spacing: Some(100),
+        postscript_name: Some(LispString::from_utf8("Menlo-Regular")),
+    });
+
+    let info = font_info(&mut eval, vec![entity]).expect("font-info result");
+    let values = info
+        .as_vector_data()
+        .expect("native entity must produce a font-info vector");
+    assert_eq!(values[2].as_int(), Some(1));
+    assert_eq!(values[3].as_int(), Some(2));
+    assert!(values[12].is_nil());
+
+    let request = request.borrow();
+    let request = request.as_ref().expect("native entity probe request");
+    assert_eq!(
+        request.family.as_ref().and_then(LispString::as_utf8_str),
+        Some("Menlo")
+    );
+    assert_eq!(
+        request
+            .postscript_name
+            .as_ref()
+            .and_then(LispString::as_utf8_str),
+        Some("Menlo-Regular")
+    );
 }
 
 #[test]

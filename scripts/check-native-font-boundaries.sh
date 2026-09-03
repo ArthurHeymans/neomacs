@@ -10,7 +10,7 @@ failures=0
 target_depends_on() {
   local target="$1"
   local package="$2"
-  [[ -n "$(cargo tree --locked -p neomacs --target "$target" -e normal -i "$package" --prefix none 2>/dev/null)" ]]
+  [[ -n "$(cargo tree --locked --all-features -p neomacs --target "$target" -e normal -i "$package" --prefix none 2>/dev/null)" ]]
 }
 
 require_dependency() {
@@ -29,7 +29,7 @@ forbid_dependency() {
   local package="$2"
   if target_depends_on "$target" "$package"; then
     printf '  FAIL %s unexpectedly depends on %s\n' "$target" "$package" >&2
-    cargo tree --locked -p neomacs --target "$target" -e normal -i "$package" >&2
+    cargo tree --locked --all-features -p neomacs --target "$target" -e normal -i "$package" >&2
     failures=$((failures + 1))
   else
     printf '  ok   %s excludes %s\n' "$target" "$package"
@@ -51,6 +51,8 @@ for target in "$macos_target" "$windows_target"; do
 done
 
 forbid_dependency "$macos_target" core-text
+forbid_dependency "$macos_target" freetype-rs
+forbid_dependency "$macos_target" freetype-sys
 
 if ((failures != 0)); then
   printf 'native font dependency boundary failed: %d violation(s)\n' "$failures" >&2

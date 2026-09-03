@@ -149,6 +149,42 @@ fn entity_query_rejects_a_different_explicit_width() {
 }
 
 #[test]
+fn entity_query_preserves_an_exact_postscript_identity() {
+    let mut regular = candidate("Fixture Sans", 400, FontSlant::Normal, 0);
+    replace_file_identity(
+        &mut regular,
+        ResolvedFontIdentity::from_file(
+            "/fixture/FixtureSans-Regular.ttf",
+            0,
+            Some("FixtureSans-Regular".to_owned()),
+        ),
+    );
+    let mut alternate = candidate("Fixture Sans", 400, FontSlant::Normal, 0);
+    replace_file_identity(
+        &mut alternate,
+        ResolvedFontIdentity::from_file(
+            "/fixture/FixtureSans-Alternate.ttf",
+            0,
+            Some("FixtureSans-Alternate".to_owned()),
+        ),
+    );
+    let resolver = FontResolver::new(Box::new(CandidateBackend {
+        candidates: vec![regular, alternate],
+    }));
+    let query = FontEntityQuery::new(Some(
+        FontFamilyName::new("Fixture Sans").expect("fixture family"),
+    ))
+    .with_postscript_name("FixtureSans-Alternate");
+
+    let entity = resolver.resolve_entity(&query).expect("matching entity");
+
+    assert_eq!(
+        entity.matched.identity.postscript_name.as_deref(),
+        Some("FixtureSans-Alternate")
+    );
+}
+
+#[test]
 fn windows_entity_policy_keeps_gnus_relaxed_weight_match() {
     let candidate = candidate("Fixture Sans", 400, FontSlant::Normal, 0);
     let query = FontEntityQuery::new(Some(
@@ -307,7 +343,7 @@ fn fixed_bitmap_entity_selection_and_cache_are_requested_size_aware() {
     assert_eq!(selected_26.file_path(), Some("/fixture/Fixture-26px.pcf"));
 }
 
-#[cfg(any(unix, windows))]
+#[cfg(any(windows, target_os = "linux"))]
 #[test]
 fn unknown_native_size_is_classified_into_concrete_strikes_before_scoring() {
     let path = neomacs_test_fonts::spleen_2_2_0()
@@ -539,5 +575,28 @@ fn native_metrics_are_probed_only_for_the_cached_winner() {
         first.pixel_metrics(20.0).expect("native metrics").ascent,
         16
     );
+    assert_eq!(probes.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn native_entity_open_is_completed_with_backend_metrics() {
+    let probes = Arc::new(AtomicUsize::new(0));
+    let mut candidate = candidate("Fixture", 400, FontSlant::Normal, 100);
+    candidate.matched.metadata.design_metrics = None;
+    let resolver = FontResolver::new(Box::new(MetricBackend {
+        candidates: vec![candidate],
+        probes: Arc::clone(&probes),
+    }));
+
+    let opened = resolver
+        .open_entity(
+            &FontEntityQuery::new(Some(
+                FontFamilyName::new("Fixture").expect("fixture family"),
+            )),
+            20,
+        )
+        .expect("selected entity");
+
+    assert_eq!(opened.metrics.ascent, 16);
     assert_eq!(probes.load(Ordering::Relaxed), 1);
 }

@@ -7,11 +7,11 @@ use std::fmt::{Display, Formatter};
 use std::num::{NonZeroU16, NonZeroU32};
 
 use super::eval::{
-    FontOtfCapability, FontPxProbeResult, FontSpecResolveRequest, GuiFrameHostRequest,
-    GuiFrameHostSize, PopupMenuRequest, ResolvedFontMatch, ResolvedFontSpecMatch,
-    ResolvedFrameFont, ResolvedSurface, ResolvedVideo, ResolvedWebKit, ShaderSurfaceCreateRequest,
-    ShaderSurfaceLanguage, ShaderSurfaceUniformInit, SurfaceResolveRequest, VideoResolveRequest,
-    WebKitResolveRequest,
+    FontEntityMetricsRequest, FontOtfCapability, FontPxProbeResult, FontSpecResolveRequest,
+    GuiFrameHostRequest, GuiFrameHostSize, PopupMenuRequest, ResolvedFontEntityMetrics,
+    ResolvedFontMatch, ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedSurface, ResolvedVideo,
+    ResolvedWebKit, ShaderSurfaceCreateRequest, ShaderSurfaceLanguage, ShaderSurfaceUniformInit,
+    SurfaceResolveRequest, VideoResolveRequest, WebKitResolveRequest,
 };
 use crate::buffer::BufferId;
 use crate::face::{Face as RuntimeFace, FaceHeight};
@@ -368,6 +368,21 @@ pub trait DisplayHost {
         _wght: Option<f32>,
     ) -> Result<Option<FontPxProbeResult>, String> {
         Ok(None)
+    }
+    fn probe_font_entity_metrics(
+        &mut self,
+        request: FontEntityMetricsRequest,
+    ) -> Result<Option<ResolvedFontEntityMetrics>, String> {
+        let Some(file) = request.file.as_ref().and_then(LispString::as_utf8_str) else {
+            return Ok(None);
+        };
+        let weight = request.weight.map(|weight| f32::from(weight.css_weight()));
+        let metrics = self.probe_font_px_metrics(file, 0, request.pixel_size, weight)?;
+        Ok(metrics.map(|metrics| ResolvedFontEntityMetrics {
+            metrics,
+            file: request.file,
+            capability: None,
+        }))
     }
     fn font_otf_capability(
         &mut self,

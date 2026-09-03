@@ -254,7 +254,7 @@ fn default_metrics_accept_explicit_default_font_size() {
     assert!(key_uses_default_font_metrics(&key, 13.0));
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 fn renderer_reopens_the_exact_physical_bitmap_strike_without_rescaling() {
     use neomacs_display_protocol::font::{
@@ -484,7 +484,7 @@ fn atlas_sampling_policy_selects_distinct_wgpu_bind_groups() {
     );
 }
 
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(target_os = "linux")]
 #[test]
 fn renderer_keeps_missing_ascii_on_primary_font() {
     use neomacs_display_protocol::face::Face;

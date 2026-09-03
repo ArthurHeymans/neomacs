@@ -14,7 +14,7 @@ use std::fmt::{Display, Formatter};
 #[cfg(any(target_os = "macos", windows))]
 use std::path::Path;
 
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -23,7 +23,7 @@ mod native_asset_cache;
 #[cfg(windows)]
 mod windows;
 
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(target_os = "linux")]
 pub use linux::FontconfigBackend;
 #[cfg(target_os = "macos")]
 pub use macos::CoreTextBackend;
@@ -122,10 +122,9 @@ pub struct PlatformFontMetadata {
 
 /// Size capability of one platform-discovered font entity.
 ///
-/// `Unknown` is intentionally not treated as scalable. Backends such as
-/// CoreText and DirectWrite do not always expose fixed strikes during native
-/// enumeration, so the shared resolver asks the materializer to classify the
-/// exact file before GNU size scoring.
+/// `Unknown` is intentionally not treated as scalable. A backend uses it only
+/// when its native catalog cannot classify the face and the target's legacy
+/// materializer must inspect the exact file before GNU size scoring.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PlatformFontSize {
     Scalable,
@@ -582,7 +581,7 @@ pub fn default_font_backend() -> Box<dyn FontBackend> {
         windows => {
             Box::new(DirectWriteBackend::default())
         }
-        all(unix, not(target_os = "macos")) => {
+        target_os = "linux" => {
             Box::new(FontconfigBackend::default())
         }
         _ => compile_error!("Neomacs has no native font catalog for this target"),
@@ -602,6 +601,45 @@ mod tests {
         assert_eq!(backend.kind(), FontBackendKind::CoreText);
         #[cfg(windows)]
         assert_eq!(backend.kind(), FontBackendKind::DirectWrite);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn core_text_candidates_are_complete_scalable_native_answers() {
+        use super::FontBackend as _;
+
+        let backend = super::CoreTextBackend::default();
+        let family = super::FontFamilyName::new(backend.resolve_family("monospace"))
+            .expect("CoreText generic family");
+        let query = super::FontCandidateQuery {
+            scope: super::FontCandidateScope::Family(family.clone()),
+            required: super::RequiredFontCoverage::Any,
+            charset_ranges: Vec::new(),
+            languages: Vec::new(),
+            requested_weight: 400,
+            requested_slant: neovm_core::face::FontSlant::Normal,
+            requested_width: neovm_core::face::FontWidth::Normal,
+            direction: super::TextDirection::LeftToRight,
+        };
+        let candidates = backend.list_candidates(&query);
+
+        assert!(
+            !candidates.is_empty(),
+            "CoreText returned no face for resolved family {family:?}"
+        );
+        assert!(candidates.iter().all(|candidate| {
+            candidate.matched.metadata.size == super::PlatformFontSize::Scalable
+        }));
+
+        let matched = candidates
+            .into_iter()
+            .find_map(|candidate| backend.finalize_match(candidate.matched))
+            .expect("CoreText candidate has a replayable outline asset");
+        let metrics = backend
+            .design_metrics(&matched)
+            .expect("CoreText exposes selected-face design metrics");
+        assert!(metrics.units_per_em > 0);
+        assert!(metrics.ascent > 0);
     }
 
     #[test]

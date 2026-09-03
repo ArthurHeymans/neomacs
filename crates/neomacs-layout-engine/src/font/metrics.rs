@@ -24,6 +24,7 @@ use neomacs_display_protocol::font::{
     ResolvedGlyph,
 };
 #[cfg(test)]
+#[cfg(target_os = "linux")]
 use neovm_core::face::FontWeight;
 use neovm_core::face::{FontSlant, FontWidth};
 // Every map in this module is an internal cache keyed by non-adversarial data
@@ -40,12 +41,12 @@ fn swash_file_replay(identity: &ResolvedFontIdentity) -> Option<FontReplay> {
 }
 use ttf_parser::Face as TtfFace;
 
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(target_os = "linux")]
 fn platform_foundry_for_file(file: &str) -> Option<String> {
     crate::font::fontconfig::foundry_for_file(file)
 }
 
-#[cfg(not(all(unix, not(target_os = "macos"))))]
+#[cfg(not(target_os = "linux"))]
 fn platform_foundry_for_file(_file: &str) -> Option<String> {
     None
 }
@@ -862,6 +863,14 @@ impl FontMetricsService {
         query: &crate::font::resolver::FontEntityQuery,
     ) -> Option<crate::font::resolver::ResolvedFontEntity> {
         self.font_resolver.resolve_entity(query)
+    }
+
+    pub fn open_font_entity(
+        &self,
+        query: &crate::font::resolver::FontEntityQuery,
+        pixel_size: u32,
+    ) -> Option<crate::font::resolver::OpenedFontEntity> {
+        self.font_resolver.open_entity(query, pixel_size)
     }
 
     #[must_use]

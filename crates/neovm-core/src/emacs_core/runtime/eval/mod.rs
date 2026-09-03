@@ -2153,6 +2153,33 @@ pub struct FontPxProbeResult {
     pub average_width: i32,
 }
 
+/// Request to open a platform font entity for the metrics reported by
+/// `font-info`.
+///
+/// A native entity is not necessarily file-backed: CoreText can identify an
+/// exact face by PostScript name and provide its metrics without exposing a
+/// path that a portable parser can reopen.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FontEntityMetricsRequest {
+    pub frame_id: crate::window::FrameId,
+    pub family: Option<crate::heap_types::LispString>,
+    pub registry: Option<crate::heap_types::LispString>,
+    pub file: Option<crate::heap_types::LispString>,
+    pub postscript_name: Option<crate::heap_types::LispString>,
+    pub weight: Option<FontWeight>,
+    pub slant: Option<FontSlant>,
+    pub width: Option<FontWidth>,
+    pub pixel_size: u32,
+}
+
+/// Complete native answer for `font-info` on a font entity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedFontEntityMetrics {
+    pub metrics: FontPxProbeResult,
+    pub file: Option<crate::heap_types::LispString>,
+    pub capability: Option<FontOtfCapability>,
+}
+
 /// One GSUB/GPOS side of an OpenType capability report: per script
 /// (table order), langsyses (`None` = default langsys, first) with their
 /// feature tags. Tags keep trailing spaces ("MKD ").
