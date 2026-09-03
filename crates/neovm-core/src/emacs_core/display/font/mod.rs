@@ -2847,12 +2847,49 @@ fn font_value_matches_frame_font_parameter(
     }
 }
 
+/// The two GNU face-realization domains.
+///
+/// A terminal may carry host-side font metadata (for example, a cell metric
+/// or bootstrap placeholder), but GNU `realize_tty_face` does not attach a
+/// font object to the realized face.  Keep that metadata out of Lisp face
+/// attributes by making the realization domain an exhaustive choice rather
+/// than inferring it from the presence of `font-parameter`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum FrameFontRealization {
+    Terminal,
+    WindowSystem,
+}
+
+impl FrameFontRealization {
+    pub(crate) fn for_frame(frame: &crate::window::Frame) -> Self {
+        match frame.effective_window_system() {
+            None => Self::Terminal,
+            Some(_) => Self::WindowSystem,
+        }
+    }
+
+    /// GNU's `internal-set-lisp-face-attribute` compiles `:font` and
+    /// `:fontset` support only for window-system faces.  A TTY face stores
+    /// neither attribute even when its frame reports the synthetic `"tty"`
+    /// font parameter.
+    pub(crate) const fn stores_face_font_attributes(self) -> bool {
+        match self {
+            Self::Terminal => false,
+            Self::WindowSystem => true,
+        }
+    }
+}
+
 pub(crate) fn live_frame_font_attribute_fallback(
     eval: &super::eval::Context,
     frame_id: FrameId,
     attr: LFaceAttr,
 ) -> Option<Value> {
     let frame = eval.frames.get(frame_id)?;
+    match FrameFontRealization::for_frame(frame) {
+        FrameFontRealization::Terminal => return None,
+        FrameFontRealization::WindowSystem => {}
+    }
     let font_value = frame.parameter("font-parameter")?;
     if !is_font(&font_value) {
         return None;

@@ -1617,6 +1617,64 @@ fn default_face_font_attribute_stays_unspecified_on_live_tty_frame() {
 }
 
 #[test]
+fn setting_font_on_a_live_tty_face_is_a_noop() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    let frame = Value::make_frame(frame_id.0);
+
+    builtin_internal_set_lisp_face_attribute(
+        &mut eval,
+        vec![
+            Value::symbol("default"),
+            Value::keyword(":font"),
+            Value::string("tty"),
+            frame,
+        ],
+    )
+    .expect("GNU accepts but ignores :font on a live TTY frame");
+
+    let result = builtin_internal_get_lisp_face_attribute(
+        &mut eval,
+        vec![Value::symbol("default"), Value::keyword(":font"), frame],
+    )
+    .expect("default TTY face font attribute");
+
+    assert_eq!(result.as_symbol_name(), Some("unspecified"));
+}
+
+#[test]
+fn tty_default_face_does_not_expose_transport_font_metadata() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    let mut transport_face = RuntimeFace::new("default");
+    transport_face.family = Some(Value::string("terminal-cell"));
+    let transport_font = build_font_object(&transport_face);
+
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("selected TTY frame")
+        .set_parameter(Value::symbol("font-parameter"), transport_font);
+
+    let result = builtin_internal_get_lisp_face_attribute(
+        &mut eval,
+        vec![
+            Value::symbol("default"),
+            Value::keyword(":font"),
+            Value::make_frame(frame_id.0),
+        ],
+    )
+    .expect("default TTY face font attribute");
+
+    assert_eq!(
+        result.as_symbol_name(),
+        Some("unspecified"),
+        "GNU realize_tty_face has no realized font; terminal-cell metadata is not a face font"
+    );
+}
+
+#[test]
 fn internal_lisp_face_attribute_values_discrete_boolean_attrs() {
     crate::test_utils::init_test_tracing();
     let result =

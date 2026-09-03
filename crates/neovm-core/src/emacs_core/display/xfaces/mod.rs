@@ -342,7 +342,7 @@ use strum::{EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
 
 use super::error::{Flow, LispCondition, signal};
 use super::font::{
-    alternative_font_family_alist, alternative_font_registry_alist,
+    FrameFontRealization, alternative_font_family_alist, alternative_font_registry_alist,
     default_face_font_attr_affects_frame_font, face_remapping_for_current_buffer,
     font_name_for_face, font_name_value, font_string_text, font_value_fields, font_value_text,
     font_vector_get_flexible, frame_device_designator_p, frame_id_from_designator,
@@ -2284,10 +2284,18 @@ fn font_face_realization_targets(
     frame_arg: Option<&Value>,
 ) -> Vec<FontFaceRealizationTarget> {
     let selected = super::window_cmds::ensure_selected_frame_id(eval);
+    let supports_fonts = |frame_id| {
+        eval.frames.get(frame_id).is_some_and(|frame| {
+            FrameFontRealization::for_frame(frame).stores_face_font_attributes()
+        })
+    };
     match frame_arg {
-        Some(frame) if frame.is_t() => vec![FontFaceRealizationTarget::NewFrameDefaults {
-            reference_frame: selected,
-        }],
+        Some(frame) if frame.is_t() => supports_fonts(selected)
+            .then_some(FontFaceRealizationTarget::NewFrameDefaults {
+                reference_frame: selected,
+            })
+            .into_iter()
+            .collect(),
         Some(frame) if frame.as_fixnum() == Some(0) => {
             let mut live_frames = eval.frames.frame_list();
             if let Some(index) = live_frames
@@ -2297,12 +2305,15 @@ fn font_face_realization_targets(
                 live_frames.swap(0, index);
             }
             let mut targets = Vec::with_capacity(live_frames.len() + 1);
-            targets.push(FontFaceRealizationTarget::NewFrameDefaults {
-                reference_frame: selected,
-            });
+            if supports_fonts(selected) {
+                targets.push(FontFaceRealizationTarget::NewFrameDefaults {
+                    reference_frame: selected,
+                });
+            }
             targets.extend(
                 live_frames
                     .into_iter()
+                    .filter(|frame_id| supports_fonts(*frame_id))
                     .map(FontFaceRealizationTarget::LiveFrame),
             );
             targets
@@ -2310,9 +2321,15 @@ fn font_face_realization_targets(
         Some(frame) if live_frame_designator_in_state(&eval.frames, frame) => {
             let frame_id =
                 frame_id_from_designator(frame).expect("live frame designator should decode");
-            vec![FontFaceRealizationTarget::LiveFrame(frame_id)]
+            supports_fonts(frame_id)
+                .then_some(FontFaceRealizationTarget::LiveFrame(frame_id))
+                .into_iter()
+                .collect()
         }
-        None | Some(_) => vec![FontFaceRealizationTarget::LiveFrame(selected)],
+        None | Some(_) => supports_fonts(selected)
+            .then_some(FontFaceRealizationTarget::LiveFrame(selected))
+            .into_iter()
+            .collect(),
     }
 }
 
@@ -3153,6 +3170,36 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
             {
                 canonical_value = Value::symbol(":ignore-defface");
             }
+
+            let mut live_frame_ids = if defaults_frame {
+                None
+            } else {
+                Some(match args.get(3) {
+                    Some(v) if v.as_fixnum() == Some(0) => eval.frames.frame_list(),
+                    Some(frame) if live_frame_designator_in_state(&eval.frames, frame) => {
+                        frame_id_from_designator(frame)
+                            .map(|frame_id| vec![frame_id])
+                            .unwrap_or_default()
+                    }
+                    _ => vec![super::window_cmds::ensure_selected_frame_id(eval)],
+                })
+            };
+            if matches!(canonical_attr, LFaceAttr::Font | LFaceAttr::Fontset)
+                && let Some(frame_ids) = live_frame_ids.as_mut()
+            {
+                frame_ids.retain(|frame_id| {
+                    eval.frames.get(*frame_id).is_some_and(|frame| {
+                        FrameFontRealization::for_frame(frame).stores_face_font_attributes()
+                    })
+                });
+                if frame_ids.is_empty() {
+                    // GNU's QCfont/QCfontset arms are guarded by
+                    // FRAME_WINDOW_P.  A live terminal accepts the call but
+                    // leaves its Lisp face vector untouched.
+                    return Ok(());
+                }
+            }
+
             set_face_override_id(face_id, canonical_attr, canonical_value, defaults_frame);
             if defaults_frame {
                 if let Some(vector) = ensure_global_lisp_face_vector(eval, &face_name) {
@@ -3165,15 +3212,7 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
                     )?;
                 }
             } else {
-                let frame_ids = match args.get(3) {
-                    Some(v) if v.as_fixnum() == Some(0) => eval.frames.frame_list(),
-                    Some(frame) if live_frame_designator_in_state(&eval.frames, frame) => {
-                        frame_id_from_designator(frame)
-                            .map(|frame_id| vec![frame_id])
-                            .unwrap_or_default()
-                    }
-                    _ => vec![super::window_cmds::ensure_selected_frame_id(eval)],
-                };
+                let frame_ids = live_frame_ids.expect("live mutation target must have frame IDs");
                 let initial = if is_known_lisp_face_name(&face_name) {
                     FrameFaceInitial::SelectedBase
                 } else {
