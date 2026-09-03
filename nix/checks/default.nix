@@ -101,6 +101,15 @@ let
         fi
         test -f "${checkedPackage}/bin/neomacs-$fingerprint.pdump"
 
+        ${lib.optionalString (pkgs.stdenv.isLinux && product == "full") ''
+          export GST_REGISTRY="$PWD/gstreamer-registry.bin"
+          export GST_PLUGIN_SYSTEM_PATH_1_0="${checkedPackage.gstreamerRuntime.pluginSystemPath}"
+          export GST_PLUGIN_SCANNER_1_0="${checkedPackage.gstreamerRuntime.pluginScanner}"
+          ${checkedPackage.gstreamerRuntime.inspect} typefind >/dev/null
+          ${checkedPackage.gstreamerRuntime.inspect} decodebin >/dev/null
+          ${checkedPackage.gstreamerRuntime.inspect} playbin >/dev/null
+        ''}
+
         ${startupContract {
           executable = "${checkedPackage}/bin/neomacs";
           marker = "nix ${product} installed-package contract ok";

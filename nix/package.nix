@@ -38,7 +38,10 @@ let
   cargoBuildArgs = lib.concatStringsSep " " (cargoPackages ++ cargoFeatureArgs);
   runtimeLibs = dependencies.productionBuildInputs productionCapabilities;
   videoEnabled = builtins.elem "video" productionCapabilities.cargoFeatures;
-  gstreamerPluginPath = pkgs.lib.makeSearchPath "lib/gstreamer-1.0" dependencies.videoPluginInputs;
+  gstreamerRuntime = import ./gstreamer-runtime.nix {
+    inherit lib pkgs;
+    pluginInputs = dependencies.videoPluginInputs;
+  };
   commonArgs = {
     pname = if minimal then "neomacs-minimal" else "neomacs";
     inherit version;
@@ -79,10 +82,10 @@ let
     ++ lib.optionals (pkgs.stdenv.isLinux && videoEnabled) [
       "--set-default"
       "GST_PLUGIN_SYSTEM_PATH_1_0"
-      gstreamerPluginPath
+      gstreamerRuntime.pluginSystemPath
       "--set-default"
       "GST_PLUGIN_SCANNER_1_0"
-      "${pkgs.gst_all_1.gstreamer}/libexec/gstreamer-1.0/gst-plugin-scanner"
+      gstreamerRuntime.pluginScanner
     ]
     ++
       lib.optionals (pkgs.stdenv.isLinux && builtins.elem "webview" productionCapabilities.cargoFeatures)
@@ -171,7 +174,9 @@ craneLib.buildPackage (
         ${lib.concatStringsSep " \\\n        " linuxWrapArgs}
     '';
 
-    passthru.productionCapabilities = productionCapabilities;
+    passthru = {
+      inherit gstreamerRuntime productionCapabilities;
+    };
 
     meta = {
       description = "GPU-accelerated Emacs-compatible editor written in Rust";
