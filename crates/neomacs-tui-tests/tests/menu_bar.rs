@@ -65,6 +65,7 @@ fn f10_opens_tty_menu_bar_file_menu_and_cg_closes_it() {
 #[test]
 fn f10_can_navigate_to_help_menu_and_open_about_emacs() {
     let (mut gnu, mut neo) = boot_pair("");
+    use_deterministic_emacs_version(&mut gnu, &mut neo);
 
     send_both(&mut gnu, &mut neo, "F10");
     gnu.read_until(Duration::from_secs(8), file_menu_ready);

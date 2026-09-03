@@ -1999,6 +1999,18 @@ impl Window {
         }
     }
 
+    fn buffer_window_count(&self, buffers: &BufferManager, root_buffer: BufferId) -> usize {
+        match self {
+            Self::Leaf { buffer_id, .. } => {
+                usize::from(buffers.shared_text_root_id(*buffer_id) == Some(root_buffer))
+            }
+            Self::Internal { children, .. } => children
+                .iter()
+                .map(|window| window.buffer_window_count(buffers, root_buffer))
+                .sum(),
+        }
+    }
+
     /// Invalidate redisplay-derived window-end state for this subtree.
     pub fn invalidate_display_state(&mut self) {
         match self {
@@ -5291,6 +5303,25 @@ impl FrameManager {
 
     pub fn frames_mut(&mut self) -> impl Iterator<Item = &mut Frame> {
         self.frames.values_mut()
+    }
+
+    /// Number of live windows displaying BUFFER or one of its indirect
+    /// buffers, matching GNU's `buffer_window_count` (`buffer.h`).
+    pub fn buffer_window_count(&self, buffers: &BufferManager, buffer: BufferId) -> usize {
+        let Some(root_buffer) = buffers.shared_text_root_id(buffer) else {
+            return 0;
+        };
+
+        self.frames
+            .values()
+            .map(|frame| {
+                frame.root_window.buffer_window_count(buffers, root_buffer)
+                    + frame
+                        .minibuffer_leaf
+                        .as_ref()
+                        .map_or(0, |window| window.buffer_window_count(buffers, root_buffer))
+            })
+            .sum()
     }
 
     /// Get the selected frame.

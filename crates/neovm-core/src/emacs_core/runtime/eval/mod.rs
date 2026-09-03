@@ -389,6 +389,18 @@ pub(crate) enum MenuBarRebuildReason {
     FullFrameRedraw,
 }
 
+/// Target of GNU `force-mode-line-update` (`buffer.c`).
+///
+/// The local form is conditional: an undisplayed current buffer has no mode
+/// line to invalidate, so it must not raise the global `update_mode_lines`
+/// menu-rebuild predicate.  Encoding the two Lisp call shapes as a sum type
+/// keeps that distinction explicit at every Rust call site.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ModeLineUpdateTarget {
+    CurrentBuffer(crate::buffer::BufferId),
+    AllBuffers,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RedisplayFrameSignature {
     layout: crate::window::FrameLayoutInputState,
@@ -8612,6 +8624,22 @@ impl Context {
         tracing::debug!(?reason, "request menu-bar rebuild");
         self.menu_bar_rebuild_generation = self.menu_bar_rebuild_generation.wrapping_add(1);
         self.invalidate_redisplay();
+    }
+
+    /// Apply GNU's local/global `force-mode-line-update` boundary.
+    pub(crate) fn request_mode_line_update(&mut self, target: ModeLineUpdateTarget) {
+        let has_mode_line_to_update = match target {
+            ModeLineUpdateTarget::CurrentBuffer(buffer) => {
+                self.frames.buffer_window_count(&self.buffers, buffer) != 0
+            }
+            ModeLineUpdateTarget::AllBuffers => true,
+        };
+        if !has_mode_line_to_update {
+            return;
+        }
+
+        self.request_menu_bar_rebuild(MenuBarRebuildReason::UpdateModeLines);
+        self.mark_chrome_dirty_all();
     }
 
     /// Mark redisplay dirty when a display-affecting variable is set.

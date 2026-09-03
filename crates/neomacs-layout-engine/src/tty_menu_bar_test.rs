@@ -432,3 +432,61 @@ fn menu_bar_item_cache_rebuilds_only_at_the_redisplay_invalidation_boundary() {
         .insert("modified");
     assert_eq!(labels(&eval), vec!["Other".to_string()]);
 }
+
+/// GNU `set-buffer-modified-p` delegates to `force-mode-line-update`, but
+/// `Fforce_mode_line_update` only raises `update_mode_lines` for its local
+/// form when the current buffer is already displayed (`buffer.c`).  The About
+/// screen is constructed in an undisplayed buffer before `switch-to-buffer`;
+/// that construction must therefore not discard the frame's prepared menu.
+#[test]
+fn offscreen_buffer_modified_state_does_not_rebuild_the_prepared_menu() {
+    let mut eval = Context::new();
+    eval.setup_thread_locals();
+
+    let visible = eval.buffer_manager_mut().create_buffer("visible-menu");
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("menu-cache", 800, 600, visible);
+    let visible_map = make_sparse_list_keymap();
+    let visible_menu = make_sparse_list_keymap();
+    list_keymap_define(
+        visible_menu,
+        Value::symbol("visible-menu"),
+        Value::cons(Value::string("Visible"), Value::symbol("ignore")),
+    );
+    list_keymap_define(visible_map, Value::symbol("menu-bar"), visible_menu);
+    eval.buffer_manager_mut()
+        .set_buffer_local_map(visible, visible_map)
+        .expect("set visible local map");
+
+    let labels = |eval: &Context| -> Vec<String> {
+        collect_tty_menu_bar_items_for_frame(eval, frame_id)
+            .into_iter()
+            .map(|item| item.label)
+            .collect()
+    };
+    assert_eq!(labels(&eval), vec!["Visible".to_string()]);
+
+    let offscreen = eval.buffer_manager_mut().create_buffer("offscreen-about");
+    let offscreen_map = make_sparse_list_keymap();
+    let offscreen_menu = make_sparse_list_keymap();
+    list_keymap_define(
+        offscreen_menu,
+        Value::symbol("offscreen-menu"),
+        Value::cons(Value::string("Offscreen"), Value::symbol("ignore")),
+    );
+    list_keymap_define(offscreen_map, Value::symbol("menu-bar"), offscreen_menu);
+    eval.buffer_manager_mut()
+        .set_buffer_local_map(offscreen, offscreen_map)
+        .expect("set offscreen local map");
+
+    eval.eval_str(
+        r##"(progn
+               (set-buffer "offscreen-about")
+               (set-buffer-modified-p nil)
+               (set-window-buffer (selected-window) (current-buffer)))"##,
+    )
+    .expect("construct offscreen buffer, then display it");
+
+    assert_eq!(labels(&eval), vec!["Visible".to_string()]);
+}

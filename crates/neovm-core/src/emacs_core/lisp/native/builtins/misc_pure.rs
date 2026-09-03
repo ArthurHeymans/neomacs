@@ -556,13 +556,16 @@ pub(crate) fn builtin_force_mode_line_update(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_max_args("force-mode-line-update", &args, 1)?;
-    ctx.request_menu_bar_rebuild(super::eval::MenuBarRebuildReason::UpdateModeLines);
-    // GNU `Fforce_mode_line_update` (buffer.c) raises the mode-line dirty
-    // flag as well as forcing a redisplay: without ALL it is
-    // `bset_update_mode_line` on the current buffer, with ALL it is the
-    // global `update_mode_lines = 10`. Both reach every window showing the
-    // buffer, which is what `mark_chrome_dirty_all` models.
-    ctx.mark_chrome_dirty_all();
+    let target = if args.first().is_some_and(|value| value.is_truthy()) {
+        super::eval::ModeLineUpdateTarget::AllBuffers
+    } else {
+        let current_buffer = ctx
+            .buffer_manager()
+            .current_buffer_id()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        super::eval::ModeLineUpdateTarget::CurrentBuffer(current_buffer)
+    };
+    ctx.request_mode_line_update(target);
     Ok(args.first().cloned().unwrap_or(Value::NIL))
 }
 

@@ -237,6 +237,32 @@ pub fn use_deterministic_compilation_exit_time(gnu: &mut TuiSession, neo: &mut T
     eval_expression(gnu, neo, expression);
 }
 
+/// Keep About screens independent of the two binaries' build directories,
+/// feature sets, and dump dates while preserving `emacs-version`'s public
+/// interactive/return/insert behavior.
+///
+/// The source version and target configuration remain observable and must
+/// still agree. Only GNU `version.el`'s explicitly environmental fields are
+/// fixed: build number, window-system feature suffixes, and build time.
+pub fn use_deterministic_emacs_version(gnu: &mut TuiSession, neo: &mut TuiSession) {
+    let expression = r##"(progn
+      (defun neomacs-tui--stable-emacs-version (&optional here)
+        (interactive "P")
+        (let ((version-string
+               (format "GNU Emacs %s (build 1, %s)%s of 2000-01-01"
+                       emacs-version
+                       system-configuration
+                       (if (called-interactively-p 'interactive) "" "\n"))))
+          (if here
+              (insert version-string)
+            (if (called-interactively-p 'interactive)
+                (message "%s" version-string)
+              version-string))))
+      (advice-add 'emacs-version :override
+                  #'neomacs-tui--stable-emacs-version))"##;
+    eval_expression(gnu, neo, expression);
+}
+
 /// Keep Dired's free-space annotation enabled while fixing its OS observation.
 ///
 /// GNU's own Dired tests stub `file-system-info`: free bytes can change between

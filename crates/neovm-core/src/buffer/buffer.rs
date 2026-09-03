@@ -5495,7 +5495,7 @@ impl BufferManager {
         ids
     }
 
-    pub(in crate::buffer) fn shared_text_root_id(&self, id: BufferId) -> Option<BufferId> {
+    pub(crate) fn shared_text_root_id(&self, id: BufferId) -> Option<BufferId> {
         let buf = self.buffers.get(&id)?;
         Some(buf.base_buffer.unwrap_or(buf.id))
     }

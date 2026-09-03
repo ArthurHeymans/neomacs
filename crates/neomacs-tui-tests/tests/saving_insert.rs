@@ -806,6 +806,7 @@ fn view_file_empty_prompt_multiple_del_keeps_prompt() {
 #[test]
 fn about_emacs_via_ch_ca_opens_about_buffer() {
     let (mut gnu, mut neo) = boot_pair("");
+    use_deterministic_emacs_version(&mut gnu, &mut neo);
 
     send_help_sequence(&mut gnu, &mut neo, "C-a");
     let about_ready = |grid: &[String]| {
