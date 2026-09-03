@@ -143,6 +143,12 @@ pub struct RetainedWindowKey {
     /// Per-buffer overlay tick (spec §4.2 (B)). Catches hl-line, show-paren,
     /// region, flymake/lsp, iedit — any of which co-moves with the cursor.
     pub overlay_modified_tick: i64,
+    /// Content digest of the buffer's overlays (span + whole property list).
+    /// The tick above says an overlay was TOUCHED; this says whether the set
+    /// actually differs. Tooling rebuilds identical overlays constantly -- an
+    /// LSP client re-creates its diagnostics on every change -- and without
+    /// this every such rebuild forces a full relayout of the window.
+    pub overlay_digest: u64,
     /// Global face-subsystem change counter (spec §4.2 (C)). Catches
     /// `set-face-attribute` / theme load / face-remap that mutate pixels with
     /// no buffer tick.
@@ -176,6 +182,7 @@ impl RetainedWindowKey {
             overlay_modified_tick,
             is_multibyte,
             buffer_size,
+            overlay_digest,
         ) = evaluator
             .buffer_manager()
             .get(neovm_core::buffer::BufferId(p.buffer_id))
@@ -186,9 +193,10 @@ impl RetainedWindowKey {
                     buffer.overlay_modified_tick(),
                     buffer.get_multibyte(),
                     buffer.point_max_char_pos().get() as i64,
+                    buffer.overlay_content_digest(),
                 )
             })
-            .unwrap_or((0, 0, 0, false, p.buffer_size));
+            .unwrap_or((0, 0, 0, false, p.buffer_size, 0));
         Self {
             media_generation: evaluator.media_generation(),
             buffer_id: p.buffer_id,
@@ -222,6 +230,7 @@ impl RetainedWindowKey {
             chars_modified_tick,
             props_modified_tick,
             overlay_modified_tick,
+            overlay_digest,
             face_change_count: evaluator.face_change_count,
             display_var_change_count: evaluator.display_var_change_count,
         }
@@ -281,6 +290,15 @@ impl RetainedWindowKey {
         // consequence, not an escalation. `buffer_begv` is NOT aligned, so a
         // narrowing change (or an edit before BEGV) still escalates to Full.
         aligned.buffer_size = curr.buffer_size;
+        // The overlay TICK may move freely: `overlay_digest` is the field that
+        // decides, and it is NOT aligned, so a set that really changed still
+        // escalates. GNU has to give up here (xdisp.c:22593 GIVE_UP (200))
+        // because `OVERLAY_MODIFF` is its only signal and it has no per-window
+        // retained key to hang a digest on -- its own comment just below asks
+        // for exactly this. Tooling that deletes and re-creates identical
+        // overlays on every keystroke, as LSP diagnostics do, would otherwise
+        // force a full relayout of the window on every edit.
+        aligned.overlay_modified_tick = curr.overlay_modified_tick;
         aligned == *curr
     }
 
@@ -326,6 +344,7 @@ impl RetainedWindowKey {
             chars_modified_tick,
             props_modified_tick,
             overlay_modified_tick,
+            overlay_digest,
             face_change_count,
             display_var_change_count,
         )
@@ -1594,6 +1613,7 @@ mod scroll_classifier_tests {
             chars_modified_tick: 5,
             props_modified_tick: 5,
             overlay_modified_tick: 5,
+            overlay_digest: 0x51_9e_5a_11,
             face_change_count: 5,
             display_var_change_count: 5,
         }
@@ -2062,15 +2082,30 @@ mod scroll_classifier_tests {
     /// try_window_id proceeds through property changes); overlay/face moves
     /// still escalate.
     #[test]
-    fn edit_eligible_accepts_props_tick_movement_but_not_overlay_or_face() {
+    fn edit_eligible_accepts_props_and_rebuilt_overlays_but_not_changed_ones() {
         let prev = synthetic_key(0, 10);
         let mut props_only = synthetic_key(0, 12);
         props_only.props_modified_tick = 9;
         assert!(RetainedWindowKey::edit_eligible(&prev, &props_only));
 
-        let mut overlay_moved = props_only.clone();
-        overlay_moved.overlay_modified_tick = 6;
-        assert!(!RetainedWindowKey::edit_eligible(&prev, &overlay_moved));
+        // An overlay was touched but the set is byte-for-byte what it was:
+        // the tick moved, the digest did not. This is the LSP-diagnostic
+        // rebuild, and it must NOT cost a full relayout.
+        let mut overlays_rebuilt = props_only.clone();
+        overlays_rebuilt.overlay_modified_tick = 6;
+        assert!(RetainedWindowKey::edit_eligible(&prev, &overlays_rebuilt));
+
+        // The set genuinely differs: escalate, exactly as GNU's
+        // `OVERLAY_MODIFF` give-up does.
+        let mut overlays_changed = overlays_rebuilt.clone();
+        overlays_changed.overlay_digest = prev.overlay_digest ^ 0x9e37_79b9;
+        assert!(!RetainedWindowKey::edit_eligible(&prev, &overlays_changed));
+
+        // A digest change with NO tick movement still escalates: the digest is
+        // the authority, the tick is only the cheap hint.
+        let mut digest_only = props_only.clone();
+        digest_only.overlay_digest = prev.overlay_digest ^ 0x1234_5678;
+        assert!(!RetainedWindowKey::edit_eligible(&prev, &digest_only));
 
         let mut face_moved = props_only.clone();
         face_moved.face_change_count = 6;
