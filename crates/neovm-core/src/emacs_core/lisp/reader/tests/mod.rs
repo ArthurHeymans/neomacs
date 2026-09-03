@@ -1911,7 +1911,12 @@ fn activate_minibuffer_window_switches_displayed_buffer_and_restores_state() {
         .expect("inactive minibuffer buffer");
 
     let active_buffer = ev.buffer_manager_mut().create_buffer(" *Minibuf-1*");
-    let saved = activate_minibuffer_window(&mut ev, active_buffer).expect("activate minibuffer");
+    let saved = activate_minibuffer_window(
+        &mut ev,
+        active_buffer,
+        crate::emacs_core::minibuffer::MinibufferEntryLevel::Outermost,
+    )
+    .expect("activate minibuffer");
 
     let frame = ev
         .frame_manager()
@@ -1956,6 +1961,39 @@ fn activate_minibuffer_window_switches_displayed_buffer_and_restores_state() {
 }
 
 #[test]
+fn nested_minibuffer_keeps_the_outer_calling_window_active() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut ev);
+    let calling_window = ev
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let outer_buffer = ev.buffer_manager_mut().create_buffer(" *Minibuf-1*");
+    let _outer = activate_minibuffer_window(
+        &mut ev,
+        outer_buffer,
+        crate::emacs_core::minibuffer::MinibufferEntryLevel::Outermost,
+    )
+    .expect("activate outer minibuffer");
+    let inner_buffer = ev.buffer_manager_mut().create_buffer(" *Minibuf-2*");
+    let _inner = activate_minibuffer_window(
+        &mut ev,
+        inner_buffer,
+        crate::emacs_core::minibuffer::MinibufferEntryLevel::Recursive,
+    )
+    .expect("activate nested minibuffer");
+
+    assert_eq!(
+        ev.minibuffer_selected_window,
+        Some(calling_window),
+        "GNU preserves minibuf_selected_window when a recursive minibuffer reuses the already-selected minibuffer window"
+    );
+}
+
+#[test]
 fn activate_minibuffer_window_saves_the_callers_live_buffer_point() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -1981,7 +2019,12 @@ fn activate_minibuffer_window_saves_the_callers_live_buffer_point() {
     let expected = LispCharPos1::from_one_based_usize(text.len() + 1);
 
     let minibuffer = ev.buffer_manager_mut().create_buffer(" *Minibuf-1*");
-    let _saved = activate_minibuffer_window(&mut ev, minibuffer).expect("activate minibuffer");
+    let _saved = activate_minibuffer_window(
+        &mut ev,
+        minibuffer,
+        crate::emacs_core::minibuffer::MinibufferEntryLevel::Outermost,
+    )
+    .expect("activate minibuffer");
     // Redisplay/text edits refresh the cached window point from its marker.
     // Saving only the cache would therefore lose the caller's live point as
     // soon as the next synchronization runs.
@@ -2018,7 +2061,12 @@ fn expired_minibuffer_buffer_is_erased_before_restore() {
     ev.buffer_manager_mut()
         .replace_buffer_contents(active_buffer, "M-x bury-buffer")
         .expect("install minibuffer contents");
-    let saved = activate_minibuffer_window(&mut ev, active_buffer).expect("activate minibuffer");
+    let saved = activate_minibuffer_window(
+        &mut ev,
+        active_buffer,
+        crate::emacs_core::minibuffer::MinibufferEntryLevel::Outermost,
+    )
+    .expect("activate minibuffer");
 
     erase_expired_minibuffer_buffer_in_state(&mut ev.buffers, active_buffer);
     restore_minibuffer_window(&mut ev, saved);
@@ -2045,7 +2093,12 @@ fn active_minibuffer_window_sync_keeps_live_buffer_point() {
         .and_then(|frame| frame.minibuffer_window)
         .expect("initial frame minibuffer window");
     let active_buffer = ev.buffer_manager_mut().create_buffer(" *Minibuf-1*");
-    let _saved = activate_minibuffer_window(&mut ev, active_buffer).expect("activate minibuffer");
+    let _saved = activate_minibuffer_window(
+        &mut ev,
+        active_buffer,
+        crate::emacs_core::minibuffer::MinibufferEntryLevel::Outermost,
+    )
+    .expect("activate minibuffer");
 
     ev.buffer_manager_mut()
         .replace_buffer_contents(active_buffer, "Eval: (+ 1 2)")

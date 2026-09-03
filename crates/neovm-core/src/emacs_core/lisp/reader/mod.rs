@@ -460,6 +460,43 @@ struct MinibufferTeardownOutcome {
     window_restore: MinibufferWindowRestoreEffect,
 }
 
+/// The only two legal updates to GNU's `minibuf_selected_window` when a
+/// minibuffer window is activated.
+///
+/// A recursive read that reuses the already-selected minibuffer must preserve
+/// the original caller.  Replacing it with the minibuffer window would make
+/// the real caller's mode/header line inactive for the duration of the nested
+/// read.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MinibufferSelectedWindowUpdate {
+    Preserve,
+    Replace(crate::window::WindowId),
+}
+
+impl MinibufferSelectedWindowUpdate {
+    pub(crate) fn for_entry(
+        level: super::minibuffer::MinibufferEntryLevel,
+        selected_window: crate::window::WindowId,
+        minibuffer_window: crate::window::WindowId,
+    ) -> Self {
+        match level {
+            super::minibuffer::MinibufferEntryLevel::Outermost => Self::Replace(selected_window),
+            super::minibuffer::MinibufferEntryLevel::Recursive
+                if selected_window == minibuffer_window =>
+            {
+                Self::Preserve
+            }
+            super::minibuffer::MinibufferEntryLevel::Recursive => Self::Replace(selected_window),
+        }
+    }
+
+    pub(crate) fn apply(self, target: &mut Option<crate::window::WindowId>) {
+        if let Self::Replace(window) = self {
+            *target = Some(window);
+        }
+    }
+}
+
 /// How the recursive edit completed, recorded before the session unwind runs.
 /// `Pending` covers failures in mode/setup hooks before recursive edit starts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -538,6 +575,7 @@ fn activate_minibuffer_window_in_state(
     minibuffer_selected_window: &mut Option<crate::window::WindowId>,
     active_minibuffer_window: &mut Option<crate::window::WindowId>,
     minibuf_id: crate::buffer::BufferId,
+    entry_level: super::minibuffer::MinibufferEntryLevel,
 ) -> Option<ActiveMinibufferWindowState> {
     let calling_frame = CallingFrame(super::window_cmds::ensure_selected_frame_id_in_state(
         frames, buffers,
@@ -591,7 +629,12 @@ fn activate_minibuffer_window_in_state(
     }
     let _ = frames.select_frame(minibuffer_frame.0);
     buffers.switch_current(minibuf_id);
-    *minibuffer_selected_window = Some(calling_selected_window);
+    MinibufferSelectedWindowUpdate::for_entry(
+        entry_level,
+        calling_selected_window,
+        minibuffer_window_id,
+    )
+    .apply(minibuffer_selected_window);
     *active_minibuffer_window = Some(minibuffer_window_id);
     Some(saved)
 }
@@ -657,6 +700,7 @@ fn record_restored_calling_window_selection(
 fn activate_minibuffer_window(
     eval: &mut super::eval::Context,
     minibuf_id: crate::buffer::BufferId,
+    entry_level: super::minibuffer::MinibufferEntryLevel,
 ) -> Option<ActiveMinibufferWindowState> {
     activate_minibuffer_window_in_state(
         &mut eval.frames,
@@ -664,6 +708,7 @@ fn activate_minibuffer_window(
         &mut eval.minibuffer_selected_window,
         &mut eval.active_minibuffer_window,
         minibuf_id,
+        entry_level,
     )
 }
 
@@ -2092,6 +2137,7 @@ fn finish_read_from_minibuffer_in_vm_runtime_interactive(
         &mut shared.minibuffer_selected_window,
         &mut shared.active_minibuffer_window,
         minibuf_id,
+        entry_permit.level(),
     );
     if active_window_state.is_none() {
         shared.buffers.switch_current(minibuf_id);

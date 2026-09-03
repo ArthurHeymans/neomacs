@@ -10813,12 +10813,17 @@ impl Context {
         prompt: crate::heap_types::LispString,
         initial_input: Option<crate::heap_types::LispString>,
     ) -> Result<Option<WindowId>, Flow> {
-        self.minibuffers.read_from_minibuffer_lisp(
-            minibuf_id,
-            &prompt,
-            initial_input.as_ref(),
-            None,
-        )?;
+        let entry_level = {
+            let state = self.minibuffers.read_from_minibuffer_lisp(
+                minibuf_id,
+                &prompt,
+                initial_input.as_ref(),
+                None,
+            )?;
+            let depth = std::num::NonZeroUsize::new(state.depth)
+                .expect("an active minibuffer has nonzero depth");
+            super::minibuffer::MinibufferEntryLevel::from_depth(depth)
+        };
 
         let frame_id = super::window_cmds::ensure_selected_frame_id_in_state(
             &mut self.frames,
@@ -10850,7 +10855,12 @@ impl Context {
             let _ = frame.select_window(minibuffer_window_id);
         }
         self.buffers.switch_current(minibuf_id);
-        self.minibuffer_selected_window = Some(previous_selected_window);
+        super::reader::MinibufferSelectedWindowUpdate::for_entry(
+            entry_level,
+            previous_selected_window,
+            minibuffer_window_id,
+        )
+        .apply(&mut self.minibuffer_selected_window);
         self.active_minibuffer_window = Some(minibuffer_window_id);
         Ok(Some(minibuffer_window_id))
     }

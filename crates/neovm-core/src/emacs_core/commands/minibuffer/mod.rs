@@ -558,6 +558,27 @@ pub(crate) enum MinibufferEntryRejection {
     TestDepthLimit,
 }
 
+/// Whether an admitted read enters the first minibuffer or recurses from one.
+///
+/// GNU uses `minibuf_level == 1` when deciding whether to replace
+/// `minibuf_selected_window`.  Keeping that distinction typed prevents callers
+/// from reconstructing the lifecycle rule from an unvalidated integer depth.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MinibufferEntryLevel {
+    Outermost,
+    Recursive,
+}
+
+impl MinibufferEntryLevel {
+    pub(crate) fn from_depth(depth: NonZeroUsize) -> Self {
+        if depth.get() == 1 {
+            Self::Outermost
+        } else {
+            Self::Recursive
+        }
+    }
+}
+
 impl MinibufferEntryRejection {
     pub(crate) fn into_flow(self) -> Flow {
         let message = match self {
@@ -584,6 +605,10 @@ pub(crate) struct MinibufferEntryPermit {
 impl MinibufferEntryPermit {
     pub(crate) fn depth(&self) -> usize {
         self.depth.get()
+    }
+
+    pub(crate) fn level(&self) -> MinibufferEntryLevel {
+        MinibufferEntryLevel::from_depth(self.depth)
     }
 }
 

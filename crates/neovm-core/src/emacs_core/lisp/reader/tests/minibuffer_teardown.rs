@@ -77,6 +77,7 @@ fn run_teardown_and_collect(
         &mut ev.minibuffer_selected_window,
         &mut ev.active_minibuffer_window,
         minibuf_id,
+        crate::emacs_core::minibuffer::MinibufferEntryLevel::Outermost,
     )
     .expect("activate minibuffer window");
 
