@@ -3257,6 +3257,58 @@ fn mode_line_pixel_align_to_adds_window_text_area_left_offset() {
     );
 }
 
+/// GNU ignores the `(space-width FACTOR)` display modifier on terminal frames:
+/// `handle_single_display_spec` returns before setting `it->space_width` when
+/// `!FRAME_WINDOW_P` (xdisp.c:6241-6254).  The ordinary space therefore owns
+/// one whole terminal cell, and a later `:align-to` must measure from that
+/// cell boundary.  Doom modeline emits exactly this sequence before its
+/// right-aligned segment.
+#[test]
+fn tty_mode_line_space_width_does_not_shift_later_align_to() {
+    let _eval = Context::new();
+    let rendered = Value::string_with_text_properties(
+        "A  R",
+        vec![
+            StringTextPropertyRun {
+                start: 1,
+                end: 2,
+                plist: Value::list(vec![
+                    Value::symbol("display"),
+                    Value::list(vec![Value::symbol("space-width"), Value::make_float(0.5)]),
+                ]),
+            },
+            StringTextPropertyRun {
+                start: 2,
+                end: 3,
+                plist: Value::list(vec![
+                    Value::symbol("display"),
+                    Value::list(vec![
+                        Value::symbol("space"),
+                        Value::keyword("align-to"),
+                        Value::list(vec![Value::fixnum(80)]),
+                    ]),
+                ]),
+            },
+        ],
+    );
+
+    let row = render_lisp_display_row(rendered, GlyphRowRole::ModeLine);
+
+    assert_eq!(
+        row_text_expanding_stretches(&row),
+        format!("A{}R", " ".repeat(9)),
+        "the right segment must begin at the requested TTY column"
+    );
+    assert!(
+        matches!(
+            row.glyphs[GlyphArea::Text.index()][1].glyph_type,
+            GlyphType::Char { ch: ' ' }
+        ),
+        "GNU keeps space-width as an ordinary terminal space: {:?}",
+        row.glyphs[GlyphArea::Text.index()]
+    );
+}
+
 /// Buffer-path `(space :align-to N)` must be unchanged by the unification: the
 /// buffer text path already used `calc_pixel_width_or_height`, so this pins
 /// that path's output stays byte-identical. An `:align-to 4` over a single

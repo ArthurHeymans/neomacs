@@ -516,6 +516,15 @@ pub(crate) trait DisplayGlyphMeasurer {
         None
     }
 
+    /// Whether a `(space-width FACTOR)` display modifier participates in row
+    /// geometry.  GNU accepts it only for window-system frames
+    /// (`handle_single_display_spec`, xdisp.c); terminal rows keep an ordinary
+    /// integral-cell space.  A closed enum keeps that backend distinction out
+    /// of ad-hoc width fallbacks.
+    fn display_space_width_behavior(&self) -> DisplaySpaceWidthBehavior {
+        DisplaySpaceWidthBehavior::Apply
+    }
+
     fn text_run_advances_px(
         &mut self,
         _text: &str,
@@ -524,6 +533,12 @@ pub(crate) trait DisplayGlyphMeasurer {
     ) -> DisplayTextRunMeasurement {
         DisplayTextRunMeasurement::PerChar
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DisplaySpaceWidthBehavior {
+    Ignore,
+    Apply,
 }
 
 pub(crate) enum DisplayRowItemMeasurement {
@@ -2148,13 +2163,22 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         face_id: FaceId,
         item_layout: DisplayItemLayout,
     ) {
-        let face_space_width = item_layout.space_width.and_then(|_| {
+        let space_width_behavior = self
+            .glyph_measurer
+            .as_deref()
+            .map(DisplayGlyphMeasurer::display_space_width_behavior)
+            .unwrap_or(DisplaySpaceWidthBehavior::Apply);
+        let applied_space_width = match space_width_behavior {
+            DisplaySpaceWidthBehavior::Ignore => None,
+            DisplaySpaceWidthBehavior::Apply => item_layout.space_width,
+        };
+        let face_space_width = applied_space_width.and_then(|_| {
             self.glyph_measurer
                 .as_deref_mut()
                 .and_then(|measurer| measurer.face_space_width_px(face_id))
                 .filter(|width| width.is_finite() && *width > 0.0)
         });
-        let face_vertical_metrics = item_layout.space_width.and_then(|_| {
+        let face_vertical_metrics = applied_space_width.and_then(|_| {
             self.glyph_measurer
                 .as_deref_mut()
                 .and_then(|measurer| measurer.face_vertical_metrics_px(face_id))
@@ -2166,7 +2190,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 // into a stretch glyph.  Its width and vertical box come
                 // from the face's PRIMARY font, not from the fallback font
                 // that happens to cover U+0020.
-                if item_layout.space_width.is_some() {
+                if applied_space_width.is_some() {
                     glyph.glyph_type = GlyphType::Stretch { width_cols: 1 };
                     let natural_width = face_space_width.unwrap_or(glyph.pixel_width);
                     glyph.pixel_width = item_layout.horizontal_advance_px(' ', natural_width);
@@ -2202,7 +2226,16 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         natural_advance_px: f32,
         item_layout: DisplayItemLayout,
     ) -> f32 {
-        let natural_advance_px = if ch == ' ' && item_layout.space_width.is_some() {
+        let space_width_behavior = self
+            .glyph_measurer
+            .as_deref()
+            .map(DisplayGlyphMeasurer::display_space_width_behavior)
+            .unwrap_or(DisplaySpaceWidthBehavior::Apply);
+        let applied_space_width = match space_width_behavior {
+            DisplaySpaceWidthBehavior::Ignore => None,
+            DisplaySpaceWidthBehavior::Apply => item_layout.space_width,
+        };
+        let natural_advance_px = if ch == ' ' && applied_space_width.is_some() {
             self.glyph_measurer
                 .as_deref_mut()
                 .and_then(|measurer| measurer.face_space_width_px(face_id))
@@ -2211,7 +2244,11 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         } else {
             natural_advance_px
         };
-        item_layout.horizontal_advance_px(ch, natural_advance_px)
+        DisplayItemLayout {
+            space_width: applied_space_width,
+            ..item_layout
+        }
+        .horizontal_advance_px(ch, natural_advance_px)
     }
 
     fn text_char_state(&self, ch: char) -> DisplayRowTextCharState {
