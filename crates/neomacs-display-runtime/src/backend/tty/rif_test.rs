@@ -1698,6 +1698,63 @@ fn first_diff_repaints_unknown_terminal() {
 }
 
 #[test]
+fn magic_wrap_normalizes_a_full_width_run_before_the_adjacent_row_like_gnu() {
+    let mut caps = TermCaps::default();
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(4, 2, caps);
+    for (column, character) in "ABCD".chars().enumerate() {
+        rif.desired
+            .set(0, column, character, CellAttrs::default(), false);
+    }
+    rif.desired.set(1, 0, 'E', CellAttrs::default(), false);
+
+    rif.diff_and_render();
+    let output = rif.take_output();
+
+    // GNU `tty_write_glyphs_1' advances its tracked cursor with `cmplus', then
+    // `cmcheckmagic' resolves the right-margin phantom position with CRLF
+    // (term.c:768,816; cm.c:113-132).  The adjacent run therefore needs no
+    // absolute cursor address.  Keeping this continuous cursor history also
+    // preserves any real terminal wrap caused by a Unicode-width disagreement,
+    // which affects copy/reflow semantics and is part of ExactDisplay.
+    assert!(
+        output.windows(7).any(|bytes| bytes == b"ABCD\r\nE"),
+        "magic-wrap should normalize the right margin before the adjacent row: {:?}",
+        String::from_utf8_lossy(&output),
+    );
+    assert!(
+        !output
+            .windows(b"\x1b[2;1H".len())
+            .any(|bytes| bytes == b"\x1b[2;1H"),
+        "an absolute move to the normalized adjacent row would erase GNU's cursor provenance",
+    );
+}
+
+#[test]
+fn no_autowrap_addresses_the_adjacent_row_explicitly() {
+    let mut caps = TermCaps::default();
+    caps.right_margin = RightMarginBehavior::NoAutoWrap;
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(4, 2, caps);
+    for (column, character) in "ABCD".chars().enumerate() {
+        rif.desired
+            .set(0, column, character, CellAttrs::default(), false);
+    }
+    rif.desired.set(1, 0, 'E', CellAttrs::default(), false);
+
+    rif.diff_and_render();
+    let output = rif.take_output();
+
+    assert!(
+        output
+            .windows(b"\x1b[2;1H".len())
+            .any(|bytes| bytes == b"\x1b[2;1H"),
+        "a terminal without autowrap must receive an explicit adjacent-row address: {:?}",
+        String::from_utf8_lossy(&output),
+    );
+}
+
+#[test]
 fn first_diff_writes_content_then_erases_the_default_blank_tail() {
     let mut caps = TermCaps::default();
     caps.synchronized_output = false;
@@ -2154,11 +2211,11 @@ fn diff_and_render_rewrites_changed_row_span_contiguously() {
     let output = String::from_utf8(rif.take_output()).expect("utf8 output");
 
     assert!(output.contains("\x1b[1;1H"));
-    assert!(output.contains("XBCDY"));
+    assert!(output.contains("XBCDY\x1b[K"));
     assert_eq!(
         output.matches("\x1b[1;").count(),
-        2,
-        "expected one contiguous write plus GNU's tail erase"
+        1,
+        "the contiguous write leaves the cursor exactly where GNU performs its tail erase"
     );
     assert!(output.contains("\x1b[K"));
 }
@@ -3594,8 +3651,9 @@ fn distant_edits_on_one_row_skip_the_untouched_middle() {
 #[test]
 fn nearby_edits_coalesce_into_one_span() {
     // Two edits six unchanged cells apart: retransmitting the gap is
-    // cheaper than a second text run, so one span covers both. The second
-    // cursor motion belongs to GNU's distinct erase-to-EOL operation.
+    // cheaper than a second text run, so one span covers both.  GNU's
+    // clear_end_of_line consumes the cursor left by tty_write_glyphs_1; it
+    // does not address that already-current position again (term.c:481-527).
     let mut rif = TtyRif::new(40, 4);
     set_row(&mut rif, 1, "abcdefgh");
     let _ = render_output(&mut rif);
@@ -3604,11 +3662,10 @@ fn nearby_edits_coalesce_into_one_span() {
     let text = String::from_utf8_lossy(&out);
     assert_eq!(
         text.matches("\x1b[2;").count(),
-        2,
-        "a six-cell gap coalesces into one text span plus tail erase: {text:?}"
+        1,
+        "a six-cell gap coalesces into one text span whose cursor feeds the tail erase: {text:?}"
     );
-    assert!(text.contains("AbcdefgH"));
-    assert!(text.contains("\x1b[K"));
+    assert!(text.contains("AbcdefgH\x1b[K"));
 }
 
 #[test]
@@ -3646,6 +3703,7 @@ fn scroll_plan_is_one_scroll_op_plus_exposed_row_runs() {
 fn caps_without_scroll_region_never_plan_scroll_ops() {
     let mut rif = TtyRif::new(20, 10);
     rif.set_caps(TermCaps {
+        right_margin: RightMarginBehavior::NoAutoWrap,
         scroll_region: None,
         insert_delete_char: false,
         blank_tail: BlankTailMethod::WriteSpaces,

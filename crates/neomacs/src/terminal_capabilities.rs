@@ -499,7 +499,9 @@ fn termcap_cap_is(
 pub(crate) fn resolve_term_caps(
     database: &mut dyn TerminalCapabilityDatabase,
 ) -> neomacs_display_runtime::backend::tty::rif::TermCaps {
-    use neomacs_display_runtime::backend::tty::rif::{BlankTailMethod, RegionScrollMethod};
+    use neomacs_display_runtime::backend::tty::rif::{
+        BlankTailMethod, RegionScrollMethod, RightMarginBehavior,
+    };
 
     let decstbm = termcap_cap_is(database, "cs", b"\x1b[%i%d;%dr");
     let cursor_address = termcap_cap_is(database, "cm", b"\x1b[%i%d;%dH");
@@ -527,6 +529,13 @@ pub(crate) fn resolve_term_caps(
     };
 
     neomacs_display_runtime::backend::tty::rif::TermCaps {
+        right_margin: if database.get_termcap_flag("xn") {
+            RightMarginBehavior::MagicWrap
+        } else if database.get_termcap_flag("am") {
+            RightMarginBehavior::AutoWrap
+        } else {
+            RightMarginBehavior::NoAutoWrap
+        },
         scroll_region,
         insert_delete_char: termcap_cap_is(database, "IC", b"\x1b[%d@")
             && termcap_cap_is(database, "DC", b"\x1b[%dP"),

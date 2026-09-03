@@ -486,6 +486,11 @@ fn terminal_cursor_cell(x: f32, y: f32, char_width: f32, char_height: f32) -> (u
 /// without DECSTBM would render SU as full-screen scroll), hence the split.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TermCaps {
+    /// How output behaves at the physical right margin.  GNU keeps `am' and
+    /// `xn' distinct because they produce different cursor states: ordinary
+    /// autowrap advances logically, while magic wrap first enters a phantom
+    /// column that must be normalized with CRLF.
+    pub right_margin: RightMarginBehavior,
     /// How region scrolls may be encoded, or `None` to refuse them. The
     /// method is chosen here, at capability time, and carried inside the
     /// planned op, so the encoder never consults a capability it might
@@ -514,6 +519,7 @@ impl Default for TermCaps {
     /// [`TermCaps::unknown_terminal`], not to this.
     fn default() -> Self {
         Self {
+            right_margin: RightMarginBehavior::MagicWrap,
             scroll_region: Some(RegionScrollMethod::SuSd),
             insert_delete_char: true,
             blank_tail: BlankTailMethod::EraseToEol {
@@ -533,12 +539,30 @@ impl TermCaps {
     /// ordinary write path.
     pub fn unknown_terminal() -> Self {
         Self {
+            right_margin: RightMarginBehavior::NoAutoWrap,
             scroll_region: None,
             insert_delete_char: false,
             blank_tail: BlankTailMethod::WriteSpaces,
             synchronized_output: true,
         }
     }
+}
+
+/// GNU's closed set of right-margin terminal behaviors (`am' / `xn').
+///
+/// Keeping this as one enum prevents an impossible capability combination
+/// such as magic wrap without autowrap and makes the encoder handle every
+/// cursor transition exhaustively.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RightMarginBehavior {
+    /// Neither termcap `am' nor `xn': output remains in the last column.
+    NoAutoWrap,
+    /// Termcap `am' without `xn': GNU advances its logical cursor directly to
+    /// column zero of the next row.
+    AutoWrap,
+    /// Termcap `xn': the terminal has a phantom right-margin state, which GNU
+    /// resolves with CRLF in `cmcheckmagic'.
+    MagicWrap,
 }
 
 /// How trailing default-face blanks are put on the terminal.
@@ -642,6 +666,77 @@ enum TermOp {
         at: u16,
         count: std::num::NonZeroU16,
     },
+}
+
+/// What the encoder knows about the terminal's logical cursor while folding a
+/// typed operation stream.
+///
+/// This is deliberately local to one frame update.  The first content op is
+/// addressed absolutely; after that, GNU-compatible right-margin transitions
+/// can carry cursor provenance between adjacent row operations.  A raw pair
+/// of row/column integers could accidentally represent the phantom column as
+/// an ordinary address, whereas this enum makes that state explicit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EncodedCursorState {
+    Unknown,
+    At { row: u16, col: u16 },
+    RightMargin { row: u16 },
+}
+
+impl EncodedCursorState {
+    fn move_to(&mut self, output: &mut Vec<u8>, row: u16, col: u16) {
+        if *self != (Self::At { row, col }) {
+            write_cursor_goto(output, row + 1, col + 1);
+            *self = Self::At { row, col };
+        }
+    }
+
+    fn finish_write(
+        &mut self,
+        output: &mut Vec<u8>,
+        row: u16,
+        end: u16,
+        width: u16,
+        height: u16,
+        right_margin: RightMarginBehavior,
+    ) {
+        if end < width {
+            *self = Self::At { row, col: end };
+            return;
+        }
+
+        debug_assert_eq!(end, width, "a terminal write run must stay within its row");
+        let Some(next_row) = row.checked_add(1).filter(|next| *next < height) else {
+            *self = Self::RightMargin { row };
+            return;
+        };
+
+        match right_margin {
+            RightMarginBehavior::NoAutoWrap => {
+                *self = Self::At {
+                    row,
+                    col: width.saturating_sub(1),
+                };
+            }
+            RightMarginBehavior::AutoWrap => {
+                *self = Self::At {
+                    row: next_row,
+                    col: 0,
+                };
+            }
+            RightMarginBehavior::MagicWrap => {
+                // GNU cmcheckmagic: leave the terminal in a known state after
+                // its phantom right-margin column.  Besides cursor placement,
+                // this retains real soft-wrap provenance when the terminal's
+                // Unicode width differs from Emacs's logical glyph width.
+                output.extend_from_slice(b"\r\n");
+                *self = Self::At {
+                    row: next_row,
+                    col: 0,
+                };
+            }
+        }
+    }
 }
 
 /// Byte/op accounting for the most recent frame, folded during encoding.
@@ -1683,6 +1778,9 @@ impl TtyRif {
     /// folds the per-frame accounting.
     fn encode_ops(&mut self, ops: &[TermOp]) {
         let mut last_attrs: Option<CellAttrs> = None;
+        let mut cursor = EncodedCursorState::Unknown;
+        let width = u16::try_from(self.desired.width).unwrap_or(u16::MAX);
+        let height = u16::try_from(self.desired.height).unwrap_or(u16::MAX);
         for op in ops {
             match *op {
                 TermOp::ScrollRows {
@@ -1726,31 +1824,40 @@ impl TtyRif {
                         }
                     }
                     self.output.extend_from_slice(b"\x1b[r");
+                    cursor = EncodedCursorState::Unknown;
                 }
                 TermOp::ClearThenWriteRun { row, start, end } => {
-                    write_cursor_goto(&mut self.output, row + 1, start + 1);
+                    cursor.move_to(&mut self.output, row, start);
                     write_face_transition(&mut self.output, &mut last_attrs, &CellAttrs::default());
                     for _ in start..end {
                         self.output.push(b' ');
                     }
-                    self.encode_write_run(row, start, end, &mut last_attrs);
+                    cursor.finish_write(
+                        &mut self.output,
+                        row,
+                        end,
+                        width,
+                        height,
+                        self.caps.right_margin,
+                    );
+                    self.encode_write_run(row, start, end, &mut last_attrs, &mut cursor);
                 }
                 TermOp::WriteRun { row, start, end } => {
-                    self.encode_write_run(row, start, end, &mut last_attrs);
+                    self.encode_write_run(row, start, end, &mut last_attrs, &mut cursor);
                 }
                 TermOp::InsertCells { row, at, count } => {
-                    write_cursor_goto(&mut self.output, row + 1, at + 1);
+                    cursor.move_to(&mut self.output, row, at);
                     self.output
                         .extend_from_slice(format!("\x1b[{count}@").as_bytes());
                 }
                 TermOp::DeleteCells { row, at, count } => {
-                    write_cursor_goto(&mut self.output, row + 1, at + 1);
+                    cursor.move_to(&mut self.output, row, at);
                     self.output
                         .extend_from_slice(format!("\x1b[{count}P").as_bytes());
                 }
                 TermOp::EraseToEol { row, from, bg } => {
                     self.frame_stats.erase_ops += 1;
-                    write_cursor_goto(&mut self.output, row + 1, from + 1);
+                    cursor.move_to(&mut self.output, row, from);
                     // Establish the BCE fill color: the transition turns the
                     // previous face off and this one on, so the erase paints
                     // exactly the tail's background and nothing else.
@@ -1776,9 +1883,10 @@ impl TtyRif {
         start: u16,
         end: u16,
         last_attrs: &mut Option<CellAttrs>,
+        cursor: &mut EncodedCursorState,
     ) {
         self.frame_stats.write_runs += 1;
-        write_cursor_goto(&mut self.output, row + 1, start + 1);
+        cursor.move_to(&mut self.output, row, start);
         let row_start = row as usize * self.desired.width;
         for col in start as usize..end as usize {
             let desired = &self.desired.cells[row_start + col];
@@ -1790,6 +1898,14 @@ impl TtyRif {
             write_cell_contents(&mut self.output, &cell);
             self.frame_stats.cells_written += 1;
         }
+        cursor.finish_write(
+            &mut self.output,
+            row,
+            end,
+            u16::try_from(self.desired.width).unwrap_or(u16::MAX),
+            u16::try_from(self.desired.height).unwrap_or(u16::MAX),
+            self.caps.right_margin,
+        );
     }
 
     /// Take the buffered output bytes. The caller writes these to stdout.

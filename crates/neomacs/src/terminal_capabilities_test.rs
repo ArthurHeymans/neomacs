@@ -63,6 +63,8 @@ impl FakeCapabilityDatabase {
             .with_string("IC", "\x1b[%d@")
             .with_string("DC", "\x1b[%dP")
             .with_string("ce", "\x1b[K")
+            .with_flag("am")
+            .with_flag("xn")
     }
 
     /// vt220 shape: DECSTBM + cursor addressing but NO indn/rin — CSI S/T
@@ -406,13 +408,16 @@ fn an_absent_color_count_is_monochrome_like_gnu() {
 // bytes the encoder emits, not mere capability presence.
 // ---------------------------------------------------------------------------
 
-use neomacs_display_runtime::backend::tty::rif::{BlankTailMethod, RegionScrollMethod};
+use neomacs_display_runtime::backend::tty::rif::{
+    BlankTailMethod, RegionScrollMethod, RightMarginBehavior,
+};
 
 #[test]
 fn xterm_shaped_entry_resolves_every_planner_capability() {
     let mut database = FakeCapabilityDatabase::xterm_like().with_flag("ut");
     let caps = resolve_term_caps(&mut database);
     assert_eq!(caps.scroll_region, Some(RegionScrollMethod::SuSd));
+    assert_eq!(caps.right_margin, RightMarginBehavior::MagicWrap);
     assert!(caps.insert_delete_char);
     assert_eq!(
         caps.blank_tail,
@@ -421,6 +426,28 @@ fn xterm_shaped_entry_resolves_every_planner_capability() {
         }
     );
     assert!(caps.synchronized_output);
+}
+
+#[test]
+fn right_margin_behavior_is_one_exhaustive_capability() {
+    let mut no_wrap = FakeCapabilityDatabase::bare();
+    let mut auto_wrap = FakeCapabilityDatabase::bare().with_flag("am");
+    let mut magic_wrap = FakeCapabilityDatabase::bare()
+        .with_flag("am")
+        .with_flag("xn");
+
+    assert_eq!(
+        resolve_term_caps(&mut no_wrap).right_margin,
+        RightMarginBehavior::NoAutoWrap
+    );
+    assert_eq!(
+        resolve_term_caps(&mut auto_wrap).right_margin,
+        RightMarginBehavior::AutoWrap
+    );
+    assert_eq!(
+        resolve_term_caps(&mut magic_wrap).right_margin,
+        RightMarginBehavior::MagicWrap
+    );
 }
 
 #[test]
