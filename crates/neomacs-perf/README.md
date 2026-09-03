@@ -94,7 +94,9 @@ the selected physical GPU, native decoder, compositor import, and display
 cadence remain part of the measurement. Supply a locally retained 3840x2160,
 60 fps input with `--video-file`; the harness hashes that file and records its
 absolute path, size, display environment, editor identity, and fixture hash in
-the run provenance. The GUI frontend dimensions define the requested video
+the run provenance. It also records the explicit GStreamer plugin catalog used
+with the fresh benchmark HOME, so decoding cannot depend on a cached per-user
+registry. The GUI frontend dimensions define the requested video
 presentation size (1920x1080 by default), not a synthetic display size. The
 harness maximizes the real window and refuses to start decoding unless the
 actual window body can contain that presentation. Its default 300 observation

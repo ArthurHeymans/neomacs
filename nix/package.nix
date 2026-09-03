@@ -37,6 +37,8 @@ let
   ];
   cargoBuildArgs = lib.concatStringsSep " " (cargoPackages ++ cargoFeatureArgs);
   runtimeLibs = dependencies.productionBuildInputs productionCapabilities;
+  videoEnabled = builtins.elem "video" productionCapabilities.cargoFeatures;
+  gstreamerPluginPath = pkgs.lib.makeSearchPath "lib/gstreamer-1.0" dependencies.videoPluginInputs;
   commonArgs = {
     pname = if minimal then "neomacs-minimal" else "neomacs";
     inherit version;
@@ -73,6 +75,14 @@ let
       "--set-default"
       "VK_DRIVER_FILES"
       "$(echo ${pkgs.mesa}/share/vulkan/icd.d/*.json | tr ' ' ':')"
+    ]
+    ++ lib.optionals (pkgs.stdenv.isLinux && videoEnabled) [
+      "--set-default"
+      "GST_PLUGIN_SYSTEM_PATH_1_0"
+      gstreamerPluginPath
+      "--set-default"
+      "GST_PLUGIN_SCANNER_1_0"
+      "${pkgs.gst_all_1.gstreamer}/libexec/gstreamer-1.0/gst-plugin-scanner"
     ]
     ++
       lib.optionals (pkgs.stdenv.isLinux && builtins.elem "webview" productionCapabilities.cargoFeatures)

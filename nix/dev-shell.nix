@@ -15,6 +15,8 @@ let
   runtimeLibraryPath = pkgs.lib.makeLibraryPath (
     lib.remove pkgs.ncurses dependencies.developmentBuildInputs
   );
+  gstreamerPluginPath = pkgs.lib.makeSearchPath "lib/gstreamer-1.0" dependencies.videoPluginInputs;
+  gstreamerPluginScanner = "${pkgs.gst_all_1.gstreamer}/libexec/gstreamer-1.0/gst-plugin-scanner";
 in
 pkgs.mkShell {
   name = "neomacs-dev";
@@ -98,6 +100,11 @@ pkgs.mkShell {
 
     # Library path for runtime. The linker supplies ncurses' RPATH.
     export LD_LIBRARY_PATH="${runtimeLibraryPath}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+    # A fresh benchmark HOME has no GStreamer registry.  Declare the complete
+    # plugin closure so video startup never depends on a user's cached catalog.
+    export GST_PLUGIN_SYSTEM_PATH_1_0="${gstreamerPluginPath}"
+    export GST_PLUGIN_SCANNER_1_0="${gstreamerPluginScanner}"
 
     export VK_DRIVER_FILES="$(echo ${pkgs.mesa}/share/vulkan/icd.d/*.json | tr ' ' ':')"
 

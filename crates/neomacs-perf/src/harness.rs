@@ -614,6 +614,14 @@ impl PerfHarness {
                 .map(|value| (name.to_string(), value.to_string_lossy().into_owned()))
         })
         .collect();
+        let gstreamer_environment: BTreeMap<String, String> =
+            ["GST_PLUGIN_SYSTEM_PATH_1_0", "GST_PLUGIN_SCANNER_1_0"]
+                .into_iter()
+                .filter_map(|name| {
+                    std::env::var_os(name)
+                        .map(|value| (name.to_string(), value.to_string_lossy().into_owned()))
+                })
+                .collect();
         if !display_environment.contains_key("DISPLAY")
             && !display_environment.contains_key("WAYLAND_DISPLAY")
         {
@@ -659,6 +667,7 @@ impl PerfHarness {
             presentation_width_pixels: presentation_target.width(),
             presentation_height_pixels: presentation_target.height(),
             display_environment: display_environment.clone(),
+            gstreamer_environment,
             gpu_frame_timing: "requested",
         };
         let provenance_json = serde_json::to_vec_pretty(&provenance_manifest)
@@ -1551,6 +1560,8 @@ const BENCHMARK_PASSTHROUGH_ENVIRONMENT: &[&str] = &[
     "LD_LIBRARY_PATH",
     "DYLD_LIBRARY_PATH",
     "DYLD_FALLBACK_LIBRARY_PATH",
+    "GST_PLUGIN_SYSTEM_PATH_1_0",
+    "GST_PLUGIN_SCANNER_1_0",
     "SYSTEMROOT",
     "WINDIR",
 ];
@@ -2499,6 +2510,7 @@ struct NativeVideoInputProvenanceManifest<'a> {
     presentation_width_pixels: u32,
     presentation_height_pixels: u32,
     display_environment: BTreeMap<String, String>,
+    gstreamer_environment: BTreeMap<String, String>,
     gpu_frame_timing: &'a str,
 }
 

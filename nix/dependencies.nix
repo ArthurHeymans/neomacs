@@ -58,7 +58,10 @@ let
       ]
     );
 
-  videoBuildInputs =
+  # GStreamer discovers these packages dynamically through its plug-in
+  # catalog.  Keep the catalog closure distinct from linked video libraries
+  # so wrappers can declare precisely what the runtime loader may scan.
+  videoPluginInputs =
     with pkgs;
     [
       gst_all_1.gstreamer
@@ -73,6 +76,14 @@ let
       with pkgs;
       [
         gst_all_1.gst-vaapi
+      ]
+    );
+
+  videoBuildInputs =
+    videoPluginInputs
+    ++ lib.optionals pkgs.stdenv.isLinux (
+      with pkgs;
+      [
         libva
       ]
     );
@@ -89,7 +100,12 @@ let
   );
 in
 {
-  inherit baseBuildInputs videoBuildInputs webviewBuildInputs;
+  inherit
+    baseBuildInputs
+    videoBuildInputs
+    videoPluginInputs
+    webviewBuildInputs
+    ;
 
   # Development exposes every optional native capability. Distribution
   # packages select capabilities using the typed production policy.
