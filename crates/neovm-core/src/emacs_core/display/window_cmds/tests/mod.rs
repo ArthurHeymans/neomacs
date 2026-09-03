@@ -4386,6 +4386,27 @@ fn select_frame_arity_designators_and_selection() {
 }
 
 #[test]
+fn deleting_selected_tty_frame_restores_surviving_window_point() {
+    crate::test_utils::init_test_tracing();
+    let result = runtime_eval_one_with_usable_terminal(
+        r##"(progn
+               (erase-buffer)
+               (insert "one\ntwo\nthree")
+               (let* ((original-frame (selected-frame))
+                      (original-window (selected-window))
+                      (original-point (point))
+                      (new-frame (make-frame)))
+                 (select-frame new-frame)
+                 (delete-frame new-frame)
+                 (list (eq (selected-frame) original-frame)
+                       (eq (selected-window) original-window)
+                       (= (point) original-point)
+                       (= (window-point original-window) original-point))))"##,
+    );
+    assert_eq!(result, "OK (t t t t)");
+}
+
+#[test]
 fn select_frame_set_input_focus_arity_designators_and_result() {
     crate::test_utils::init_test_tracing();
     let out = runtime_eval_with_usable_terminal(

@@ -3635,7 +3635,7 @@ fn current_layout_frame_tracks_surrogate_after_bootstrap_frame_deletion() {
     let f2 = eval.frame_manager_mut().create_frame("F2", 80, 24, b2);
 
     assert_eq!(current_layout_frame_id(&eval), Some(f1));
-    assert!(eval.frame_manager_mut().delete_frame(f1));
+    assert!(eval.frame_manager_mut().delete_frame(f1).was_deleted());
     assert_eq!(current_layout_frame_id(&eval), Some(f2));
 }
 
@@ -4750,7 +4750,11 @@ fn bootstrap_buffers_names_reused_initial_tty_frame_f1_after_surrogate_allocatio
         .frame_manager_mut()
         .create_frame("surrogate", 80, 25, old_buffer);
     assert!(eval.frame_manager_mut().select_frame(surrogate));
-    assert!(eval.frame_manager_mut().delete_frame(dump_only));
+    assert!(
+        eval.frame_manager_mut()
+            .delete_frame(dump_only)
+            .was_deleted()
+    );
 
     let _bootstrap = bootstrap_buffers(
         &mut eval,

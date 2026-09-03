@@ -8,7 +8,7 @@
 //! paths for compatibility.
 
 use super::error::{EvalResult, Flow, signal};
-use super::intern::{SymId, resolve_sym};
+use super::intern::{SymId, intern, resolve_sym};
 use super::minibuffer::MinibufferManager;
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use crate::buffer::{BufferId, BufferManager, EmacsBytePos, LispCharPos1};
@@ -20,9 +20,10 @@ use crate::emacs_core::indent::MotionEngine;
 use crate::emacs_core::xdisp::LineWrap;
 use crate::window::body::{WindowBodyAxis, WindowBodyCellSize, WindowBodyUnit};
 use crate::window::{
-    CombinationLimit, CursorTypeSymbol, DeleteResize, FrameDivider, FrameFullscreen, FrameId,
-    FrameManager, FrameParam, FrameParamKey, FrameVisibility, Rect, SplitDirection, SplitPlacement,
-    Window, WindowBufferDisplayDefaults, WindowFringeDefaults, WindowId, WindowMargins,
+    CombinationLimit, CursorTypeSymbol, DeleteResize, FrameDeletion, FrameDeletionSelectionPolicy,
+    FrameDivider, FrameFullscreen, FrameId, FrameManager, FrameParam, FrameParamKey,
+    FrameVisibility, Rect, SelectedFrameAfterDeletion, SplitDirection, SplitPlacement, Window,
+    WindowBufferDisplayDefaults, WindowFringeDefaults, WindowId, WindowMargins,
     WindowScrollBarDefaults, is_valid_horizontal_scroll_bar_value,
     is_valid_vertical_scroll_bar_value, window_first_child_id, window_next_sibling_id,
     window_parent_id, window_prev_sibling_id,
@@ -6595,8 +6596,51 @@ pub(crate) fn delete_frame_owned(
     if eval.frames.get(fid).is_none() {
         return Ok(Value::NIL);
     }
-    if !eval.frames.delete_frame(fid) {
-        return Err(signal("error", vec![Value::string("Cannot delete frame")]));
+    let selected_frame_before_delete = eval.frames.selected_frame().map(|frame| frame.id);
+    if selected_frame_before_delete == Some(fid) {
+        let selection_policy = if eval
+            .special_variable_value_by_id(intern("after-delete-frame-select-mru-frame"))
+            .is_some_and(Value::is_truthy)
+        {
+            FrameDeletionSelectionPolicy::MostRecentlyUsed
+        } else {
+            FrameDeletionSelectionPolicy::FrameListOrder
+        };
+        if let Some(replacement) = eval
+            .frames
+            .replacement_frame_for_deletion(fid, selection_policy)
+        {
+            if !eval.frames.select_frame(replacement) {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Cannot select replacement frame")],
+                ));
+            }
+            if let Some(selected_wid) = eval
+                .frames
+                .get(replacement)
+                .map(|frame| frame.selected_window)
+            {
+                let _ = eval.frames.note_window_selected(selected_wid);
+            }
+            sync_selected_window_buffer_in_state(&eval.frames, &mut eval.buffers, replacement);
+        }
+    }
+    match eval.frames.delete_frame(fid) {
+        FrameDeletion::NotFound => {
+            return Err(signal("error", vec![Value::string("Cannot delete frame")]));
+        }
+        FrameDeletion::Deleted {
+            selected: SelectedFrameAfterDeletion::Unchanged,
+        } => {}
+        FrameDeletion::Deleted {
+            selected: SelectedFrameAfterDeletion::Replaced(replacement),
+        } => {
+            sync_selected_window_buffer_in_state(&eval.frames, &mut eval.buffers, replacement);
+        }
+        FrameDeletion::Deleted {
+            selected: SelectedFrameAfterDeletion::Cleared,
+        } => {}
     }
     if let Some(host) = eval.display_host.as_mut() {
         if was_gui_child_frame {

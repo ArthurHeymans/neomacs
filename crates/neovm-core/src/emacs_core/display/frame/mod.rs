@@ -995,7 +995,7 @@ pub(crate) fn builtin_make_terminal_frame(
             .get(frame_id)
             .is_none_or(|frame| frame.terminal_id != terminal_id)
         {
-            eval.frames.delete_frame(frame_id);
+            let _ = eval.frames.delete_frame(frame_id);
             return Err(signal(
                 "error",
                 vec![Value::string(
@@ -1011,7 +1011,7 @@ pub(crate) fn builtin_make_terminal_frame(
         ) {
             Ok(request) => request,
             Err(message) => {
-                eval.frames.delete_frame(frame_id);
+                let _ = eval.frames.delete_frame(frame_id);
                 return Err(signal("error", vec![Value::string(message)]));
             }
         };
@@ -1022,7 +1022,7 @@ pub(crate) fn builtin_make_terminal_frame(
         let opened = match opened {
             Ok(opened) => opened,
             Err(message) => {
-                eval.frames.delete_frame(frame_id);
+                let _ = eval.frames.delete_frame(frame_id);
                 return Err(signal("error", vec![Value::string(message)]));
             }
         };
@@ -1086,7 +1086,7 @@ fn make_terminal_frame_on_existing_terminal(
         .get(frame_id)
         .is_none_or(|frame| frame.terminal_id != terminal_id)
     {
-        eval.frames.delete_frame(frame_id);
+        let _ = eval.frames.delete_frame(frame_id);
         return Err(signal(
             "error",
             vec![Value::string(

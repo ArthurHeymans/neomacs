@@ -4941,6 +4941,41 @@ pub struct FrameManager {
     window_topology_generation: u64,
 }
 
+/// GNU's policy for choosing the frame selected after deleting the currently
+/// selected frame (`src/frame.c:2750-2821`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrameDeletionSelectionPolicy {
+    MostRecentlyUsed,
+    FrameListOrder,
+}
+
+/// Process-wide selection change caused by removing a frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SelectedFrameAfterDeletion {
+    Unchanged,
+    Replaced(FrameId),
+    Cleared,
+}
+
+/// Result of a low-level frame removal.  Callers that also own buffer state
+/// must handle `selected` and realign the current buffer with the surviving
+/// frame's selected window, as GNU's `do_switch_frame` does before freeing the
+/// deleted frame.
+#[must_use]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrameDeletion {
+    NotFound,
+    Deleted {
+        selected: SelectedFrameAfterDeletion,
+    },
+}
+
+impl FrameDeletion {
+    pub const fn was_deleted(self) -> bool {
+        matches!(self, Self::Deleted { .. })
+    }
+}
+
 impl FrameManager {
     pub fn new() -> Self {
         Self {
@@ -5443,8 +5478,64 @@ impl FrameManager {
         };
     }
 
-    /// Delete a frame.
-    pub fn delete_frame(&mut self, id: FrameId) -> bool {
+    /// Select GNU's successor for a selected frame that is about to be
+    /// deleted.  Same-terminal visible frames win; only when there is no such
+    /// frame do we fall back to another live frame.
+    pub fn replacement_frame_for_deletion(
+        &self,
+        id: FrameId,
+        policy: FrameDeletionSelectionPolicy,
+    ) -> Option<FrameId> {
+        let deleting = self.frames.get(&id)?;
+        let terminal_id = deleting.terminal_id;
+        let same_terminal = self
+            .frames
+            .values()
+            .filter(|candidate| {
+                candidate.id != id
+                    && candidate.terminal_id == terminal_id
+                    && candidate.visibility.is_visible()
+            })
+            .max_by_key(|candidate| {
+                let frame_list_order = candidate.id.0;
+                match policy {
+                    FrameDeletionSelectionPolicy::MostRecentlyUsed => {
+                        let use_time = candidate
+                            .window_list()
+                            .into_iter()
+                            .map(|window| self.window_use_time(window))
+                            .max()
+                            .unwrap_or(0);
+                        (use_time, frame_list_order)
+                    }
+                    FrameDeletionSelectionPolicy::FrameListOrder => (0, frame_list_order),
+                }
+            })
+            .map(|frame| frame.id);
+        same_terminal.or_else(|| {
+            self.frames
+                .values()
+                .filter(|candidate| candidate.id != id)
+                .max_by_key(|candidate| candidate.id.0)
+                .map(
+                    |candidate| match self.top_frame_on_terminal(candidate.terminal_id) {
+                        Some(top_frame) if top_frame != id => top_frame,
+                        _ => candidate.id,
+                    },
+                )
+        })
+    }
+
+    /// Delete a frame and report whether process-wide frame selection changed.
+    pub fn delete_frame(&mut self, id: FrameId) -> FrameDeletion {
+        let selected_replacement = (self.selected == Some(id))
+            .then(|| {
+                self.replacement_frame_for_deletion(
+                    id,
+                    FrameDeletionSelectionPolicy::FrameListOrder,
+                )
+            })
+            .flatten();
         if let Some(frame) = self.frames.remove(&id) {
             let terminal_id = frame.terminal_id;
             self.pending_content_transition_intents.frames.remove(id);
@@ -5462,21 +5553,29 @@ impl FrameManager {
                 self.deleted_window_parameters
                     .insert(minibuffer_wid, minibuffer_leaf.parameters().clone());
             }
-            if self.selected == Some(id) {
-                self.selected = self.frames.keys().next().copied();
-            }
+            let selected = if self.selected == Some(id) {
+                self.selected = selected_replacement;
+                self.selected.map_or(
+                    SelectedFrameAfterDeletion::Cleared,
+                    SelectedFrameAfterDeletion::Replaced,
+                )
+            } else {
+                SelectedFrameAfterDeletion::Unchanged
+            };
             if self.terminal_top_frames.get(&terminal_id).copied() == Some(id) {
                 let replacement = self
                     .frames
                     .values()
-                    .find(|candidate| {
+                    .filter(|candidate| {
                         candidate.terminal_id == terminal_id
                             && candidate.parent_frame.as_frame_id().is_none()
                     })
+                    .max_by_key(|candidate| candidate.id.0)
                     .or_else(|| {
                         self.frames
                             .values()
-                            .find(|candidate| candidate.terminal_id == terminal_id)
+                            .filter(|candidate| candidate.terminal_id == terminal_id)
+                            .max_by_key(|candidate| candidate.id.0)
                     })
                     .map(|candidate| candidate.id);
                 if let Some(replacement) = replacement {
@@ -5486,9 +5585,9 @@ impl FrameManager {
                 }
             }
             self.mark_window_topology_changed();
-            true
+            FrameDeletion::Deleted { selected }
         } else {
-            false
+            FrameDeletion::NotFound
         }
     }
 

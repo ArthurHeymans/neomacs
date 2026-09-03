@@ -1147,7 +1147,7 @@ fn deleting_child_frame_that_shares_minibuffer_does_not_delete_owner_minibuffer(
         mgr.find_valid_window_frame_id(root_minibuffer),
         Some(root_id)
     );
-    assert!(mgr.delete_frame(child_id));
+    assert!(mgr.delete_frame(child_id).was_deleted());
     assert!(!mgr.deleted_windows.contains(&root_minibuffer));
     assert_eq!(mgr.find_window_frame_id(root_minibuffer), Some(root_id));
     assert!(mgr.lookup_window(root_minibuffer).is_some());
@@ -1827,8 +1827,35 @@ fn delete_frame() {
     crate::test_utils::init_test_tracing();
     let mut mgr = FrameManager::new();
     let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
-    assert!(mgr.delete_frame(fid));
+    assert_eq!(
+        mgr.delete_frame(fid),
+        FrameDeletion::Deleted {
+            selected: SelectedFrameAfterDeletion::Cleared,
+        }
+    );
     assert!(mgr.get(fid).is_none());
+    assert_eq!(mgr.delete_frame(fid), FrameDeletion::NotFound);
+}
+
+#[test]
+fn frame_deletion_replacement_policy_distinguishes_mru_from_frame_list_order() {
+    let mut mgr = FrameManager::new();
+    let oldest = mgr.create_frame("oldest", 80, 25, BufferId(1));
+    let middle = mgr.create_frame("middle", 80, 25, BufferId(2));
+    let newest = mgr.create_frame("newest", 80, 25, BufferId(3));
+    let oldest_window = mgr.get(oldest).expect("oldest frame").selected_window;
+
+    mgr.note_window_selected(oldest_window);
+    assert!(mgr.select_frame(newest));
+
+    assert_eq!(
+        mgr.replacement_frame_for_deletion(newest, FrameDeletionSelectionPolicy::MostRecentlyUsed,),
+        Some(oldest)
+    );
+    assert_eq!(
+        mgr.replacement_frame_for_deletion(newest, FrameDeletionSelectionPolicy::FrameListOrder,),
+        Some(middle)
+    );
 }
 
 #[test]
@@ -1878,7 +1905,7 @@ fn multiple_frames() {
     assert!(mgr.select_frame(f2));
     assert_eq!(mgr.selected_frame().unwrap().id, f2);
 
-    mgr.delete_frame(f1);
+    assert!(mgr.delete_frame(f1).was_deleted());
     assert_eq!(mgr.frame_list().len(), 1);
 }
 
@@ -1900,7 +1927,7 @@ fn terminal_top_frame_survives_selecting_a_frame_on_another_terminal() {
         "another terminal's selection must not erase this TTY's top frame"
     );
 
-    assert!(mgr.delete_frame(second_tty));
+    assert!(mgr.delete_frame(second_tty).was_deleted());
     assert_eq!(mgr.top_frame_on_terminal(7), Some(first_tty));
 }
 

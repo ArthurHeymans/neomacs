@@ -57,7 +57,11 @@ fn frame_display_context_does_not_restore_a_deleted_caller_frame() {
     assert!(eval.frame_manager_mut().select_frame(caller_frame));
 
     eval.with_frame_display_context(target_frame, |eval| {
-        assert!(eval.frame_manager_mut().delete_frame(caller_frame));
+        assert!(
+            eval.frame_manager_mut()
+                .delete_frame(caller_frame)
+                .was_deleted()
+        );
     })
     .expect("live target frame context");
 
