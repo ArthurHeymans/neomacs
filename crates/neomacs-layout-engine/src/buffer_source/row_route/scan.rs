@@ -1012,8 +1012,8 @@ pub(super) fn routed_row_elision_scan<B: LayoutBufferView>(
     // newline itself covers the line end just as one running into it does.
     while pos <= newline_charpos {
         let (status, next_visible) = text_props.check_invisible(pos);
-        if status.hidden {
-            if status.ellipsis
+        if status.hidden() {
+            if status.ellipsis()
                 || pos == row_charpos
                 || pos >= newline_charpos
                 || next_visible > newline_charpos

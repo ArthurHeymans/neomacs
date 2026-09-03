@@ -49,8 +49,24 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
                 active_face_state,
                 buffer,
             );
-            if invisible_text_outcome.should_continue_buffer_walk() {
-                continue;
+            match invisible_text_outcome {
+                BufferSourceInvisibleTextRenderOutcome::Visible => {}
+                BufferSourceInvisibleTextRenderOutcome::RenderBoundaryOverlayStrings => {
+                    if !self.render_next_source_item_for_context(
+                        loop_context,
+                        source_walk,
+                        row_prelude_context,
+                        face_resolution_context,
+                        text,
+                        params,
+                        active_face_state,
+                        buffer,
+                    ) {
+                        break;
+                    }
+                    continue;
+                }
+                BufferSourceInvisibleTextRenderOutcome::HiddenSpanApplied => continue,
             }
 
             if self.row_carryover.hscroll_skip.should_skip() {
@@ -98,16 +114,16 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
                 PlainRowRouteOutcome::NotRouted => {}
             }
 
-            if !BufferSourceRenderRequest::new(
+            if !self.render_next_source_item_for_context(
                 loop_context,
+                source_walk,
+                row_prelude_context,
+                face_resolution_context,
                 text,
                 params,
                 active_face_state,
-                self.reborrow(),
-            )
-            .with_row_prelude_context(row_prelude_context)
-            .render_next_and_apply(source_walk, face_resolution_context, buffer)
-            {
+                buffer,
+            ) {
                 break;
             }
         }
@@ -218,6 +234,32 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
             0.0,
         );
         self.render_invisible_text_at_checkpoint(source_walk, request, buffer)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_next_source_item_for_context<'request, 'face, B: LayoutBufferView>(
+        &mut self,
+        loop_context: BufferSourceLoopRequestContext,
+        source_walk: &mut BufferSourceWalk<'request, B>,
+        row_prelude_context: BufferSourceRowPreludeRequestContext,
+        face_resolution_context: BufferSourceFaceResolutionContext<'request, B>,
+        text: &'request [u8],
+        params: &'request WindowParams,
+        active_face_state: &'face DisplayRowActiveFaceState,
+        buffer: &B,
+    ) -> bool
+    where
+        'surface: 'request,
+    {
+        BufferSourceRenderRequest::new(
+            loop_context,
+            text,
+            params,
+            active_face_state,
+            self.reborrow(),
+        )
+        .with_row_prelude_context(row_prelude_context)
+        .render_next_and_apply(source_walk, face_resolution_context, buffer)
     }
 
     fn render_invisible_text_at_checkpoint<B: LayoutBufferView>(

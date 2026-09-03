@@ -2811,26 +2811,48 @@ impl OverlayDisplayString {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct InvisibleStatus {
-    pub(crate) hidden: bool,
-    pub(crate) ellipsis: bool,
+pub(crate) enum InvisiblePropertyOrigin {
+    TextProperty,
+    Overlay,
+}
+
+/// The resolved visibility at one buffer position.
+///
+/// Making visibility a sum type rules out contradictory states such as
+/// "visible with ellipsis" and retains the property origin needed by GNU's
+/// boundary-overlay-string rule in `handle_invisible_prop`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum InvisibleStatus {
+    Visible,
+    Hidden {
+        ellipsis: bool,
+        origin: InvisiblePropertyOrigin,
+    },
 }
 
 impl InvisibleStatus {
-    const VISIBLE: Self = Self {
-        hidden: false,
-        ellipsis: false,
-    };
+    const VISIBLE: Self = Self::Visible;
 
-    const HIDDEN_NO_ELLIPSIS: Self = Self {
-        hidden: true,
-        ellipsis: false,
-    };
+    pub(crate) const fn hidden(self) -> bool {
+        matches!(self, Self::Hidden { .. })
+    }
 
-    const HIDDEN_WITH_ELLIPSIS: Self = Self {
-        hidden: true,
-        ellipsis: true,
-    };
+    pub(crate) const fn ellipsis(self) -> bool {
+        matches!(self, Self::Hidden { ellipsis: true, .. })
+    }
+
+    /// GNU only reloads strings from the old stop position after invisibility
+    /// came from a text property.  Overlay invisibility makes its own start and
+    /// end strings indistinguishable and is handled at the overlay endpoint.
+    pub(crate) const fn preserves_boundary_overlay_strings(self) -> bool {
+        matches!(
+            self,
+            Self::Hidden {
+                origin: InvisiblePropertyOrigin::TextProperty,
+                ..
+            }
+        )
+    }
 }
 
 fn layout_total_emacs_byte_end_pos<B: LayoutBufferView>(buffer: &B) -> EmacsBytePos {
@@ -2885,12 +2907,19 @@ fn clamped_layout_emacs_byte_range<B: LayoutBufferView>(
     (from < to).then(|| EmacsByteRange::new(from, to))
 }
 
-fn invisible_atom_status(prop_atom: Value, spec: Value) -> InvisibleStatus {
+fn invisible_atom_status(
+    prop_atom: Value,
+    spec: Value,
+    origin: InvisiblePropertyOrigin,
+) -> InvisibleStatus {
     if spec.is_nil() {
         return InvisibleStatus::VISIBLE;
     }
     if spec.is_t() {
-        return InvisibleStatus::HIDDEN_NO_ELLIPSIS;
+        return InvisibleStatus::Hidden {
+            ellipsis: false,
+            origin,
+        };
     }
 
     let mut cursor = spec;
@@ -2899,25 +2928,41 @@ fn invisible_atom_status(prop_atom: Value, spec: Value) -> InvisibleStatus {
         if entry.is_cons() {
             if eq_value(&entry.cons_car(), &prop_atom) {
                 return if entry.cons_cdr().is_nil() {
-                    InvisibleStatus::HIDDEN_NO_ELLIPSIS
+                    InvisibleStatus::Hidden {
+                        ellipsis: false,
+                        origin,
+                    }
                 } else {
-                    InvisibleStatus::HIDDEN_WITH_ELLIPSIS
+                    InvisibleStatus::Hidden {
+                        ellipsis: true,
+                        origin,
+                    }
                 };
             }
         } else if eq_value(&entry, &prop_atom) {
-            return InvisibleStatus::HIDDEN_NO_ELLIPSIS;
+            return InvisibleStatus::Hidden {
+                ellipsis: false,
+                origin,
+            };
         }
         cursor = cursor.cons_cdr();
     }
 
     if eq_value(&spec, &prop_atom) {
-        InvisibleStatus::HIDDEN_NO_ELLIPSIS
+        InvisibleStatus::Hidden {
+            ellipsis: false,
+            origin,
+        }
     } else {
         InvisibleStatus::VISIBLE
     }
 }
 
-fn invisible_prop_status(prop: Option<Value>, spec: Value) -> InvisibleStatus {
+fn invisible_prop_status(
+    prop: Option<Value>,
+    spec: Value,
+    origin: InvisiblePropertyOrigin,
+) -> InvisibleStatus {
     let Some(prop) = prop else {
         return InvisibleStatus::VISIBLE;
     };
@@ -2925,24 +2970,27 @@ fn invisible_prop_status(prop: Option<Value>, spec: Value) -> InvisibleStatus {
         return InvisibleStatus::VISIBLE;
     }
     if spec.is_t() {
-        return InvisibleStatus::HIDDEN_NO_ELLIPSIS;
+        return InvisibleStatus::Hidden {
+            ellipsis: false,
+            origin,
+        };
     }
 
     if prop.is_cons() {
         let mut cursor = prop;
         while cursor.is_cons() {
-            let status = invisible_atom_status(cursor.cons_car(), spec);
-            if status.hidden {
+            let status = invisible_atom_status(cursor.cons_car(), spec, origin);
+            if status.hidden() {
                 return status;
             }
             cursor = cursor.cons_cdr();
         }
         if !cursor.is_nil() {
-            return invisible_atom_status(cursor, spec);
+            return invisible_atom_status(cursor, spec, origin);
         }
         InvisibleStatus::VISIBLE
     } else {
-        invisible_atom_status(prop, spec)
+        invisible_atom_status(prop, spec, origin)
     }
 }
 
@@ -2977,7 +3025,7 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
     pub fn check_invisible(&self, charpos: i64) -> (InvisibleStatus, i64) {
         let status = self.invisible_status_at(charpos);
         let mut next_change = self.next_invisible_boundary(charpos);
-        if status.hidden {
+        if status.hidden() {
             // GNU `handle_invisible_prop` collapses CONSECUTIVE invisible runs
             // into a single ellipsis even when the `invisible` value changes
             // within the run.  Example: a folded org subtree (overlay
@@ -2990,7 +3038,7 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
             // the run that opened the region (`status`, matching GNU which sets
             // `display_ellipsis` from the entry position).
             let max = self.buffer.layout_point_max_char_pos().get() as i64;
-            while next_change < max && self.invisible_status_at(next_change).hidden {
+            while next_change < max && self.invisible_status_at(next_change).hidden() {
                 next_change = self.next_invisible_boundary(next_change);
             }
         }
@@ -3050,19 +3098,24 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
         // higher-priority overlay whose value is not in the spec), and consulting
         // the text property FIRST (so a text property hid text that a covering
         // overlay declared visible).
-        let value = self
+        let overlay_value = self
             .buffer
             .layout_overlays()
             .highest_priority_overlay_property_value_at_emacs_byte_pos(
                 bytepos,
                 Value::symbol("invisible"),
                 self.window_id,
-            )
-            .or_else(|| {
+            );
+        let (value, origin) = if let Some(value) = overlay_value {
+            (Some(value), InvisiblePropertyOrigin::Overlay)
+        } else {
+            (
                 self.buffer
-                    .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("invisible"))
-            });
-        invisible_prop_status(value, spec)
+                    .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("invisible")),
+                InvisiblePropertyOrigin::TextProperty,
+            )
+        };
+        invisible_prop_status(value, spec, origin)
     }
 
     /// Next position where the `invisible` property changes, combining the
@@ -3247,7 +3300,7 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
             .buffer
             .layout_buffer_local_value(LayoutVar::BufferInvisibilitySpec)
             .unwrap_or(Value::T);
-        invisible_prop_status(Some(invisible), spec).hidden
+        invisible_prop_status(Some(invisible), spec, InvisiblePropertyOrigin::Overlay).hidden()
     }
 
     /// The overlay's `before-string` / `after-string` if it is something GNU

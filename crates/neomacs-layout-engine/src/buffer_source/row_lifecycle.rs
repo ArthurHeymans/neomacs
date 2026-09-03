@@ -744,8 +744,15 @@ pub(crate) enum BufferSourceSelectiveDisplayTailRenderOutcome {
 /// [`BufferSourceSelectiveDisplayTailRenderOutcome`] carries a `Stop`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferSourceInvisibleTextRenderOutcome {
+    /// No hidden text begins at the current source position.
     Visible,
-    ContinueBufferWalk,
+    /// GNU preserves an overlay string anchored at the entry to a hidden text
+    /// property.  The caller must render the producer's insertion element
+    /// before asking this checkpoint to commit the skip on the next iteration.
+    RenderBoundaryOverlayStrings,
+    /// The hidden span (and optional ellipsis) was consumed; restart the walk
+    /// at its first visible position.
+    HiddenSpanApplied,
 }
 
 impl BufferSourceSelectiveDisplayTailRenderOutcome {
@@ -759,9 +766,9 @@ impl BufferSourceSelectiveDisplayTailRenderOutcome {
 }
 
 impl BufferSourceInvisibleTextRenderOutcome {
-    pub(crate) fn should_continue_buffer_walk(self) -> bool {
-        matches!(self, Self::ContinueBufferWalk)
-    }
+    // Intentionally no boolean projection: the visible loop must exhaustively
+    // handle all three ordering states, so adding a fourth cannot silently
+    // acquire the behavior of an existing branch.
 }
 
 impl<'a> BufferSourceSelectiveDisplayTailRenderContext<'a> {
@@ -1115,15 +1122,32 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
         let mut source_render = source_render;
         let context = self;
 
+        let scan_context = BufferSourceInvisibleTextScanContext::new(
+            context.text,
+            context.accessible_end,
+            context.point_charpos,
+            cursor_info.is_missing(),
+        );
+
+        // GNU xdisp.c `handle_invisible_prop` advances the buffer iterator but,
+        // for text-property invisibility, calls `get_overlay_strings` with the
+        // OLD stop position first.  Keep the insertion in the producer: merely
+        // tell the visible loop to consume its next typed element before this
+        // checkpoint is entered again to commit the hidden-span skip.
+        if source_walk.has_pending_overlay_strings_at(progress.source_position())
+            && scan_context.will_skip_at_checkpoint(
+                buffer,
+                invisible_text_checkpoint,
+                progress.source_position(),
+            )
+        {
+            return BufferSourceInvisibleTextRenderOutcome::RenderBoundaryOverlayStrings;
+        }
+
         let action = source_walk
             .consume_invisible_checkpoint(
                 buffer,
-                BufferSourceInvisibleTextScanContext::new(
-                    context.text,
-                    context.accessible_end,
-                    context.point_charpos,
-                    cursor_info.is_missing(),
-                ),
+                scan_context,
                 invisible_text_checkpoint,
                 progress.source_position(),
             )
@@ -1158,7 +1182,7 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
         // since P4.6: the producer surfaces them as an element when it produces
         // at that position, which is the very next step and appends nothing in
         // between.
-        BufferSourceInvisibleTextRenderOutcome::ContinueBufferWalk
+        BufferSourceInvisibleTextRenderOutcome::HiddenSpanApplied
     }
 }
 
@@ -1200,7 +1224,7 @@ impl<'a> BufferSourceInvisibleTextScanContext<'a> {
         let (invisible, next_visible) = text_props.check_invisible(start_charpos);
         checkpoints.record_next_visible(next_visible);
 
-        if !invisible.hidden {
+        if !invisible.hidden() {
             return BufferSourceInvisibleTextScanAction::Visible { next_visible };
         }
 
@@ -1244,9 +1268,28 @@ impl<'a> BufferSourceInvisibleTextScanContext<'a> {
             skip_to,
             next_visible,
             point_in_hidden_region,
-            invisible.ellipsis,
+            invisible.ellipsis(),
             hidden_newline_count,
         ))
+    }
+
+    /// Whether the checkpoint would commit an invisible-text skip at this
+    /// position.  This read-only classification exists so an anchored producer
+    /// insertion can be rendered first without mutating either the checkpoint
+    /// or source progress.
+    fn will_skip_at_checkpoint<B: LayoutBufferView>(
+        &self,
+        buffer: &B,
+        checkpoints: &InvisibleTextScanCheckpoint,
+        position: DisplaySourceTextPosition,
+    ) -> bool {
+        if !checkpoints.should_check(position.charpos()) {
+            return false;
+        }
+        let text_props = RustTextPropAccess::new(buffer);
+        let (invisible, _) = text_props.check_invisible(position.charpos());
+        invisible.preserves_boundary_overlay_strings()
+            && !text_props.replacing_display_at(position.charpos())
     }
 }
 

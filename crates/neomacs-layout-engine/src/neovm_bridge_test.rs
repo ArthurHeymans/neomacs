@@ -1694,16 +1694,16 @@ fn test_text_prop_check_invisible() {
 
     // Position 0: not invisible
     let (invis, _next) = access.check_invisible(0);
-    assert!(!invis.hidden);
+    assert!(!invis.hidden());
 
     // Position 8: invisible
     let (invis, _next) = access.check_invisible(8);
-    assert!(invis.hidden);
-    assert!(!invis.ellipsis);
+    assert!(invis.hidden());
+    assert!(!invis.ellipsis());
 
     // Position 14: visible again
     let (invis, _next) = access.check_invisible(14);
-    assert!(!invis.hidden);
+    assert!(!invis.hidden());
 }
 
 #[test]
@@ -1738,7 +1738,13 @@ fn text_prop_invisible_respects_buffer_invisibility_spec() {
     assert_eq!(details, InvisibleStatus::VISIBLE);
 
     let (filename, _) = access.check_invisible(8);
-    assert_eq!(filename, InvisibleStatus::HIDDEN_WITH_ELLIPSIS);
+    assert_eq!(
+        filename,
+        InvisibleStatus::Hidden {
+            ellipsis: true,
+            origin: InvisiblePropertyOrigin::TextProperty,
+        }
+    );
 }
 
 #[test]
@@ -1764,7 +1770,13 @@ fn text_prop_invisible_matches_members_of_property_list() {
     let access = RustTextPropAccess::new(buf);
 
     let (status, _) = access.check_invisible(0);
-    assert_eq!(status, InvisibleStatus::HIDDEN_WITH_ELLIPSIS);
+    assert_eq!(
+        status,
+        InvisibleStatus::Hidden {
+            ellipsis: true,
+            origin: InvisiblePropertyOrigin::TextProperty,
+        }
+    );
 }
 
 #[test]
@@ -1799,7 +1811,13 @@ fn overlay_invisible_respects_buffer_invisibility_spec() {
     assert_eq!(visible, InvisibleStatus::VISIBLE);
 
     let (folded, next_change) = access.check_invisible(8);
-    assert_eq!(folded, InvisibleStatus::HIDDEN_WITH_ELLIPSIS);
+    assert_eq!(
+        folded,
+        InvisibleStatus::Hidden {
+            ellipsis: true,
+            origin: InvisiblePropertyOrigin::Overlay,
+        }
+    );
     assert_eq!(next_change, 14);
 
     let (visible_again, _) = access.check_invisible(14);

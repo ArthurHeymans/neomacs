@@ -1961,7 +1961,7 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
 
     assert_eq!(
         outcome,
-        BufferSourceInvisibleTextRenderOutcome::ContinueBufferWalk
+        BufferSourceInvisibleTextRenderOutcome::HiddenSpanApplied
     );
     assert_eq!(byte_idx, 6);
     assert_eq!(charpos, 6);

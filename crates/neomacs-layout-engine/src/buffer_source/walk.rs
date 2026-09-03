@@ -183,6 +183,16 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         self.producer.consume_prefix_to(resume_charpos);
     }
 
+    /// True when the producer's next element at this source position is an
+    /// overlay-string insertion rather than buffer text.
+    pub(crate) fn has_pending_overlay_strings_at(
+        &self,
+        source_position: DisplaySourceTextPosition,
+    ) -> bool {
+        self.producer
+            .has_pending_overlay_strings_at(source_position)
+    }
+
     /// Reseat the producer at a row-wrap retry position so the current character
     /// is re-produced on the continuation row.
     pub(crate) fn rewind_source_consumption(&mut self, rewind: BufferSourceRewind) {

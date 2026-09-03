@@ -30749,6 +30749,43 @@ fn overlay_sourced_display_property_is_not_re_entered_mid_overlay() {
     );
 }
 
+/// GNU `handle_stop` loads overlay strings before it dispatches the display
+/// property on the buffer character at the same position.  Org numbering uses
+/// exactly this shape for linked headlines: its numbering overlay ends where
+/// the link's display replacement begins.
+#[test]
+fn overlay_after_string_at_display_replacement_start_is_not_dropped() {
+    assert_eq!(
+        display_prop_first_row_text(
+            "** link\n",
+            "(let ((numbering (make-overlay 1 4))) \
+               (overlay-put numbering 'after-string \"3.1 \") \
+               (put-text-property 4 8 'display \"Title\"))",
+        ),
+        "** 3.1 Title ",
+        "an overlay after-string is an insertion before a display replacement \
+         anchored at the same buffer position"
+    );
+}
+
+/// Org hides the link target immediately after the stars and numbering
+/// overlay.  GNU carries the overlay string across that invisible-text stop;
+/// the insertion must not disappear with the skipped buffer run.
+#[test]
+fn overlay_after_string_at_invisible_run_start_is_not_dropped() {
+    assert_eq!(
+        display_prop_first_row_text(
+            "** hiddenTitle\n",
+            "(let ((numbering (make-overlay 1 4))) \
+               (overlay-put numbering 'after-string \"3.1 \") \
+               (put-text-property 4 10 'invisible t))",
+        ),
+        "** 3.1 Title ",
+        "an overlay after-string remains visible when hidden text starts at \
+         its attachment position"
+    );
+}
+
 /// An image whose file cannot be loaded still REPLACES its covered range: the
 /// covered text does not reappear, and the walk resumes past that range exactly
 /// once.

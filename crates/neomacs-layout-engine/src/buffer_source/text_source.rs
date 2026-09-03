@@ -258,6 +258,17 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         (!strings.is_empty()).then_some(strings)
     }
 
+    /// Whether the next element at `char_pos` is an overlay-string insertion.
+    ///
+    /// The invisible-text checkpoint uses this narrow query before it advances
+    /// over a hidden run.  GNU's `handle_invisible_prop` preserves strings
+    /// anchored at the run's entry position; without asking the producer first,
+    /// advancing the buffer cursor would make that insertion unreachable.
+    pub(crate) fn has_pending_overlay_strings_at(&self, char_pos: CharPos0) -> bool {
+        self.overlay_strings_produced_at != Some(char_pos)
+            && self.overlay_strings_at(char_pos).is_some()
+    }
+
     /// A produced run must never CROSS an overlay-string anchor: anchors are
     /// surfaced as their own element at the position they anchor, and the
     /// producer only looks for them at a run's START, so a run that swallowed

@@ -164,6 +164,19 @@ impl<'request, B: LayoutBufferView> BufferElementProducer<'request, B> {
             .request_char_granularity_until(CharPos0::new(end_charpos.max(0) as usize));
     }
 
+    /// Whether production at `source_position` must first yield an anchored
+    /// overlay-string insertion.  This does not move or mark the cursor; the
+    /// regular production step remains the sole consumer of the element.
+    pub(crate) fn has_pending_overlay_strings_at(
+        &self,
+        source_position: DisplaySourceTextPosition,
+    ) -> bool {
+        self.source_cursor
+            .has_pending_overlay_strings_at(
+                CharPos0::new(source_position.charpos().max(0) as usize),
+            )
+    }
+
     pub(crate) fn resolved_source_face(&self, face_id: FaceId) -> Option<&ResolvedFace> {
         self.source_resolve_state.resolved_face(face_id)
     }
