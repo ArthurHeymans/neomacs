@@ -2054,7 +2054,7 @@ fn copied_content_in_two_destinations_uses_the_same_erased_tail_rule() {
 }
 
 #[test]
-fn changed_row_erases_its_unchanged_default_blank_tail() {
+fn equal_length_changed_row_preserves_its_default_blank_tail() {
     let mut caps = TermCaps::default();
     caps.synchronized_output = false;
     let mut rif = TtyRif::new_with_caps(8, 1, caps);
@@ -2071,19 +2071,12 @@ fn changed_row_erases_its_unchanged_default_blank_tail() {
 
     assert_eq!(
         rif.plan_for_test(),
-        vec![
-            TermOp::WriteRun {
-                row: 0,
-                start: 0,
-                end: 3,
-            },
-            TermOp::EraseToEol {
-                row: 0,
-                from: 3,
-                bg: None,
-            },
-        ],
-        "GNU erases the blank tail whenever it updates a shorter logical line",
+        vec![TermOp::WriteRun {
+            row: 0,
+            start: 0,
+            end: 3,
+        }],
+        "GNU preserves the tail when trimmed `olen` and `nlen` are both three",
     );
 }
 
@@ -2211,17 +2204,45 @@ fn diff_and_render_rewrites_changed_row_span_contiguously() {
     let output = String::from_utf8(rif.take_output()).expect("utf8 output");
 
     assert!(output.contains("\x1b[1;1H"));
-    assert!(output.contains("XBCDY\x1b[K"));
+    assert!(output.contains("XBCDY"));
     assert_eq!(
         output.matches("\x1b[1;").count(),
         1,
-        "the contiguous write leaves the cursor exactly where GNU performs its tail erase"
+        "the equal-length rewrite is one contiguous GNU-style span"
     );
-    assert!(output.contains("\x1b[K"));
+    assert!(
+        !output.contains("\x1b[K"),
+        "GNU does not erase the tail when `olen == nlen`: {output:?}"
+    );
 }
 
 #[test]
-fn diff_and_render_preclears_composite_cell_rewrites() {
+fn equal_logical_row_lengths_do_not_request_a_tail_erase() {
+    let mut caps = TermCaps::default();
+    caps.insert_delete_char = false;
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(16, 1, caps);
+    let attrs = CellAttrs::default();
+
+    for (column, character) in "ABCDEFGHIJK□".chars().enumerate() {
+        rif.desired.set(0, column, character, attrs, false);
+    }
+    let _ = render_output(&mut rif);
+
+    rif.desired = rif.current.clone();
+    for (column, character) in "abcdefghijk\u{10d24}".chars().enumerate() {
+        rif.desired.set(0, column, character, attrs, false);
+    }
+
+    let ops = rif.plan_for_test();
+    assert!(
+        !ops.iter().any(|op| matches!(op, TermOp::EraseToEol { .. })),
+        "GNU preserves the physical tail when trimmed old/new row lengths are equal: {ops:?}",
+    );
+}
+
+#[test]
+fn equal_length_composite_rewrite_does_not_preclear_the_row() {
     let mut rif = TtyRif::new(10, 5);
     let attrs = CellAttrs::default();
 
@@ -2237,17 +2258,17 @@ fn diff_and_render_preclears_composite_cell_rewrites() {
     let output = String::from_utf8(rif.take_output()).expect("utf8 output");
 
     assert!(
-        output.contains("\x1b[1;1H\x1b[KA\u{0301}"),
-        "composite rewrites should erase the changed tail before repainting it: {output:?}"
+        output.contains("\x1b[1;1HA\u{0301}"),
+        "the changed composite cell should be repainted in place: {output:?}"
     );
     assert!(
-        output.contains("A\u{0301}"),
-        "replacement composite should still be painted after preclear: {output:?}"
+        !output.contains("\x1b[K"),
+        "GNU does not erase a tail when old and new logical lengths are equal: {output:?}"
     );
 }
 
 #[test]
-fn composite_repaint_does_not_write_an_erasable_tail_after_extenders() {
+fn equal_length_composite_repaint_does_not_touch_its_unchanged_tail() {
     let mut caps = TermCaps::default();
     caps.synchronized_output = false;
     let mut rif = TtyRif::new_with_caps(16, 2, caps);
@@ -2262,19 +2283,15 @@ fn composite_repaint_does_not_write_an_erasable_tail_after_extenders() {
     rif.desired.set_cluster(0, 9, ' ', "ꦶ", attrs, false);
     let output = String::from_utf8(render_output(&mut rif)).expect("UTF-8 terminal output");
 
-    // GNU `update_frame_line' trims the default-face suffix before calling
-    // `write_glyphs' and clears the stale tail with `ce' (dispnew.c:6019-6022,
-    // 6234-6238). Emitting that suffix after a cluster is observably wrong:
-    // a terminal whose Unicode-width table differs from Emacs advances the
-    // spaces from its physical cursor, reaches the margin, and marks the row
-    // wrapped even though the modeled row is short.
+    // GNU rewrites only the changed equal-length span and neither clears nor
+    // retransmits the unchanged suffix (`write_row`, dispnew.c:6019-6238).
     assert!(
-        output.contains("\x1b[K ꦶ);"),
-        "the stale composite tail must be erased before its meaningful prefix is repainted: {output:?}",
+        output.contains("\x1b[1;10H ꦶ"),
+        "the replacement composite should be painted at its logical cell: {output:?}",
     );
     assert!(
-        !output.contains("    "),
-        "erasable trailing cells must not be retransmitted after extenders: {output:?}",
+        !output.contains(");") && !output.contains("\x1b[K"),
+        "an equal-length rewrite must preserve both the logical and physical tail: {output:?}",
     );
     assert!(
         !output.contains("\r\n"),
@@ -2283,7 +2300,7 @@ fn composite_repaint_does_not_write_an_erasable_tail_after_extenders() {
 }
 
 #[test]
-fn composite_repaint_without_el_keeps_clear_and_write_extents_distinct() {
+fn equal_length_composite_plan_is_independent_of_el_capability() {
     let mut caps = TermCaps::default();
     caps.blank_tail = BlankTailMethod::WriteSpaces;
     caps.synchronized_output = false;
@@ -2299,13 +2316,41 @@ fn composite_repaint_without_el_keeps_clear_and_write_extents_distinct() {
     rif.desired.set_cluster(0, 9, ' ', "ꦶ", attrs, false);
     assert_eq!(
         rif.plan_for_test(),
-        vec![TermOp::RefreshCompositeRow {
+        vec![TermOp::WriteRun {
             row: 0,
             start: 9,
-            write_end: 12,
-            clear: CompositeRowClear::WriteSpaces { end: 16, attrs },
+            end: 10,
         }],
-        "a terminal without EL must clear the full stale tail but repaint only the meaningful prefix",
+        "GNU does not consult EL when the logical row did not shrink",
+    );
+}
+
+#[test]
+fn width_sensitive_row_rewrite_is_one_logical_terminal_run() {
+    let mut caps = TermCaps::default();
+    caps.insert_delete_char = false;
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(32, 1, caps);
+    let attrs = CellAttrs::default();
+
+    rif.desired.set_cluster(0, 0, 'A', "\u{0301}", attrs, false);
+    for column in 1..=20 {
+        rif.desired.set(0, column, 'x', attrs, false);
+    }
+    let _ = render_output(&mut rif);
+
+    rif.desired = rif.current.clone();
+    rif.desired.set_cluster(0, 0, 'A', "\u{0302}", attrs, false);
+    rif.desired.set(0, 20, 'y', attrs, false);
+
+    assert_eq!(
+        rif.plan_for_test(),
+        vec![TermOp::WriteRun {
+            row: 0,
+            start: 0,
+            end: 21,
+        }],
+        "GNU keeps width-sensitive glyphs and their changed suffix in one cursor-contiguous run",
     );
 }
 
@@ -2635,6 +2680,9 @@ fn rtl_automatic_composite_emits_terminal_cells_in_visual_order() {
         .map(|col| desired_char(&rif, 0, col))
         .collect::<String>();
     assert_eq!(visual, "𐴝𐴤𐴑𐴠𐴓");
+    assert!(rif.desired.cells[..5].iter().all(|cell| {
+        cell.extenders.is_none() && cell.terminal_advance == TerminalAdvance::TerminalResolved
+    }));
 }
 
 fn run_member_padding(ch: char, charpos: usize) -> Glyph {
@@ -3770,9 +3818,8 @@ fn distant_edits_on_one_row_skip_the_untouched_middle() {
 #[test]
 fn nearby_edits_coalesce_into_one_span() {
     // Two edits six unchanged cells apart: retransmitting the gap is
-    // cheaper than a second text run, so one span covers both.  GNU's
-    // clear_end_of_line consumes the cursor left by tty_write_glyphs_1; it
-    // does not address that already-current position again (term.c:481-527).
+    // cheaper than a second text run, so one span covers both. GNU preserves
+    // the tail because the old and new effective lengths are equal.
     let mut rif = TtyRif::new(40, 4);
     set_row(&mut rif, 1, "abcdefgh");
     let _ = render_output(&mut rif);
@@ -3782,9 +3829,10 @@ fn nearby_edits_coalesce_into_one_span() {
     assert_eq!(
         text.matches("\x1b[2;").count(),
         1,
-        "a six-cell gap coalesces into one text span whose cursor feeds the tail erase: {text:?}"
+        "a six-cell gap coalesces into one text span: {text:?}"
     );
-    assert!(text.contains("AbcdefgH\x1b[K"));
+    assert!(text.contains("AbcdefgH"));
+    assert!(!text.contains("\x1b[K"));
 }
 
 #[test]
@@ -3808,9 +3856,7 @@ fn scroll_plan_is_one_scroll_op_plus_exposed_row_runs() {
     );
     for op in &ops[1..] {
         match op {
-            TermOp::WriteRun { row, .. }
-            | TermOp::RefreshCompositeRow { row, .. }
-            | TermOp::EraseToEol { row, .. } => {
+            TermOp::WriteRun { row, .. } | TermOp::EraseToEol { row, .. } => {
                 assert_eq!(*row, 9, "only the exposed row may be rewritten: {ops:?}");
             }
             other => panic!("unexpected op after scroll: {other:?}"),
@@ -4529,7 +4575,7 @@ fn reused_damage_rows_carry_verbatim_and_plan_nothing() {
     let ops = rif.plan_for_test();
     assert!(
         ops.iter().all(|op| match op {
-            TermOp::WriteRun { row, .. } | TermOp::RefreshCompositeRow { row, .. } => *row == 3,
+            TermOp::WriteRun { row, .. } => *row == 3,
             _ => false,
         }) && !ops.is_empty(),
         "only the edited row may be written: {ops:?}"

@@ -81,6 +81,33 @@ pub struct TtyCell {
     pub padding: bool,
     /// Grapheme-cluster extenders stacked on `ch` (None for ordinary cells).
     pub extenders: Option<Box<str>>,
+    /// Whether emitting this cell has a compile-time-known one-column advance
+    /// or delegates width to the connected terminal's Unicode tables.
+    pub terminal_advance: TerminalAdvance,
+}
+
+/// Provenance of the cursor advance caused by one logical terminal cell.
+///
+/// GNU plans redisplay in glyph columns even when the terminal later advances
+/// by a different amount. Keeping that distinction in the cell type lets the
+/// planner retain GNU's cursor-contiguous write spans where absolute cursor
+/// moves would otherwise change the physical result.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TerminalAdvance {
+    /// An ASCII scalar with no extenders: exactly one terminal column.
+    OneColumn,
+    /// Unicode width or cluster layout is resolved by the terminal emulator.
+    TerminalResolved,
+}
+
+impl TerminalAdvance {
+    const fn for_scalar(ch: char, padding: bool) -> Self {
+        if ch.is_ascii() && !padding {
+            Self::OneColumn
+        } else {
+            Self::TerminalResolved
+        }
+    }
 }
 
 /// Logical erase eligibility of one cell.
@@ -209,6 +236,7 @@ impl Default for TtyCell {
             materialization: CellMaterialization::Erased,
             padding: false,
             extenders: None,
+            terminal_advance: TerminalAdvance::OneColumn,
         }
     }
 }
@@ -257,6 +285,7 @@ impl TtyGrid {
             materialization: CellMaterialization::Erased,
             padding: false,
             extenders: None,
+            terminal_advance: TerminalAdvance::OneColumn,
         };
         for cell in &mut self.cells {
             *cell = blank.clone();
@@ -334,6 +363,7 @@ impl TtyGrid {
                 materialization: CellMaterialization::Written,
                 padding,
                 extenders: None,
+                terminal_advance: TerminalAdvance::for_scalar(ch, padding),
             };
         }
     }
@@ -353,6 +383,7 @@ impl TtyGrid {
             cell.materialization = CellMaterialization::Written;
             cell.padding = false;
             cell.extenders = None;
+            cell.terminal_advance = TerminalAdvance::OneColumn;
         };
         // The old cell is a padding half: blank leftward through its base.
         if self.cells[row_start + col].padding {
@@ -407,6 +438,7 @@ impl TtyGrid {
                 materialization: CellMaterialization::Written,
                 padding,
                 extenders: ext,
+                terminal_advance: TerminalAdvance::TerminalResolved,
             };
         }
     }
@@ -589,6 +621,46 @@ impl BlankTailMethod {
     }
 }
 
+/// GNU's effective `glyph_row::used[TEXT_AREA]` after `write_row` trims the
+/// default-face blank suffix.
+///
+/// This is a logical glyph-grid length, not the terminal emulator's observed
+/// cursor advance.  Keeping it as a distinct type prevents Unicode-width
+/// disagreement from leaking into the decision to erase an old row tail.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct LogicalRowLength(usize);
+
+impl LogicalRowLength {
+    fn from_cells(cells: &[TtyCell], blank_tail: BlankTailMethod) -> Self {
+        let length = match uniform_erasable_tail(cells, 0) {
+            Some((split, bg)) if blank_tail.can_erase(bg) => split,
+            _ => cells.len(),
+        };
+        Self(length)
+    }
+
+    fn tail_update_to(self, desired: Self) -> LogicalTailUpdate {
+        if self > desired {
+            LogicalTailUpdate::EraseFrom(desired)
+        } else {
+            LogicalTailUpdate::Preserve
+        }
+    }
+
+    const fn as_usize(self) -> usize {
+        self.0
+    }
+}
+
+/// The exhaustive tail decision from GNU's old/new logical row lengths.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LogicalTailUpdate {
+    /// Equal-length and growing rows do not erase their physical tail.
+    Preserve,
+    /// A shrinking logical row clears from its new effective end.
+    EraseFrom(LogicalRowLength),
+}
+
 /// How a region scroll is put on the wire. Chosen at capability-resolution
 /// time from what the terminfo entry actually attests, and carried in the
 /// planned op — the encoder is total over this enum.
@@ -614,20 +686,6 @@ enum ScrollDir {
     Down(std::num::NonZeroU16),
 }
 
-/// Capability-resolved preparation for repainting a row with composites.
-///
-/// The terminal's Unicode-width table can disagree with Emacs's glyph grid,
-/// so stale clusters must be cleared before repainting.  Clearing and writing
-/// have deliberately separate bounds: trailing cells can require clearing
-/// without being safe to retransmit after variable-width cluster bytes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum CompositeRowClear {
-    /// Clear through `end` by writing spaces with the tail's attributes.
-    WriteSpaces { end: u16, attrs: CellAttrs },
-    /// Clear from the repaint start through the physical row end with EL.
-    EraseToEol { bg: Option<TerminalColor> },
-}
-
 /// One planned terminal-update operation.
 ///
 /// The planner (grid diff) decides WHAT changes; [`TtyRif::encode_ops`] is
@@ -648,16 +706,6 @@ enum TermOp {
     },
     /// Move the cursor and rewrite desired cells `start..end` of `row`.
     WriteRun { row: u16, start: u16, end: u16 },
-    /// Atomically prepare a composite row and repaint only its meaningful
-    /// prefix. `clear` is capability-resolved by the planner; `write_end` is
-    /// independent of the clear extent so an erasable suffix is never emitted
-    /// after cluster bytes whose physical width the terminal decides.
-    RefreshCompositeRow {
-        row: u16,
-        start: u16,
-        write_end: u16,
-        clear: CompositeRowClear,
-    },
     /// Erase from `from` to the physical end of `row` (ESC[K), filling with
     /// `bg` via back-color-erase. Plannable only when every desired cell of
     /// that tail is an erasable blank of that background — see
@@ -1505,6 +1553,11 @@ impl TtyRif {
             let row_start = row * self.desired.width;
             let desired_row = &self.desired.cells[row_start..row_start + self.desired.width];
             let current_row = &self.current.cells[row_start..row_start + self.desired.width];
+            let current_logical_length =
+                LogicalRowLength::from_cells(current_row, self.caps.blank_tail);
+            let desired_logical_length =
+                LogicalRowLength::from_cells(desired_row, self.caps.blank_tail);
+            let logical_tail_update = current_logical_length.tail_update_to(desired_logical_length);
 
             let Some(first_changed) = (if self.force_full_render {
                 Some(0)
@@ -1527,52 +1580,6 @@ impl TtyRif {
                     .expect("row with first changed cell must also have a last changed cell")
             };
 
-            // Real terminals are not uniformly reliable when a row containing
-            // grapheme clusters is rewritten with different text. If the
-            // terminal's idea of the cluster width differs from our cell
-            // grid, stale glyphs can remain past the internal changed span.
-            // Clear the whole changed tail for composite rows so shrunk
-            // clusters cannot leave visible residue, then repaint only the
-            // meaningful prefix. GNU trims default-face trailing blanks before
-            // `write_glyphs' and handles the remainder with `ce'
-            // (dispnew.c:6019-6022, 6234-6238). Keeping the clear extent and
-            // write extent distinct is essential when the terminal's Unicode
-            // width table disagrees with Emacs: retransmitting the blank tail
-            // after extenders can spuriously reach the right margin.
-            let composite_row =
-                row_has_composite_cells(desired_row) || row_has_composite_cells(current_row);
-            if composite_row {
-                let row_end = u16::try_from(desired_row.len()).unwrap_or(u16::MAX);
-                let (write_end, clear) = match uniform_erasable_tail(desired_row, first_changed) {
-                    Some((split, bg)) if self.caps.blank_tail.can_erase(bg) => {
-                        (split, CompositeRowClear::EraseToEol { bg })
-                    }
-                    Some((split, bg)) => (
-                        split,
-                        CompositeRowClear::WriteSpaces {
-                            end: row_end,
-                            attrs: CellAttrs {
-                                bg,
-                                ..CellAttrs::default()
-                            },
-                        },
-                    ),
-                    None => (
-                        desired_row.len(),
-                        CompositeRowClear::WriteSpaces {
-                            end: row_end,
-                            attrs: CellAttrs::default(),
-                        },
-                    ),
-                };
-                ops.push(TermOp::RefreshCompositeRow {
-                    row: row as u16,
-                    start: first_changed as u16,
-                    write_end: u16::try_from(write_end).unwrap_or(u16::MAX),
-                    clear,
-                });
-                continue;
-            }
             if self.force_full_render {
                 // GNU dispnew.c:5991-6013 trims trailing default-face spaces
                 // when termcap `in` is absent, writes the meaningful prefix,
@@ -1625,6 +1632,38 @@ impl TtyRif {
                 continue;
             }
 
+            // GNU's row updater emits one cursor-contiguous logical glyph run.
+            // Splitting that run is visually equivalent only when every cell
+            // has a known one-column advance. Once Unicode width or cluster
+            // layout is terminal-resolved, an absolute move between sub-runs
+            // changes the physical result. Preserve GNU's single span for
+            // those rows and apply any logical shrink erase afterwards.
+            let terminal_resolves_advance = row_has_terminal_resolved_advance(desired_row)
+                || row_has_terminal_resolved_advance(current_row);
+            if terminal_resolves_advance {
+                let erase_tail =
+                    logical_tail_erase(desired_row, logical_tail_update, self.caps.blank_tail);
+                let write_limit = erase_tail
+                    .map(|(from, _)| from)
+                    .unwrap_or_else(|| desired_logical_length.as_usize());
+                let write_end = (last_changed + 1).min(write_limit);
+                if first_changed < write_end {
+                    ops.push(TermOp::WriteRun {
+                        row: row as u16,
+                        start: first_changed as u16,
+                        end: write_end as u16,
+                    });
+                }
+                if let Some((from, bg)) = erase_tail {
+                    ops.push(TermOp::EraseToEol {
+                        row: row as u16,
+                        from: from as u16,
+                        bg,
+                    });
+                }
+                continue;
+            }
+
             // In-line horizontal shift (ICH/DCH): one char typed or deleted
             // mid-line shifts the whole tail; detecting it turns a
             // tail-rewrite into one escape plus the changed cells. The
@@ -1670,22 +1709,18 @@ impl TtyRif {
                 continue;
             }
 
-            // Erase-to-EOL: when the desired row's physical tail is one
-            // uniform run of erasable blanks (see erasable_blank) and the
-            // changed span reaches that tail, finish the logical-line update
-            // with ESC[K.  GNU does this even when the abstract blank cells
-            // in the tail compare equal: the erase changes physically written
-            // spaces into unwritten cells, which is observable terminal state.
-            // Correctness needs the WHOLE tail erasable, not just its changed
-            // part. Without back-color-erase the terminal fills with its
-            // default background, so a colored tail stays on the write path.
-            const MIN_ERASE_CELLS: usize = 4;
+            // GNU bases tail erasure on logical glyph-grid lengths, not on the
+            // terminal emulator's Unicode width table: `write_row` calls
+            // `clear_end_of_line` only when trimmed `olen > nlen`
+            // (`src/dispnew.c:6234-6238`). Equal-length and growing rows must
+            // preserve their physical tail. A shrinking row may use EL only
+            // when the desired tail is uniformly erasable with this
+            // terminal's BCE behavior.
             let mut erase_from: Option<usize> = None;
             {
-                if let Some((split, bg)) = uniform_erasable_tail(desired_row, first_changed)
-                    && desired_row.len().saturating_sub(split) >= MIN_ERASE_CELLS
+                if let Some((split, bg)) =
+                    logical_tail_erase(desired_row, logical_tail_update, self.caps.blank_tail)
                     && split <= last_changed + 1
-                    && self.caps.blank_tail.can_erase(bg)
                 {
                     erase_from = Some(split);
                     last_changed = split.saturating_sub(1).max(first_changed);
@@ -1799,33 +1834,6 @@ impl TtyRif {
                         cell.materialization = CellMaterialization::Written;
                     }
                 }
-                TermOp::RefreshCompositeRow {
-                    row,
-                    start,
-                    write_end,
-                    clear,
-                } => {
-                    let row = row as usize;
-                    let row_start = row * self.desired.width;
-                    let clear_end = match clear {
-                        CompositeRowClear::WriteSpaces { end, .. } => end as usize,
-                        CompositeRowClear::EraseToEol { .. } => self.desired.width,
-                    };
-                    let clear_materialization = match clear {
-                        CompositeRowClear::WriteSpaces { .. } => CellMaterialization::Written,
-                        CompositeRowClear::EraseToEol { .. } => CellMaterialization::Erased,
-                    };
-                    for cell in
-                        &mut self.desired.cells[row_start + start as usize..row_start + clear_end]
-                    {
-                        cell.materialization = clear_materialization;
-                    }
-                    for cell in &mut self.desired.cells
-                        [row_start + start as usize..row_start + write_end as usize]
-                    {
-                        cell.materialization = CellMaterialization::Written;
-                    }
-                }
                 TermOp::EraseToEol { row, from, .. } => {
                     let row = row as usize;
                     let start = row * self.desired.width + from as usize;
@@ -1852,8 +1860,6 @@ impl TtyRif {
     fn encode_ops(&mut self, ops: &[TermOp]) {
         let mut last_attrs: Option<CellAttrs> = None;
         let mut cursor = EncodedCursorState::Unknown;
-        let width = u16::try_from(self.desired.width).unwrap_or(u16::MAX);
-        let height = u16::try_from(self.desired.height).unwrap_or(u16::MAX);
         for op in ops {
             match *op {
                 TermOp::ScrollRows {
@@ -1898,42 +1904,6 @@ impl TtyRif {
                     }
                     self.output.extend_from_slice(b"\x1b[r");
                     cursor = EncodedCursorState::Unknown;
-                }
-                TermOp::RefreshCompositeRow {
-                    row,
-                    start,
-                    write_end,
-                    clear,
-                } => {
-                    cursor.move_to(&mut self.output, row, start);
-                    match clear {
-                        CompositeRowClear::WriteSpaces { end, attrs } => {
-                            write_face_transition(&mut self.output, &mut last_attrs, &attrs);
-                            for _ in start..end {
-                                self.output.push(b' ');
-                            }
-                            cursor.finish_write(
-                                &mut self.output,
-                                row,
-                                end,
-                                width,
-                                height,
-                                self.caps.right_margin,
-                            );
-                        }
-                        CompositeRowClear::EraseToEol { bg } => {
-                            self.frame_stats.erase_ops += 1;
-                            let attrs = CellAttrs {
-                                bg,
-                                ..CellAttrs::default()
-                            };
-                            write_face_transition(&mut self.output, &mut last_attrs, &attrs);
-                            self.output.extend_from_slice(b"\x1b[K");
-                        }
-                    }
-                    if start < write_end {
-                        self.encode_write_run(row, start, write_end, &mut last_attrs, &mut cursor);
-                    }
                 }
                 TermOp::WriteRun { row, start, end } => {
                     self.encode_write_run(row, start, end, &mut last_attrs, &mut cursor);
@@ -2496,6 +2466,10 @@ fn row_hash(row: &[TtyCell]) -> u64 {
             CellMaterialization::Erased => 0,
             CellMaterialization::Written => 1,
         });
+        h.write_u8(match c.terminal_advance {
+            TerminalAdvance::OneColumn => 0,
+            TerminalAdvance::TerminalResolved => 1,
+        });
         h.write_u8(c.attrs.underline);
         if let Some(e) = &c.extenders {
             h.write(e.as_bytes());
@@ -2612,8 +2586,8 @@ fn detect_scroll(
 /// desired row `i` equals current row `i + delta` with REAL cell equality
 /// (hashes only route; a collision can cost time, never correctness), and
 /// return the covering region when the run is long enough to pay for a
-/// region scroll. Composite rows are excluded: the conservative full-tail
-/// repaint path owns them.
+/// region scroll. Rows with terminal-resolved advances are excluded: moving
+/// their logical cells cannot prove where an emulator physically placed them.
 fn verify_delta(
     current: &TtyGrid,
     desired: &TtyGrid,
@@ -2636,7 +2610,7 @@ fn verify_delta(
         }
         let d = &desired.cells[i * w..(i + 1) * w];
         let c = &current.cells[j * w..(j + 1) * w];
-        d == c && !row_has_composite_cells(d)
+        d == c && !row_has_terminal_resolved_advance(d)
     };
     let (mut best_lo, mut best_len) = (0usize, 0usize);
     let mut run_lo: Option<usize> = None;
@@ -2675,8 +2649,8 @@ fn verify_delta(
 /// - any padding cell in either row: a wide base pushed against or off the
 ///   right edge is blanked by the terminal but kept by the model, and no
 ///   later diff can see the difference (both grids agree);
-/// - any composite cell: cluster-width bookkeeping differs per terminal
-///   (the same exclusion every other optimization applies);
+/// - any terminal-resolved cell: Unicode/cluster width bookkeeping differs per
+///   emulator (the same exclusion every cursor-addressing optimization uses);
 /// - the suffix equality runs to the PHYSICAL row end, never a sub-span, so
 ///   vertically split windows (divider glyphs) refuse naturally.
 fn detect_row_shift(
@@ -2688,12 +2662,8 @@ fn detect_row_shift(
     const MAX_SHIFT: usize = 8;
     const MIN_SAVED_CELLS: usize = 8;
     let width = desired_row.len();
-    if desired_row
-        .iter()
-        .any(|c| c.padding || c.extenders.is_some())
-        || current_row
-            .iter()
-            .any(|c| c.padding || c.extenders.is_some())
+    if row_has_terminal_resolved_advance(desired_row)
+        || row_has_terminal_resolved_advance(current_row)
     {
         return None;
     }
@@ -2805,8 +2775,23 @@ fn uniform_erasable_tail(
     Some((split, background))
 }
 
-fn row_has_composite_cells(row: &[TtyCell]) -> bool {
-    row.iter().any(|cell| cell.extenders.is_some())
+/// Resolve GNU's typed logical shrink into a capability-safe terminal erase.
+/// Equal-length and growing rows cannot produce an erase through this seam.
+fn logical_tail_erase(
+    desired_row: &[TtyCell],
+    update: LogicalTailUpdate,
+    blank_tail: BlankTailMethod,
+) -> Option<(usize, Option<TerminalColor>)> {
+    let LogicalTailUpdate::EraseFrom(from) = update else {
+        return None;
+    };
+    let (split, background) = uniform_erasable_tail(desired_row, 0)?;
+    (split == from.as_usize() && blank_tail.can_erase(background)).then_some((split, background))
+}
+
+fn row_has_terminal_resolved_advance(row: &[TtyCell]) -> bool {
+    row.iter()
+        .any(|cell| cell.terminal_advance == TerminalAdvance::TerminalResolved)
 }
 
 // ---------------------------------------------------------------------------
