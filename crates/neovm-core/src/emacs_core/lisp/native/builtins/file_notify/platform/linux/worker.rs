@@ -4,8 +4,9 @@
 //! descriptors.  The evaluator sends typed commands and receives owned event
 //! records; neither side shares kernel handles or Lisp values.
 
+use super::super::super::delivery::{self, DeliveryReceiver, DeliverySender};
 use crate::emacs_core::process::WaitNotifier;
-use crossbeam_channel::{Receiver, Sender, TryRecvError, TrySendError};
+use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use inotify::{EventMask, Inotify, WatchDescriptor, WatchMask};
 use polling::{Event, Events, PollMode, Poller};
 use std::collections::HashMap;
@@ -13,11 +14,9 @@ use std::ffi::OsString;
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 
 const INOTIFY_KEY: usize = 1;
-const EVENT_CAPACITY: usize = 4096;
 
 #[derive(Clone, Debug)]
 pub(super) struct NativeEvent {
@@ -43,8 +42,7 @@ enum Command {
 pub(super) struct Worker {
     commands: Sender<Command>,
     poller: Arc<Poller>,
-    events: Receiver<Result<NativeEvent, String>>,
-    overflowed: Arc<AtomicBool>,
+    events: DeliveryReceiver<Result<NativeEvent, String>>,
     join: Option<JoinHandle<()>>,
 }
 
@@ -58,29 +56,17 @@ impl Worker {
             .map_err(|error| error.to_string())?;
 
         let (command_tx, command_rx) = crossbeam_channel::bounded(64);
-        let (event_tx, event_rx) = crossbeam_channel::bounded(EVENT_CAPACITY);
-        let overflowed = Arc::new(AtomicBool::new(false));
+        let (event_tx, event_rx) = delivery::channel(notifier);
         let worker_poller = Arc::clone(&poller);
-        let worker_overflowed = Arc::clone(&overflowed);
         let join = std::thread::Builder::new()
             .name("neomacs-inotify".to_owned())
-            .spawn(move || {
-                worker_loop(
-                    inotify,
-                    worker_poller,
-                    command_rx,
-                    event_tx,
-                    worker_overflowed,
-                    notifier,
-                )
-            })
+            .spawn(move || worker_loop(inotify, worker_poller, command_rx, event_tx))
             .map_err(|error| error.to_string())?;
 
         Ok(Self {
             commands: command_tx,
             poller,
             events: event_rx,
-            overflowed,
             join: Some(join),
         })
     }
@@ -120,7 +106,7 @@ impl Worker {
     }
 
     pub(super) fn take_overflow(&self) -> bool {
-        self.overflowed.swap(false, Ordering::AcqRel)
+        self.events.take_overflow()
     }
 }
 
@@ -137,9 +123,7 @@ fn worker_loop(
     mut inotify: Inotify,
     poller: Arc<Poller>,
     commands: Receiver<Command>,
-    events: Sender<Result<NativeEvent, String>>,
-    overflowed: Arc<AtomicBool>,
-    notifier: Option<WaitNotifier>,
+    events: DeliverySender<Result<NativeEvent, String>>,
 ) {
     let mut descriptors = HashMap::<i32, WatchDescriptor>::new();
     let mut poll_events = Events::new();
@@ -154,12 +138,7 @@ fn worker_loop(
 
         poll_events.clear();
         if let Err(error) = poller.wait(&mut poll_events, None) {
-            publish(
-                &events,
-                Err(error.to_string()),
-                &overflowed,
-                notifier.as_ref(),
-            );
+            events.publish(Err(error.to_string()));
             break;
         }
 
@@ -182,17 +161,12 @@ fn worker_loop(
                         any = true;
                         let descriptor = event.wd.get_watch_descriptor_id();
                         let terminal = event.mask.contains(EventMask::IGNORED);
-                        publish(
-                            &events,
-                            Ok(NativeEvent {
-                                descriptor,
-                                mask: event.mask,
-                                cookie: event.cookie,
-                                name: event.name.map(ToOwned::to_owned),
-                            }),
-                            &overflowed,
-                            notifier.as_ref(),
-                        );
+                        events.publish(Ok(NativeEvent {
+                            descriptor,
+                            mask: event.mask,
+                            cookie: event.cookie,
+                            name: event.name.map(ToOwned::to_owned),
+                        }));
                         if terminal {
                             descriptors.remove(&descriptor);
                         }
@@ -203,12 +177,7 @@ fn worker_loop(
                 }
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
                 Err(error) => {
-                    publish(
-                        &events,
-                        Err(error.to_string()),
-                        &overflowed,
-                        notifier.as_ref(),
-                    );
+                    events.publish(Err(error.to_string()));
                     running = false;
                     break;
                 }
@@ -253,25 +222,5 @@ fn apply_commands(
             Err(TryRecvError::Empty) => return true,
             Err(TryRecvError::Disconnected) => return false,
         }
-    }
-}
-
-fn publish(
-    events: &Sender<Result<NativeEvent, String>>,
-    event: Result<NativeEvent, String>,
-    overflowed: &AtomicBool,
-    notifier: Option<&WaitNotifier>,
-) {
-    match events.try_send(event) {
-        Ok(()) => {}
-        Err(TrySendError::Full(_)) => {
-            overflowed.store(true, Ordering::Release);
-        }
-        Err(TrySendError::Disconnected(_)) => return,
-    }
-    if let Some(notifier) = notifier
-        && let Err(error) = notifier.notify()
-    {
-        tracing::error!(%error, "failed to wake evaluator for inotify notification");
     }
 }

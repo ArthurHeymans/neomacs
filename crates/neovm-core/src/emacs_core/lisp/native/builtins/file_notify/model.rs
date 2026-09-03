@@ -49,14 +49,18 @@ pub(super) struct FileWatch<Request> {
 
 pub(super) trait BackendEvent {
     fn watch_id(&self) -> &WatchId;
-    fn lifecycle(&self) -> WatchLifecycle;
     fn into_lisp(self) -> Value;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum WatchLifecycle {
-    Active,
-    Terminated,
+/// One atomic handoff from a native backend to the evaluator.
+///
+/// Watch termination is control-plane state, not an attribute of a
+/// Lisp-visible event.  Keeping it separate ensures callback roots are
+/// released even when a terminal native notification produces no event for
+/// the watch's requested action set.
+pub(super) struct DrainBatch<Event> {
+    pub(super) events: Vec<Event>,
+    pub(super) terminated: Vec<WatchId>,
 }
 
 pub(super) trait Backend {
@@ -71,6 +75,6 @@ pub(super) trait Backend {
     ) -> Result<WatchId, Flow>;
     fn remove_watch(&mut self, watch_id: &WatchId) -> Result<bool, Flow>;
     fn valid_p(&self, watch_id: &WatchId) -> bool;
-    fn drain_events(&mut self) -> Result<Vec<Self::Event>, Flow>;
+    fn drain_events(&mut self) -> Result<DrainBatch<Self::Event>, Flow>;
     fn has_watches(&self) -> bool;
 }

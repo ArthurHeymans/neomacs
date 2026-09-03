@@ -37,6 +37,39 @@ fn compiled_file_notification_subrs_match_the_target_backend() {
     );
 }
 
+#[derive(Debug)]
+struct LifecycleTestEvent(WatchId);
+
+impl FileNotifyEvent for LifecycleTestEvent {
+    fn watch_id(&self) -> &WatchId {
+        &self.0
+    }
+
+    fn into_lisp(self) -> Value {
+        unreachable!("the lifecycle test does not encode events")
+    }
+}
+
+#[test]
+fn terminal_watch_without_a_visible_event_releases_its_callback_root() {
+    let watch_id = WatchId::new(7, 3);
+    let mut registry = WatchRegistry::default();
+    registry.register(watch_id.clone(), Value::fixnum(42));
+
+    let deliveries = prepare_deliveries(
+        &mut registry,
+        DrainBatch::<LifecycleTestEvent> {
+            events: Vec::new(),
+            terminated: vec![watch_id],
+        },
+    );
+
+    assert!(deliveries.is_empty());
+    let mut roots = Vec::new();
+    registry.collect_gc_roots(&mut roots);
+    assert!(roots.is_empty(), "terminated callback remained GC-rooted");
+}
+
 /// Destructure a `Flow` into its signal payload; Debug-printing a `SymId`
 /// resolves the name best-effort and is not stable under parallel tests, so
 /// error assertions compare interned symbols structurally.

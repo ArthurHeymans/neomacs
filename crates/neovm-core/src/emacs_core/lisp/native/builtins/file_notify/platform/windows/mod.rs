@@ -1,6 +1,6 @@
 #[cfg(target_os = "windows")]
-use super::super::{FileNotifyBackend, FileWatch, file_notify_error};
-use super::super::{FileNotifyEvent, WatchId, WatchLifecycle};
+use super::super::{DrainBatch, FileNotifyBackend, FileWatch, file_notify_error};
+use super::super::{FileNotifyEvent, WatchId};
 #[cfg(target_os = "windows")]
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::value::Value;
@@ -106,10 +106,6 @@ impl FileNotifyEvent for W32Event {
         &self.watch_id
     }
 
-    fn lifecycle(&self) -> WatchLifecycle {
-        WatchLifecycle::Active
-    }
-
     fn into_lisp(self) -> Value {
         // GNU w32notify events are `(DESCRIPTOR ACTION FILE)` and use a
         // pointer-like integer as the opaque descriptor.
@@ -158,6 +154,7 @@ fn event_actions(event: &notify::Event, request: &W32Request) -> Vec<(usize, W32
 
 #[cfg(target_os = "windows")]
 mod native {
+    use super::super::super::delivery::{self, DeliveryReceiver, EVENT_CAPACITY};
     use super::*;
     use crate::emacs_core::process::WaitNotifier;
     use notify::Watcher;
@@ -171,7 +168,7 @@ mod native {
     #[derive(Default)]
     pub(crate) struct W32NotifyBackend {
         watcher: Option<notify::ReadDirectoryChangesWatcher>,
-        rx: Option<std::sync::mpsc::Receiver<Result<notify::Event, notify::Error>>>,
+        rx: Option<DeliveryReceiver<Result<notify::Event, notify::Error>>>,
         watches: Vec<W32Watch>,
         physical_modes: HashMap<PathBuf, bool>,
         next_id: i64,
@@ -182,15 +179,10 @@ mod native {
             if self.watcher.is_some() {
                 return Ok(());
             }
-            let (tx, rx) = std::sync::mpsc::channel();
+            let (tx, rx) = delivery::channel(notifier);
             let watcher = notify::ReadDirectoryChangesWatcher::new(
                 move |result| {
-                    if tx.send(result).is_ok()
-                        && let Some(notifier) = notifier.as_ref()
-                        && let Err(error) = notifier.notify()
-                    {
-                        tracing::error!(%error, "failed to wake evaluator for w32 notification");
-                    }
+                    tx.publish(result);
                 },
                 notify::Config::default(),
             )
@@ -375,24 +367,51 @@ mod native {
                 .any(|watch| watch.common.id == *descriptor)
         }
 
-        fn drain_events(&mut self) -> Result<Vec<Self::Event>, Flow> {
+        fn drain_events(&mut self) -> Result<DrainBatch<Self::Event>, Flow> {
             let mut raw_events = Vec::new();
             if let Some(rx) = self.rx.as_ref() {
+                let overflowed = rx.take_overflow();
                 loop {
                     match rx.try_recv() {
                         Ok(Ok(event)) => raw_events.push(event),
                         Ok(Err(error)) => {
                             tracing::warn!(%error, "w32 file notification event was lost");
                         }
-                        Err(std::sync::mpsc::TryRecvError::Empty) => break,
-                        Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
+                        Err(crossbeam_channel::TryRecvError::Empty) => break,
+                        Err(crossbeam_channel::TryRecvError::Disconnected) => break,
                     }
                 }
+                if overflowed {
+                    tracing::warn!(
+                        capacity = EVENT_CAPACITY,
+                        "Windows file-notification queue overflowed; emitting conservative changes"
+                    );
+                    return Ok(DrainBatch {
+                        events: self
+                            .watches
+                            .iter()
+                            .map(|watch| W32Event {
+                                watch_id: watch.common.id.clone(),
+                                action: W32Action::Modified,
+                                path: watch.common.path.clone(),
+                            })
+                            .chain(
+                                raw_events
+                                    .into_iter()
+                                    .flat_map(|event| self.translate_event(event)),
+                            )
+                            .collect(),
+                        terminated: Vec::new(),
+                    });
+                }
             }
-            Ok(raw_events
-                .into_iter()
-                .flat_map(|event| self.translate_event(event))
-                .collect())
+            Ok(DrainBatch {
+                events: raw_events
+                    .into_iter()
+                    .flat_map(|event| self.translate_event(event))
+                    .collect(),
+                terminated: Vec::new(),
+            })
         }
 
         fn has_watches(&self) -> bool {

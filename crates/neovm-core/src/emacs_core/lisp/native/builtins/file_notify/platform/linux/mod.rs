@@ -6,7 +6,7 @@
 //! bits, `isdir`, `unmount`, and terminal `ignored`).
 
 use super::super::{
-    FileNotifyBackend, FileNotifyEvent, FileWatch, WatchId, WatchLifecycle, file_notify_error,
+    DrainBatch, FileNotifyBackend, FileNotifyEvent, FileWatch, WatchId, file_notify_error,
 };
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::process::WaitNotifier;
@@ -121,20 +121,11 @@ pub(in super::super) struct InotifyEvent {
     aspects: Vec<&'static str>,
     path: PathBuf,
     cookie: u32,
-    terminal: bool,
 }
 
 impl FileNotifyEvent for InotifyEvent {
     fn watch_id(&self) -> &WatchId {
         &self.watch_id
-    }
-
-    fn lifecycle(&self) -> WatchLifecycle {
-        if self.terminal {
-            WatchLifecycle::Terminated
-        } else {
-            WatchLifecycle::Active
-        }
     }
 
     fn into_lisp(self) -> Value {
@@ -221,7 +212,6 @@ impl InotifyBackend {
                     .map(PathBuf::from)
                     .unwrap_or_else(|| watch.common.path.clone()),
                 cookie: event.cookie,
-                terminal: event.mask.contains(EventMask::IGNORED),
             })
             .collect()
     }
@@ -234,7 +224,6 @@ impl InotifyBackend {
                 aspects: vec!["q-overflow"],
                 path: watch.common.path.clone(),
                 cookie: 0,
-                terminal: false,
             })
             .collect()
     }
@@ -310,7 +299,7 @@ impl FileNotifyBackend for InotifyBackend {
             .any(|watch| watch.common.id == *descriptor)
     }
 
-    fn drain_events(&mut self) -> Result<Vec<Self::Event>, Flow> {
+    fn drain_events(&mut self) -> Result<DrainBatch<Self::Event>, Flow> {
         let mut events = Vec::new();
         let mut terminal_descriptors = Vec::new();
         if let Some(worker) = self.worker.as_ref() {
@@ -341,6 +330,12 @@ impl FileNotifyBackend for InotifyBackend {
                 }
             }
         }
+        let terminated = self
+            .watches
+            .iter()
+            .filter(|watch| terminal_descriptors.contains(&watch.native_descriptor))
+            .map(|watch| watch.common.id.clone())
+            .collect();
         if !terminal_descriptors.is_empty() {
             self.watches
                 .retain(|watch| !terminal_descriptors.contains(&watch.native_descriptor));
@@ -348,7 +343,7 @@ impl FileNotifyBackend for InotifyBackend {
         if self.watches.is_empty() {
             self.worker = None;
         }
-        Ok(events)
+        Ok(DrainBatch { events, terminated })
     }
 
     fn has_watches(&self) -> bool {
