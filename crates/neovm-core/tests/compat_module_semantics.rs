@@ -12,7 +12,7 @@ use neovm_core::emacs_core::load::{
     apply_runtime_startup_state, create_bootstrap_evaluator_cached,
 };
 
-mod common;
+use crate::common;
 
 /// Build the test cdylib, returning the path to the .so file.
 ///

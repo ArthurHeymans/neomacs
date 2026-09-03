@@ -6,6 +6,9 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Core runtime structures for NeoVM"
+# The compat_* suites share one binary (see tests/compat_all.rs); turning
+# auto-discovery off makes every remaining integration target explicit below.
+autotests = false
 
 [dependencies]
 neovm-host-abi.workspace = true
@@ -137,6 +140,25 @@ syn = { version = "3.0.3", features = ["full", "visit"] }
 pkg-config.workspace = true
 sha2.workspace = true
 
+[[test]]
+name = "compat_all"
+path = "tests/compat_all.rs"
+
+[[test]]
+name = "aot_call_bearing"
+path = "tests/aot_call_bearing.rs"
+
+[[test]]
+name = "aot_pgo"
+path = "tests/aot_pgo.rs"
+
+[[test]]
+name = "aot_spec"
+path = "tests/aot_spec.rs"
+
+[[test]]
+name = "fringe_standard_indicators"
+path = "tests/fringe_standard_indicators.rs"
 [[bench]]
 name = "buffer_text_backends"
 harness = false

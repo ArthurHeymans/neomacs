@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 
 use common::{oracle_enabled, run_neovm_eval, run_oracle_eval};
 use neovm_core::emacs_core::value_reader;

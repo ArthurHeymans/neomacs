@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 
 use common::{oracle_enabled, run_oracle_eval};
 use neovm_core::emacs_core::{Context, format_eval_result_with_eval};

@@ -29,7 +29,7 @@
 //! the global `Vfeatures` (`src/fns.c:3731`), so if `features` were special,
 //! `(let ((features '(foo))) (featurep 'foo))` would answer `t`.
 
-mod common;
+use crate::common;
 
 use common::{oracle_enabled, run_neovm_eval, run_oracle_eval};
 
