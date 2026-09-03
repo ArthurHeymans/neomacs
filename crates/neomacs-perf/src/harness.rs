@@ -27,16 +27,16 @@ use crate::{
     host::{collect_host_provenance, validate_machine_policy},
     native_video::{
         NativeVideoBuildProfile, NativeVideoComparisonIdentity, NativeVideoDecoderKind,
-        NativeVideoExecutionIdentity, NativeVideoGraphicsBackend, NativeVideoPresentationTarget,
-        discover_media_metadata,
+        NativeVideoExecutionIdentity, NativeVideoFrameFormat, NativeVideoGpuTimingStatus,
+        NativeVideoGraphicsBackend, NativeVideoPresentationTarget, discover_media_metadata,
     },
     profile_gate::ProfileGate,
     scenario,
 };
 
-pub(crate) const ARTIFACT_SCHEMA_VERSION: u32 = 4;
+pub(crate) const ARTIFACT_SCHEMA_VERSION: u32 = 5;
 const SCENARIO_RESULT_SCHEMA_VERSION: u32 = 1;
-const NATIVE_VIDEO_RESULT_SCHEMA_VERSION: u32 = 3;
+const NATIVE_VIDEO_RESULT_SCHEMA_VERSION: u32 = 4;
 const MX_TAB_COMPLETION_CANDIDATE_COUNT: u64 = 1024;
 const RUST_LSP_TYPING_OVERLAY_COUNT: u64 = 4;
 const RUST_LSP_TYPING_DIAGNOSTIC_COUNT: u64 = 4;
@@ -2048,26 +2048,6 @@ impl std::fmt::Display for VideoBenchmarkBackend {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-enum VideoBenchmarkFrameFormat {
-    Nv12,
-    P010,
-    Rgba8,
-    Bgra8,
-}
-
-impl std::fmt::Display for VideoBenchmarkFrameFormat {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(match self {
-            Self::Nv12 => "nv12",
-            Self::P010 => "p010",
-            Self::Rgba8 => "rgba8",
-            Self::Bgra8 => "bgra8",
-        })
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "kebab-case")]
 enum VideoBenchmarkImport {
     BorrowedNativeSurface,
     GpuBlit,
@@ -2098,16 +2078,8 @@ impl std::fmt::Display for VideoBenchmarkPresentation {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-enum VideoBenchmarkGpuTimingStatus {
-    Disabled,
-    Unsupported,
-    Enabled,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "kebab-case")]
 enum VideoBenchmarkDecodeResidency {
-    HardwareSameDevice,
+    HardwareDecoderReportsRendererDevice,
     HardwareUnverified,
     Software,
     Unknown,
@@ -2116,7 +2088,9 @@ enum VideoBenchmarkDecodeResidency {
 impl std::fmt::Display for VideoBenchmarkDecodeResidency {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
-            Self::HardwareSameDevice => "hardware-same-device",
+            Self::HardwareDecoderReportsRendererDevice => {
+                "hardware-decoder-reports-renderer-device"
+            }
             Self::HardwareUnverified => "hardware-unverified",
             Self::Software => "software",
             Self::Unknown => "unknown",
@@ -2150,7 +2124,7 @@ struct SustainedNativeVideoResult {
     gpu_driver_info: String,
     drm_render_node: Option<String>,
     display_refresh_hz: Option<u16>,
-    frame_format: VideoBenchmarkFrameFormat,
+    frame_format: NativeVideoFrameFormat,
     compositor_import: VideoBenchmarkImport,
     presentation: VideoBenchmarkPresentation,
     decoded_frames: u64,
@@ -2168,7 +2142,7 @@ struct SustainedNativeVideoResult {
     interval_p95_us: u64,
     interval_p99_us: u64,
     interval_max_us: u64,
-    gpu_timing_status: VideoBenchmarkGpuTimingStatus,
+    gpu_timing_status: NativeVideoGpuTimingStatus,
     gpu_pass_samples: u64,
     gpu_pass_total_us: u64,
     gpu_pass_min_us: Option<u64>,
@@ -2208,7 +2182,7 @@ struct SustainedNativeVideoResultWire {
     gpu_driver_info: String,
     drm_render_node: Option<String>,
     display_refresh_hz: Option<u16>,
-    frame_format: VideoBenchmarkFrameFormat,
+    frame_format: NativeVideoFrameFormat,
     compositor_import: VideoBenchmarkImport,
     presentation: VideoBenchmarkPresentation,
     decoded_frames: u64,
@@ -2226,7 +2200,7 @@ struct SustainedNativeVideoResultWire {
     interval_p95_us: u64,
     interval_p99_us: u64,
     interval_max_us: u64,
-    gpu_timing_status: VideoBenchmarkGpuTimingStatus,
+    gpu_timing_status: NativeVideoGpuTimingStatus,
     gpu_pass_samples: u64,
     gpu_pass_total_us: u64,
     gpu_pass_min_us: Option<u64>,
@@ -2322,6 +2296,8 @@ impl SustainedNativeVideoResult {
             gpu_driver_info: self.gpu_driver_info.clone(),
             drm_render_node: self.drm_render_node.clone(),
             display_refresh_hz: self.display_refresh_hz,
+            frame_format: self.frame_format,
+            gpu_timing_status: self.gpu_timing_status,
         }
     }
 }
@@ -2684,6 +2660,7 @@ struct HarnessProvenance {
     revision: String,
     checkout_revision: String,
     source_tree_dirty: bool,
+    harness_inputs_dirty_when_built: bool,
     executable_sha256: String,
     executable_size_bytes: u64,
     invocation: Vec<String>,
@@ -2724,7 +2701,26 @@ fn collect_harness_provenance(workspace_root: &Path) -> Result<HarnessProvenance
             "sustained native-video acceptance requires a harness with embedded Git provenance"
                 .to_owned()
         })?;
-    validate_harness_revision(embedded_revision, &checkout_revision)?;
+    let harness_inputs_dirty_when_built = match option_env!("NEOMACS_PERF_INPUTS_DIRTY") {
+        Some("true") => true,
+        Some("false") => false,
+        Some(value) => {
+            return Err(format!(
+                "benchmark harness contains invalid build-time dirty marker {value:?}"
+            ));
+        }
+        None => {
+            return Err(
+                "sustained native-video acceptance requires build-time source provenance"
+                    .to_owned(),
+            );
+        }
+    };
+    validate_harness_build(
+        embedded_revision,
+        &checkout_revision,
+        harness_inputs_dirty_when_built,
+    )?;
 
     Ok(HarnessProvenance {
         revision: embedded_revision.to_owned(),
@@ -2734,6 +2730,7 @@ fn collect_harness_provenance(workspace_root: &Path) -> Result<HarnessProvenance
             &["status", "--porcelain", "--untracked-files=no"],
         )?
         .is_empty(),
+        harness_inputs_dirty_when_built,
         executable_sha256: sha256_file(&executable)?,
         executable_size_bytes: executable_metadata.len(),
         invocation: std::env::args_os()
@@ -2749,6 +2746,21 @@ pub(crate) fn validate_harness_revision(embedded: &str, checkout: &str) -> Resul
     Err(format!(
         "benchmark harness was built from {embedded}, but the checkout is {checkout}; rebuild the harness before collecting acceptance evidence"
     ))
+}
+
+pub(crate) fn validate_harness_build(
+    embedded: &str,
+    checkout: &str,
+    harness_inputs_dirty_when_built: bool,
+) -> Result<(), String> {
+    validate_harness_revision(embedded, checkout)?;
+    if harness_inputs_dirty_when_built {
+        return Err(
+            "benchmark harness was built from dirty tracked harness inputs; restore clean inputs and rebuild the harness before collecting acceptance evidence"
+                .to_owned(),
+        );
+    }
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -3199,7 +3211,7 @@ fn validate_sustained_native_video_result(
     mismatch(
         &mut mismatches,
         "decode-residency",
-        VideoBenchmarkDecodeResidency::HardwareSameDevice,
+        VideoBenchmarkDecodeResidency::HardwareDecoderReportsRendererDevice,
         result.decode_residency,
     );
     mismatch(
@@ -3257,7 +3269,7 @@ fn validate_sustained_native_video_result(
     let _gpu_driver_info = &result.gpu_driver_info;
     if !matches!(
         result.frame_format,
-        VideoBenchmarkFrameFormat::Nv12 | VideoBenchmarkFrameFormat::P010
+        NativeVideoFrameFormat::Nv12 | NativeVideoFrameFormat::P010
     ) {
         mismatches.push(CorrectnessMismatch {
             invariant: "frame-format".to_string(),
@@ -3339,7 +3351,7 @@ fn validate_sustained_native_video_result(
         });
     }
     match result.gpu_timing_status {
-        VideoBenchmarkGpuTimingStatus::Enabled => {
+        NativeVideoGpuTimingStatus::Enabled => {
             for (name, value) in [
                 ("gpu-pass-samples", result.gpu_pass_samples),
                 ("gpu-pass-total-time", result.gpu_pass_total_us),
@@ -3349,12 +3361,12 @@ fn validate_sustained_native_video_result(
                 require_positive_phase(&mut mismatches, name, value);
             }
         }
-        VideoBenchmarkGpuTimingStatus::Disabled => mismatches.push(CorrectnessMismatch {
+        NativeVideoGpuTimingStatus::Disabled => mismatches.push(CorrectnessMismatch {
             invariant: "gpu-timing-status".to_string(),
             expected: "enabled or unsupported".to_string(),
             actual: "disabled".to_string(),
         }),
-        VideoBenchmarkGpuTimingStatus::Unsupported => {}
+        NativeVideoGpuTimingStatus::Unsupported => {}
     }
     mismatches
 }

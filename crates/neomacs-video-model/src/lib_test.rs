@@ -90,7 +90,7 @@ fn video_event_identity_is_remapped_without_rebuilding_its_payload() {
         VideoPresentationPath::WgpuComposited,
     );
     let current = VideoFramePath::new(
-        VideoDecodeResidency::HardwareSameDevice,
+        VideoDecodeResidency::HardwareDecoderReportsRendererDevice,
         VideoCompositorImport::BorrowedNativeSurface,
         VideoPresentationPath::WgpuComposited,
     );

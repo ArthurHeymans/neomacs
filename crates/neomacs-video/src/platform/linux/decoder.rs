@@ -1006,7 +1006,9 @@ fn decode_sample(
                 VideoDecoderKind::Hardware,
                 Some(renderer),
                 PipelineDrmIdentity::Single(decoder),
-            ) if renderer == decoder => VideoDecodeResidency::HardwareSameDevice,
+            ) if renderer == decoder => {
+                VideoDecodeResidency::HardwareDecoderReportsRendererDevice
+            }
             (VideoDecoderKind::Hardware, _, _) => VideoDecodeResidency::HardwareUnverified,
             (VideoDecoderKind::Software, _, _) => VideoDecodeResidency::Software,
             (VideoDecoderKind::Unknown, _, _) => VideoDecodeResidency::Unknown,

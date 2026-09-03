@@ -57,7 +57,7 @@ impl DisplayHost for RecordingVideoDisplayHost {
                 decoder: None,
                 state: VideoSessionState::Playing,
                 frame_path: Some(VideoFramePath::new(
-                    VideoDecodeResidency::HardwareSameDevice,
+                    VideoDecodeResidency::HardwareDecoderReportsRendererDevice,
                     VideoCompositorImport::BorrowedNativeSurface,
                     VideoPresentationPath::WgpuComposited,
                 )),
@@ -208,7 +208,7 @@ fn diagnostics_reports_the_observed_end_to_end_path_and_pool_pressure() {
             .as_lisp_string()
             .and_then(|value| value.as_utf8_str()),
         Some(
-            "(42 gstreamer playing hardware-same-device borrowed-native-surface \
+            "(42 gstreamer playing hardware-decoder-reports-renderer-device borrowed-native-surface \
              wgpu-composited nv12 9 4 3 2 20000 97 nil 4096 compositor-import 64 3 2 1)"
         )
     );

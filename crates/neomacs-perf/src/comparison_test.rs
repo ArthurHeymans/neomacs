@@ -10,8 +10,9 @@ use super::{
     comparison_schedule, evaluate_comparison,
 };
 use crate::native_video::{
-    NativeVideoDecoderKind, NativeVideoExecutionIdentity, NativeVideoFrameRate,
-    NativeVideoGraphicsBackend, NativeVideoMediaMetadata,
+    NativeVideoDecoderKind, NativeVideoExecutionIdentity, NativeVideoFrameFormat,
+    NativeVideoFrameRate, NativeVideoGpuTimingStatus, NativeVideoGraphicsBackend,
+    NativeVideoMediaMetadata,
 };
 
 fn editor(role: ComparisonRunRole) -> PathBuf {
@@ -109,6 +110,8 @@ fn native_video_execution() -> NativeVideoExecutionIdentity {
         gpu_driver_info: "Mesa".to_owned(),
         drm_render_node: Some("/dev/dri/renderD128".to_owned()),
         display_refresh_hz: Some(60),
+        frame_format: NativeVideoFrameFormat::Nv12,
+        gpu_timing_status: NativeVideoGpuTimingStatus::Enabled,
     }
 }
 
@@ -140,8 +143,8 @@ fn native_video_comparison() -> (ComparisonInput, Vec<ComparisonObservation>) {
 }
 
 #[test]
-fn native_video_comparison_rejects_changed_decoder_or_render_node() {
-    for change in ["decoder", "render-node"] {
+fn native_video_comparison_rejects_changed_execution_path() {
+    for change in ["decoder", "render-node", "frame-format", "gpu-timing"] {
         let (input, mut observations) = native_video_comparison();
         let identity = observations[2]
             .run
@@ -152,6 +155,10 @@ fn native_video_comparison_rejects_changed_decoder_or_render_node() {
             "decoder" => identity.decoder_factory = "nvh264dec".to_owned(),
             "render-node" => {
                 identity.drm_render_node = Some("/dev/dri/renderD129".to_owned());
+            }
+            "frame-format" => identity.frame_format = NativeVideoFrameFormat::P010,
+            "gpu-timing" => {
+                identity.gpu_timing_status = NativeVideoGpuTimingStatus::Unsupported;
             }
             _ => unreachable!(),
         }

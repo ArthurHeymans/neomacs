@@ -125,7 +125,7 @@
         (neomacs-perf-native-video--required-environment "NEOMACS_PERF_RESULT")
       (insert
        (json-serialize
-        `((schema_version . 3)
+        `((schema_version . 4)
           (scenario . "sustained-native-video")
           (status . ,status)
           (iterations . ,iterations)

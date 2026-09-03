@@ -16,7 +16,7 @@ use crate::{
     scenario,
 };
 
-pub(crate) const COMPARISON_ARTIFACT_SCHEMA_VERSION: u32 = 4;
+pub(crate) const COMPARISON_ARTIFACT_SCHEMA_VERSION: u32 = 5;
 static COMPARISON_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// Immutable parameters shared by every run in one comparison.

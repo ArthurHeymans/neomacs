@@ -749,10 +749,12 @@ impl VideoSessionRecovery {
 /// enough information to prove how the decoder produced it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VideoDecodeResidency {
-    /// Hardware decode whose output and renderer are proven to use the same
-    /// DRM device. This does not claim ownership of the decoder's internal
-    /// pool: a same-device GStreamer transform may have allocated the DMA-BUF.
-    HardwareSameDevice,
+    /// The selected hardware decoder reports the renderer's DRM device.
+    ///
+    /// This says nothing about downstream allocation locality or ownership;
+    /// compositor-import evidence records whether the observed frame itself
+    /// reached the renderer without a pixel copy.
+    HardwareDecoderReportsRendererDevice,
     HardwareUnverified,
     Software,
     Unknown,

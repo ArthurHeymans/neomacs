@@ -5,7 +5,8 @@ use std::process::Command;
 
 use super::{
     Frontend, MetricName, PerfError, PerfHarness, RunRequest, RunVerdict, ScenarioId,
-    collect_editor_provenance, configure_benchmark_environment, validate_harness_revision,
+    collect_editor_provenance, configure_benchmark_environment, validate_harness_build,
+    validate_harness_revision,
 };
 
 #[test]
@@ -546,7 +547,7 @@ fn sustained_native_video_promotes_pacing_gpu_pool_and_memory_metrics() {
         NonZeroU32::new(300).expect("non-zero literal"),
     );
     let raw_result = r#"{
-      "schema_version": 3,
+      "schema_version": 4,
       "scenario": "sustained-native-video",
       "status": "ok",
       "iterations": 300,
@@ -557,7 +558,7 @@ fn sustained_native_video_promotes_pacing_gpu_pool_and_memory_metrics() {
       "viewport_width_pixels": 3440,
       "viewport_height_pixels": 1880,
       "backend": "gstreamer",
-      "decode_residency": "hardware-same-device",
+      "decode_residency": "hardware-decoder-reports-renderer-device",
       "decoder_factory": "vah264dec",
       "decoder_plugin": "va",
       "decoder_kind": "hardware",
@@ -658,7 +659,7 @@ fn sustained_native_video_rejects_a_cpu_upload_fallback() {
         NonZeroU32::new(1).expect("non-zero literal"),
     );
     let raw_result = r#"{
-      "schema_version": 3, "scenario": "sustained-native-video", "status": "ok",
+      "schema_version": 4, "scenario": "sustained-native-video", "status": "ok",
       "iterations": 1, "elapsed_cpu_us": 1, "elapsed_wall_us": 100000,
       "presentation_width_pixels": 1920, "presentation_height_pixels": 1080,
       "viewport_width_pixels": 3440, "viewport_height_pixels": 1880,
@@ -944,5 +945,14 @@ fn stale_harness_revision_cannot_be_attributed_to_the_current_checkout() {
         .expect_err("stale harness must be rejected");
     assert!(error.contains("old-commit"));
     assert!(error.contains("new-commit"));
+    assert!(error.contains("rebuild"));
+}
+
+#[test]
+fn harness_built_from_dirty_tracked_sources_cannot_be_acceptance_evidence() {
+    assert!(validate_harness_build("same", "same", false).is_ok());
+    let error = validate_harness_build("same", "same", true)
+        .expect_err("dirty-built harness must be rejected after the checkout is restored");
+    assert!(error.contains("dirty tracked harness inputs"));
     assert!(error.contains("rebuild"));
 }

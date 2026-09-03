@@ -95,10 +95,11 @@ cadence remain part of the measurement. Supply a locally retained 3840x2160,
 60/1 or 60000/1001 fps input with `--video-file`; the harness discovers and
 validates that media contract, hashes the file before and after the run, and
 records its absolute path, size, display environment, editor identity, fixture
-hash, embedded harness revision, checkout revision, invocation, and
-harness-executable hash in the run provenance. The embedded and checkout
-revisions must match. Acceptance runs require an optimized Neomacs profile and
-a clean tracked harness source tree. The artifact also records the explicit GStreamer
+hash, embedded harness revision, build-time harness-input and runtime source cleanliness,
+checkout revision, invocation, and harness-executable hash in the run
+provenance. The embedded and checkout revisions must match. Acceptance runs
+require an optimized Neomacs profile and a harness built and run from a clean
+tracked source tree. The artifact also records the explicit GStreamer
 plugin catalog used with the fresh benchmark HOME, so decoding cannot depend on
 a cached per-user registry. The GUI frontend dimensions define the requested video
 presentation size (1920x1080 by default), not a synthetic display size. The
@@ -107,11 +108,12 @@ actual window body can contain that presentation. Its default 300 observation
 ticks give a 30-second sample after warmup.
 
 A valid native-video run must identify the instantiated hardware GStreamer
-decoder and plugin, the exact Vulkan adapter/driver and DRM render node, and
-hardware decoding whose output is on that same DRM device. This deliberately
-does not claim GStreamer's DMA-BUF came directly from the decoder's own pool,
-because a same-device converter may own that allocation. It must also observe
-NV12 or P010 frames, borrowed native-surface import, wgpu composition, positive
+decoder and plugin, the exact Vulkan adapter/driver and DRM render node, and a
+hardware decoder that reports that same DRM device. This deliberately does not
+claim that a downstream output allocation belongs to the decoder or is on the
+same device. The independently observed compositor-import evidence must also
+show NV12 or P010 frames reaching wgpu as borrowed native surfaces. A valid run
+therefore requires wgpu composition, positive
 decode/import/submission/presentation activity, bounded pool occupancy, and no
 GPU-blit or CPU-upload fallback. The artifact reports decode and presentation
 rates, p50/p95/p99/max presentation intervals, workload CPU and wall time,

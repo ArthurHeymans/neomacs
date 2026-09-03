@@ -284,7 +284,9 @@ fn diagnostic_symbol(name: &'static str) -> Value {
 
 fn decode_residency_to_lisp(value: VideoDecodeResidency) -> Value {
     diagnostic_symbol(match value {
-        VideoDecodeResidency::HardwareSameDevice => "hardware-same-device",
+        VideoDecodeResidency::HardwareDecoderReportsRendererDevice => {
+            "hardware-decoder-reports-renderer-device"
+        }
         VideoDecodeResidency::HardwareUnverified => "hardware-unverified",
         VideoDecodeResidency::Software => "software",
         VideoDecodeResidency::Unknown => "unknown",

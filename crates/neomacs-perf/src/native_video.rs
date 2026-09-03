@@ -161,6 +161,34 @@ pub enum NativeVideoGraphicsBackend {
     Other,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NativeVideoFrameFormat {
+    Nv12,
+    P010,
+    Rgba8,
+    Bgra8,
+}
+
+impl fmt::Display for NativeVideoFrameFormat {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Nv12 => "nv12",
+            Self::P010 => "p010",
+            Self::Rgba8 => "rgba8",
+            Self::Bgra8 => "bgra8",
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NativeVideoGpuTimingStatus {
+    Disabled,
+    Unsupported,
+    Enabled,
+}
+
 impl fmt::Display for NativeVideoGraphicsBackend {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
@@ -192,6 +220,8 @@ pub struct NativeVideoExecutionIdentity {
     pub gpu_driver_info: String,
     pub drm_render_node: Option<String>,
     pub display_refresh_hz: Option<u16>,
+    pub frame_format: NativeVideoFrameFormat,
+    pub gpu_timing_status: NativeVideoGpuTimingStatus,
 }
 
 impl NativeVideoMediaMetadata {
