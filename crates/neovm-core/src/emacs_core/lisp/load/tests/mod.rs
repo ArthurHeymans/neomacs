@@ -4320,15 +4320,9 @@ fn bootstrap_runtime_window_close_routes_through_handle_delete_frame() {
         emacs_frame_id: frame_id.0,
     })
     .expect("queue window close");
-    drop(tx);
-
     eval.input_rx = Some(rx);
-    eval.command_loop.running = true;
-
-    let result = eval
-        .recursive_edit_inner()
-        .expect("window close should exit command loop normally");
-    assert_eq!(result, Value::NIL);
+    eval.service_wait_request_special_input_events()
+        .expect("window close should be handled as a GNU special event");
 
     assert_eq!(
         format_eval_result(&eval.eval_str(
