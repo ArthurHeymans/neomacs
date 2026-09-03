@@ -522,3 +522,58 @@ fn translate_region_clamps_point_inside_shrinking_multi_char_source() {
         );
     }
 }
+
+/// `buffer-substring-no-properties` now takes its character count from the
+/// positions it already resolved instead of re-walking the copied bytes, so
+/// the count has to be right for every shape of multibyte text: pure ASCII,
+/// multi-byte characters, a region that starts and ends mid-buffer, reversed
+/// arguments, an empty region, and a narrowed buffer.
+#[test]
+fn buffer_substring_no_properties_reports_the_right_length_for_multibyte_text() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::Context::new();
+    // Mixed widths: ASCII, 2-byte, 3-byte and 4-byte characters.
+    ev.eval_str(
+        "(progn (set-buffer (get-buffer-create \"substr-probe\"))
+                (insert \"abcé日本語x😀z\"))",
+    )
+    .expect("fill the probe buffer");
+
+    for expr in [
+        "(buffer-substring-no-properties (point-min) (point-max))",
+        "(buffer-substring-no-properties 4 8)",
+        "(buffer-substring-no-properties 8 4)",
+        "(buffer-substring-no-properties 3 3)",
+        "(buffer-substring-no-properties (point-min) 5)",
+    ] {
+        let got = crate::emacs_core::error::format_eval_result(&ev.eval_str(expr));
+        // `length` walks the string's own character count, so it disagrees
+        // with the bytes exactly when the cached count is wrong.
+        let len =
+            crate::emacs_core::error::format_eval_result(&ev.eval_str(&format!("(length {expr})")));
+        let via_chars = crate::emacs_core::error::format_eval_result(
+            &ev.eval_str(&format!("(length (append {expr} nil))")),
+        );
+        assert_eq!(
+            len, via_chars,
+            "{expr}: stored length disagrees with the characters ({got})"
+        );
+    }
+
+    // Narrowing moves point-min/point-max; the count must follow.
+    let narrowed = crate::emacs_core::error::format_eval_result(&ev.eval_str(
+        "(progn (narrow-to-region 4 9)
+                (let ((s (buffer-substring-no-properties (point-min) (point-max))))
+                  (prog1 (list (length s) (length (append s nil))) (widen))))",
+    ));
+    let parts: Vec<&str> = narrowed
+        .trim_start_matches("OK (")
+        .trim_end_matches(')')
+        .split(' ')
+        .collect();
+    assert_eq!(parts.len(), 2, "narrowed probe returned {narrowed}");
+    assert_eq!(
+        parts[0], parts[1],
+        "narrowed: stored length disagrees ({narrowed})"
+    );
+}

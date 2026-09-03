@@ -1179,6 +1179,50 @@ pub(crate) fn current_buffer_accessible_char_region_in_buffers(
     )))
 }
 
+/// [`current_buffer_accessible_char_region_in_buffers`] that also reports the
+/// region's CHARACTER count.
+///
+/// The resolver clamps and orders two character positions, so the count is
+/// `to - from` -- arithmetic the caller would otherwise recover by walking
+/// every byte of the copy.  GNU takes both lengths the same way
+/// (`editfns.c:1608`).
+pub(crate) fn current_buffer_accessible_char_region_with_chars(
+    buffers: &BufferManager,
+    start_arg: &Value,
+    end_arg: &Value,
+) -> Result<Option<(EmacsByteRange, usize)>, Flow> {
+    let Some(buf) = buffers.current_buffer() else {
+        return Ok(None);
+    };
+    let start = expect_integer_or_marker_in_buffers(buffers, start_arg)?;
+    let end = expect_integer_or_marker_in_buffers(buffers, end_arg)?;
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
+    if start.as_i64() < point_min
+        || start.as_i64() > point_max
+        || end.as_i64() < point_min
+        || end.as_i64() > point_max
+    {
+        return Err(signal(
+            LispCondition::ArgsOutOfRange,
+            vec![Value::make_buffer(buf.id), *start_arg, *end_arg],
+        ));
+    }
+    let (from, to) = if start <= end {
+        (start, end)
+    } else {
+        (end, start)
+    };
+    let chars = (to.as_i64() - from.as_i64()).max(0) as usize;
+    Ok(Some((
+        EmacsByteRange::new(
+            buf.lisp_pos_to_accessible_emacs_byte_pos(from),
+            buf.lisp_pos_to_accessible_emacs_byte_pos(to),
+        ),
+        chars,
+    )))
+}
+
 // ---------------------------------------------------------------------------
 // Eval-dependent builtins (need &mut Context for buffer access)
 // ---------------------------------------------------------------------------
@@ -1512,8 +1556,11 @@ pub(crate) fn builtin_buffer_substring_no_properties(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("buffer-substring-no-properties", &args, 2)?;
-    let Some(byte_range) =
-        current_buffer_accessible_char_region_in_buffers(&ctx.buffers, &args[0], &args[1])?
+    // No Lisp runs between resolving the region and copying it (the
+    // fontify hook belongs to `buffer-substring`, not this one), so the
+    // character count the resolver computed still describes the bytes.
+    let Some((byte_range, chars)) =
+        current_buffer_accessible_char_region_with_chars(&ctx.buffers, &args[0], &args[1])?
     else {
         return Ok(Value::heap_string(
             crate::heap_types::LispString::from_emacs_bytes(Vec::new()),
@@ -1526,9 +1573,11 @@ pub(crate) fn builtin_buffer_substring_no_properties(
     };
     let mut bytes = Vec::new();
     buf.copy_emacs_byte_range_to(byte_range, &mut bytes);
-    Ok(Value::heap_string(
-        crate::emacs_core::builtins::lisp_string_from_buffer_bytes(bytes, buf.get_multibyte()),
-    ))
+    Ok(Value::heap_string(if buf.get_multibyte() {
+        crate::heap_types::LispString::from_emacs_bytes_with_chars(bytes, chars)
+    } else {
+        crate::emacs_core::builtins::lisp_string_from_buffer_bytes(bytes, false)
+    }))
 }
 
 /// `(following-char)` — return character after point (0 if at end).

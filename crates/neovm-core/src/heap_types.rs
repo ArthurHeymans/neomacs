@@ -361,6 +361,26 @@ impl LispString {
         Self::from_owned_payload(data, size, size_byte)
     }
 
+    /// [`Self::from_emacs_bytes`] for a caller that already knows the
+    /// character count, so the bytes are not walked a second time to
+    /// recover it.
+    ///
+    /// GNU builds a buffer substring this way: `make_uninit_multibyte_string
+    /// (end - start, end_byte - start_byte)` (`editfns.c:1608`) takes both
+    /// lengths as arithmetic on positions it already holds, then does one
+    /// memcpy.  `size` must be the true character count of `data`; the
+    /// `debug_assert` below is the check, because `from_owned_payload` only
+    /// validates the BYTE length.
+    pub fn from_emacs_bytes_with_chars(data: Vec<u8>, size: usize) -> Self {
+        debug_assert_eq!(
+            size,
+            emacs_char::chars_in_multibyte(&data),
+            "caller-supplied character count must match the bytes"
+        );
+        let size_byte = data.len() as i64;
+        Self::from_owned_payload(data, size, size_byte)
+    }
+
     /// Reconstruct a `LispString` from pdump data with pre-computed fields.
     /// The caller is responsible for passing consistent `data`, `size`, and
     /// `size_byte` values (as stored in the dump file).
