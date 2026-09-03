@@ -11949,6 +11949,27 @@ impl Context {
         self.obarray.set_symbol_function(name, value);
     }
 
+    /// GNU `do_symval_forwarding` (`src/data.c:1337-1360`) for the descriptor
+    /// variants whose storage is the descriptor itself: `Lisp_Intfwd`,
+    /// `Lisp_Boolfwd` and `Lisp_Objfwd` are one load each.
+    /// `Lisp_Kboard_Objfwd` resolves in keyboard context and
+    /// `Lisp_Buffer_Objfwd` in buffer context, so both answer `None` and
+    /// leave their reads to [`Self::forwarded_buffer_obj_value`] and the
+    /// full walk.
+    #[inline]
+    fn forwarded_descriptor_value(
+        &self,
+        sym: &crate::emacs_core::symbol::LispSymbol,
+    ) -> Option<Value> {
+        use crate::emacs_core::forward::LispFwdType;
+
+        let fwd = unsafe { &*sym.val.fwd };
+        match fwd.ty {
+            LispFwdType::Int | LispFwdType::Bool | LispFwdType::Obj => fwd.load(),
+            LispFwdType::BufferObj | LispFwdType::KboardObj => None,
+        }
+    }
+
     #[inline]
     fn forwarded_buffer_obj_value(
         &self,
@@ -12106,6 +12127,15 @@ impl Context {
                 }
                 crate::emacs_core::symbol::SymbolRedirect::Forwarded => {
                     if let Some(value) = self.forwarded_buffer_obj_value(sym) {
+                        return Ok(SymbolValueLookup::Bound(value));
+                    }
+                    // The remaining descriptor variants are GNU's one-load
+                    // `do_symval_forwarding` cases.  Without them every read
+                    // of a C-defined global (`char-script-table`,
+                    // `inhibit-changing-match-data`, `default-text-properties`
+                    // ...) walked the keyword memo, the alias chain and the
+                    // canonical checks to reach the same load.
+                    if let Some(value) = self.forwarded_descriptor_value(sym) {
                         return Ok(SymbolValueLookup::Bound(value));
                     }
                 }

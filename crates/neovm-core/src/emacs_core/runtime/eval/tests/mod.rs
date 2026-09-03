@@ -24664,3 +24664,57 @@ fn let_inside_unwind_protect_restores_before_the_cleanup_runs() {
     ));
     assert_eq!(result, "OK (1 1)");
 }
+
+/// Reading a C-defined global takes GNU's one-load `do_symval_forwarding`
+/// leaf.  The values, the void/boundp answers and the write-back must be
+/// identical to the full walk for every descriptor variant: an integer
+/// forwarder, a boolean one, an object one, and a buffer-local slot (which
+/// stays on the buffer path).
+#[test]
+fn forwarded_globals_read_the_same_through_the_leaf_and_the_full_walk() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let probe = r#"(list (integerp gc-cons-threshold)
+                         (progn (setq gc-cons-threshold 654321) gc-cons-threshold)
+                         (default-value 'gc-cons-threshold)
+                         (symbol-value 'gc-cons-threshold)
+                         (boundp 'gc-cons-threshold)
+                         (progn (setq case-fold-search t) (list case-fold-search
+                                                                (symbol-value 'case-fold-search)
+                                                                (default-value 'case-fold-search)))
+                         (progn (setq tab-width 13) (list tab-width
+                                                          (symbol-value 'tab-width))))"#;
+    assert_eq!(
+        format_eval_result(&ev.eval_str(probe)),
+        "OK (t 654321 654321 654321 t (t t t) (13 13))"
+    );
+}
+
+/// An alias to a forwarded global still indirects (GNU `find_symbol_value`
+/// follows `SYMBOL_VARALIAS` before dispatching on the redirect), and a
+/// buffer-local binding of a forwarded slot still shadows the default.
+#[test]
+fn forwarded_globals_keep_alias_and_buffer_local_semantics() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    assert_eq!(
+        format_eval_result(&ev.eval_str(
+            "(progn (defvaralias 'fwd-leaf-alias 'gc-cons-threshold)
+                    (setq gc-cons-threshold 4242)
+                    (list fwd-leaf-alias (symbol-value 'fwd-leaf-alias)))"
+        )),
+        "OK (4242 4242)"
+    );
+    // Primitives only: a bare `Context` has no `setq-default`/`with-temp-buffer`
+    // macros (they live in subr.el).
+    assert_eq!(
+        format_eval_result(&ev.eval_str(
+            "(progn (set-default 'tab-width 8)
+                    (set-buffer (get-buffer-create \"fwd-leaf-probe\"))
+                    (make-local-variable 'tab-width)
+                    (set 'tab-width 3)
+                    (list tab-width (symbol-value 'tab-width) (default-value 'tab-width)))"
+        )),
+        "OK (3 3 8)"
+    );
+}
