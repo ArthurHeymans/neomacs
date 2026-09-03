@@ -1,8 +1,7 @@
 use super::{
     BufferLayoutInputState, Frame, FrameId, FrameManager, FrameParam, HorizontalScrollBarType,
     VerticalScrollBarType, Window, WindowDisplaySnapshot, WindowDisplaySnapshotFreshness,
-    WindowDisplayState, WindowId, WindowLayoutInputState, WindowLayoutParameterState,
-    WindowMargins,
+    WindowDisplayState, WindowId, WindowLayoutInputState, WindowMargins,
 };
 use crate::buffer::{BufferId, LispCharPos1};
 use crate::emacs_core::value::Value;
@@ -36,6 +35,11 @@ thread_local! {
     /// epoch local to the evaluator thread avoids unrelated parallel contexts
     /// invalidating one another while making every in-thread mutation visible.
     static CHAR_TABLE_LAYOUT_MUTATION_EPOCH: Cell<u64> = const { Cell::new(0) };
+
+    /// Unique identities for window-parameter states created on this
+    /// evaluator thread.  Window trees are cloned for saved configurations,
+    /// so a counter stored on the window itself can fork and later collide.
+    static WINDOW_PARAMETERS_LAYOUT_GENERATION: Cell<u64> = const { Cell::new(0) };
 }
 
 pub(crate) fn char_table_layout_mutation_epoch() -> u64 {
@@ -44,6 +48,17 @@ pub(crate) fn char_table_layout_mutation_epoch() -> u64 {
 
 pub(crate) fn note_char_table_layout_mutation() {
     CHAR_TABLE_LAYOUT_MUTATION_EPOCH.with(|epoch| epoch.set(epoch.get().wrapping_add(1)));
+}
+
+pub(super) fn next_window_parameters_generation() -> u64 {
+    WINDOW_PARAMETERS_LAYOUT_GENERATION.with(|generation| {
+        let next = generation
+            .get()
+            .checked_add(1)
+            .expect("window parameter layout generation exhausted");
+        generation.set(next);
+        next
+    })
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -372,7 +387,7 @@ impl Frame {
             margins: *margins,
             display_table_identity: display.display_table.bits(),
             char_table_mutation_epoch: char_table_layout_mutation_epoch(),
-            layout_parameters: WindowLayoutParameterState::of(window.parameters()),
+            window_parameters_generation: window.parameters_generation(),
             left_fringe_width,
             right_fringe_width,
             fringes_outside_margins: display.fringes_outside_margins,

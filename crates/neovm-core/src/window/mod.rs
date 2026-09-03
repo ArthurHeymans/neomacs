@@ -536,7 +536,7 @@ pub struct WindowLayoutInputState {
     pub(crate) margins: WindowMargins,
     pub(crate) display_table_identity: usize,
     pub(crate) char_table_mutation_epoch: u64,
-    pub(crate) layout_parameters: WindowLayoutParameterState,
+    pub(crate) window_parameters_generation: u64,
     pub(crate) left_fringe_width: i32,
     pub(crate) right_fringe_width: i32,
     pub(crate) fringes_outside_margins: bool,
@@ -700,72 +700,6 @@ impl WindowLayoutValueIdentity {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct WindowLayoutVariableState {
     values: [Option<WindowLayoutValueIdentity>; <WindowLayoutVariable as strum::EnumCount>::COUNT],
-}
-
-/// The window parameters redisplay reads.
-///
-/// GNU reads these live and never treats `set-window-parameter` itself as a
-/// redisplay event: Lisp entered FROM redisplay rewrites its own bookkeeping
-/// parameters on every evaluation (`tab-line-format` stores `tab-line-cache`
-/// and, through `tab-line-tabs-fixed-window-buffers`, `tab-line-buffers`),
-/// so a write counter over the whole alist made every layout attempt that
-/// evaluated a tab line invalidate itself until the frame was rejected.
-/// Freshness therefore keys on the identities of exactly the parameters
-/// layout consumes.
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    strum::EnumString,
-    strum::IntoStaticStr,
-    strum::EnumCount,
-    strum::VariantArray,
-)]
-#[repr(usize)]
-#[strum(serialize_all = "kebab-case")]
-pub enum WindowLayoutParameter {
-    /// Per-window override of the buffer's `mode-line-format`.
-    ModeLineFormat,
-    /// Per-window override of the buffer's `header-line-format`.
-    HeaderLineFormat,
-    /// Per-window override of the buffer's `tab-line-format`.
-    TabLineFormat,
-    /// The cursor effect the renderer applies to this window's cursor.
-    NeomacsCursorEffect,
-}
-
-impl WindowLayoutParameter {
-    pub fn name(self) -> &'static str {
-        self.into()
-    }
-
-    pub fn symbol(self) -> Value {
-        Value::symbol(self.name())
-    }
-}
-
-/// Identity snapshot of [`WindowLayoutParameter`] values on one window.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct WindowLayoutParameterState {
-    values: [Option<WindowLayoutValueIdentity>; <WindowLayoutParameter as strum::EnumCount>::COUNT],
-}
-
-impl WindowLayoutParameterState {
-    pub(crate) fn of(parameters: &[(Value, Value)]) -> Self {
-        use strum::VariantArray;
-
-        let mut values = [None; <WindowLayoutParameter as strum::EnumCount>::COUNT];
-        for parameter in WindowLayoutParameter::VARIANTS {
-            let key = parameter.symbol();
-            values[*parameter as usize] = parameters
-                .iter()
-                .find(|(existing_key, _)| crate::emacs_core::value::eq_value(existing_key, &key))
-                .map(|(_, value)| WindowLayoutValueIdentity::of(*value));
-        }
-        Self { values }
-    }
 }
 
 /// Selection inputs that affect active/inactive chrome and cursor layout.
@@ -1263,6 +1197,8 @@ pub enum Window {
         dedicated: Value,
         /// Lisp-visible per-window parameter alist, newest entries first.
         parameters: WindowParameters,
+        /// Monotonic identity for changes to `parameters`.
+        parameters_generation: u64,
         /// Live-window history state mirrored from GNU `struct window`.
         history: WindowHistoryState,
         /// Desired height in lines (for fixed windows, 0 = flexible).
@@ -1357,6 +1293,8 @@ pub enum Window {
         left_col: i64,
         /// Lisp-visible per-window parameter alist, newest entries first.
         parameters: WindowParameters,
+        /// Monotonic identity for changes to `parameters`.
+        parameters_generation: u64,
         /// Combination limit — prevents recombination when non-nil.
         /// Mirrors GNU Emacs `w->combination_limit`.
         combination_limit: bool,
@@ -1391,6 +1329,7 @@ impl Window {
             old_point: LispCharPos1::ONE,
             dedicated: Value::NIL,
             parameters: Vec::new(),
+            parameters_generation: 0,
             history: WindowHistoryState::default(),
             fixed_height: 0,
             fixed_width: 0,
@@ -1733,8 +1672,34 @@ impl Window {
 
     /// Return a mutable reference to this window's Lisp-visible parameter alist.
     pub fn parameters_mut(&mut self) -> &mut WindowParameters {
+        let next_generation = display::next_window_parameters_generation();
         match self {
-            Window::Leaf { parameters, .. } | Window::Internal { parameters, .. } => parameters,
+            Window::Leaf {
+                parameters,
+                parameters_generation,
+                ..
+            }
+            | Window::Internal {
+                parameters,
+                parameters_generation,
+                ..
+            } => {
+                *parameters_generation = next_generation;
+                parameters
+            }
+        }
+    }
+
+    pub const fn parameters_generation(&self) -> u64 {
+        match self {
+            Window::Leaf {
+                parameters_generation,
+                ..
+            }
+            | Window::Internal {
+                parameters_generation,
+                ..
+            } => *parameters_generation,
         }
     }
 
@@ -2537,11 +2502,10 @@ impl WindowLayoutAttemptFreshness {
                 let mut expected_after = self;
                 // GNU tab-line.el writes window-local caches such as
                 // `tab-line-buffers` while `display_mode_lines` is formatting
-                // chrome.  Only the parameters redisplay reads are layout
-                // inputs at all (`WindowLayoutParameter`), and even those,
-                // rewritten by the chrome itself, are observed on the next
-                // redisplay: GNU does not rewind the body already produced.
-                expected_after.window.layout_parameters = after.window.layout_parameters;
+                // chrome.  Face filters observe the new identity on the next
+                // redisplay; GNU does not rewind the body already produced.
+                expected_after.window.window_parameters_generation =
+                    after.window.window_parameters_generation;
                 // Chrome evaluation can autoload its formatter.  The emitted
                 // chrome already used the loaded definition, while the body
                 // precedes this phase in GNU and is not replayed.
@@ -6187,6 +6151,7 @@ fn make_split_sibling(
         buffer_id,
         bounds: sibling_bounds,
         parameters,
+        parameters_generation,
         dedicated,
         history,
         window_start,
@@ -6203,6 +6168,7 @@ fn make_split_sibling(
         *buffer_id = new_buffer_id;
         *sibling_bounds = bounds;
         parameters.clear();
+        *parameters_generation = 0;
         // GNU `make_window` leaves `w->dedicated` nil, and
         // `Fsplit_window_internal` copies only decorations (margins, fringes,
         // scroll bars) from the reference -- never the dedication.  Inheriting
@@ -6422,6 +6388,7 @@ fn split_window_in_tree(
                 },
                 bounds: old_bounds,
                 parameters: Vec::new(),
+                parameters_generation: 0,
                 combination_limit: new_parent_seal,
                 new_pixel: None,
                 new_total: None,
@@ -6541,6 +6508,7 @@ fn split_window_in_tree(
             },
             bounds: old_bounds,
             parameters: Vec::new(),
+            parameters_generation: 0,
             combination_limit: new_parent_seal,
             new_pixel: None,
             new_total: None,

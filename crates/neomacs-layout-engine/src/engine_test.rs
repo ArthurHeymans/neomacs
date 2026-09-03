@@ -31712,11 +31712,13 @@ fn p52_header_and_tab_lines_are_evaluated_with_the_mode_line() {
 /// Lisp entered from redisplay may write its own bookkeeping window
 /// parameters on every evaluation: `tab-line-format` stores `tab-line-cache`
 /// and, through `tab-line-tabs-fixed-window-buffers`, `tab-line-buffers`.
-/// GNU reads window parameters live and never treats such a write as a
-/// redisplay event. Keying attempt freshness on a write counter over the
-/// whole alist made every attempt that evaluated a tab line invalidate
-/// itself, and the frame was rejected once the retry budget ran out —
-/// `neomacs -nw` froze on its last accepted frame the moment
+/// Those writes bump the window-parameter generation, which the BODY
+/// boundary must keep watching (a `:window` face filter may read any
+/// parameter).  Chrome runs after GNU has completed the body, so the
+/// WindowChrome boundary tolerates the bump instead of invalidating the
+/// attempt; without that tolerance every attempt that evaluated a tab line
+/// invalidated itself and the frame was rejected once the retry budget ran
+/// out — `neomacs -nw` froze on its last accepted frame the moment
 /// `global-tab-line-mode` was enabled.
 #[test]
 fn tab_line_that_rewrites_its_bookkeeping_parameter_converges() {
