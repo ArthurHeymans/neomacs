@@ -23,7 +23,12 @@
   <a href="COPYING"><img src="https://img.shields.io/github/license/eval-exec/neomacs" alt="License: GPL-3.0"/></a>
   <a href="https://github.com/eval-exec/neomacs/discussions"><img src="https://img.shields.io/github/discussions/eval-exec/neomacs" alt="Discussions"/></a>
   <a href="https://x.com/evil_exec"><img src="https://img.shields.io/badge/X-Eval%20Exec-000000?logo=x&logoColor=white" alt="X: Eval-Exec"></a>
-
+<a href="https://github.com/sponsors/eval-exec">
+  <img
+    src="https://img.shields.io/badge/Sponsor-eval--exec-ea4aaa?style=flat&logo=githubsponsors&logoColor=white"
+    alt="Sponsor NEO Emacs"
+  />
+</a>
 
   
 </p>
@@ -50,6 +55,15 @@ the test oracle, so every rewritten subsystem is verified to behave identically.
 > [!NOTE]
 > NEO Emacs is a hard fork of GNU Emacs (Lisp tree synced to `emacs-31.0.90`). The C core
 > has been fully replaced by Rust. Fork provenance and rationale: [FAQ](docs/faq.md).
+
+
+## ❤️ Sponsoring
+
+NEO Emacs is a long-term project that takes significant ongoing work to build, test, and
+maintain. If NEO Emacs is useful or exciting to you, please consider supporting its
+development on [❤️ GitHub Sponsors](https://github.com/sponsors/eval-exec).
+
+
 
 ## Showcase
 
@@ -177,11 +191,7 @@ and editor state, the render thread owns the GPU.
 Design principles, the full module map, and why Rust/wgpu:
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Sponsoring
 
-NEO Emacs is a long-term project that takes significant ongoing work to build, test, and
-maintain. If NEO Emacs is useful or exciting to you, please consider supporting its
-development on [❤️ GitHub Sponsors](https://github.com/sponsors/eval-exec).
 
 ## Acknowledgments
 
