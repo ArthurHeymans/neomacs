@@ -189,12 +189,12 @@ fn index_org_has_face_colours() {
         has_help_title(&neo.text_grid()),
         "Neomacs did not display the Doom index.org title"
     );
-    // Wait 3s for buffer colours to fully render after document loads
-    gnu.read(Duration::from_secs(3));
-    neo.read(Duration::from_secs(3));
-    // Let the top-of-buffer face changes settle before comparison.
-    gnu.read(Duration::from_secs(2));
-    neo.read(Duration::from_secs(2));
+    // Keep both PTYs drained while deferred fontification and the final
+    // top-of-buffer repaint settle.  Reading these serially lets the editor
+    // visited second accumulate a different physical right-margin history
+    // under load even when its final cells are identical.
+    read_both(&mut gnu, &mut neo, Duration::from_secs(3));
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
 
     // Count cells with non-default foreground
     let count_colours = |sess: &TuiSession| -> (usize, usize) {
