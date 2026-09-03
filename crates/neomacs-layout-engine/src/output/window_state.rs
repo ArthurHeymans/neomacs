@@ -310,28 +310,33 @@ pub(crate) struct OutputWindowRowGrid {
     finalized_rows: Vec<bool>,
 }
 
-/// How an enabled buffer row can own point.
+/// Why an enabled buffer row owns point.
 ///
-/// GNU's `set_cursor_from_row` treats the newline glyph of an empty line as a
-/// real cursor position even though the row displays no buffer text.  Keeping
-/// that case distinct from an ordinary displayed span prevents callers from
-/// accidentally using `displays_text` as a cursor-addressability predicate.
+/// GNU `row_containing_pos` scans rows in display order.  A position strictly
+/// inside a displayed span belongs to that row; a position exactly at a row's
+/// end belongs to the following row unless `row_for_charpos_p` says the first
+/// row ends at visible ZV (`src/xdisp.c:22425-22504,24942-25003`).  Keeping the
+/// endpoint case closed and explicit prevents synthetic blank rows below ZV
+/// from globally outranking an earlier real span with the same shifted anchor.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CursorRowBufferMatch {
-    DisplayedSpan,
-    EmptyLineAnchor,
+    DisplayedInterior,
+    VisibleBufferEnd,
 }
 
 impl CursorRowBufferMatch {
     fn classify(row: &GlyphRow, charpos: usize) -> Option<Self> {
-        if !row.enabled || row.role != GlyphRowRole::Text {
+        if !row.enabled
+            || row.role != GlyphRowRole::Text
+            || charpos < row.start_charpos
+            || charpos > row.end_charpos
+        {
             return None;
         }
-        if !row.displays_text && row.start_charpos == charpos && row.end_charpos == charpos {
-            return Some(Self::EmptyLineAnchor);
+        if charpos < row.end_charpos && row.displays_text {
+            return Some(Self::DisplayedInterior);
         }
-        (row.displays_text && row.start_charpos <= charpos && charpos <= row.end_charpos)
-            .then_some(Self::DisplayedSpan)
+        (charpos == row.end_charpos && row.ends_at_zv).then_some(Self::VisibleBufferEnd)
     }
 }
 
@@ -407,22 +412,26 @@ impl OutputWindowRowGrid {
 
     /// Find the enabled buffer row that owns `charpos` for cursor placement.
     ///
-    /// Prefer an exact empty-line anchor over a displayed span.  This mirrors
-    /// GNU `set_cursor_from_row`: an empty line's newline glyph is cursor
-    /// addressable, while synthetic rows below ZV can repeat the same anchor;
-    /// the first such row owns the hardware cursor.
+    /// Return the first enabled row that owns `charpos` in display order.
+    ///
+    /// This is GNU `row_containing_pos`'s decisive ordering: an earlier real
+    /// span wins immediately, while an end position is admitted only when that
+    /// row ends at visible ZV.  No second pass can let a later synthetic row
+    /// steal an already-resolved point.
     pub(crate) fn find_cursor_row_for_charpos(&self, charpos: usize) -> Option<usize> {
-        let mut displayed_span = None;
-        for (row_index, row) in self.matrix.rows.iter().enumerate() {
-            match CursorRowBufferMatch::classify(row, charpos) {
-                Some(CursorRowBufferMatch::EmptyLineAnchor) => return Some(row_index),
-                Some(CursorRowBufferMatch::DisplayedSpan) => {
-                    displayed_span.get_or_insert(row_index);
-                }
-                None => {}
-            }
-        }
-        displayed_span
+        self.matrix
+            .rows
+            .iter()
+            .enumerate()
+            .find_map(
+                |(row_index, row)| match CursorRowBufferMatch::classify(row, charpos) {
+                    Some(
+                        CursorRowBufferMatch::DisplayedInterior
+                        | CursorRowBufferMatch::VisibleBufferEnd,
+                    ) => Some(row_index),
+                    None => None,
+                },
+            )
     }
 
     pub(crate) fn row_mut(&mut self, row: usize) -> Option<&mut GlyphRow> {
