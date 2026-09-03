@@ -1014,9 +1014,10 @@ impl OverlayList {
     /// are folded in by identity, which can only make the digest differ more
     /// often -- over-invalidating costs a redisplay, under-invalidating
     /// leaves a stale frame on screen.
-    pub fn content_digest(&self) -> u64 {
+    pub fn content_digest(&self) -> Option<u64> {
         use std::hash::Hasher;
 
+        let properties = DisplayOverlayProperties::intern();
         let mut hasher = rustc_hash::FxHasher::default();
         for overlay in self.index.all_ascending() {
             hasher.write_u64(
@@ -1027,12 +1028,29 @@ impl OverlayList {
                 self.overlay_end_emacs_byte_pos(overlay)
                     .map_or(u64::MAX, |p| p.get() as u64),
             );
-            match self.overlay_plist(overlay) {
-                Some(plist) => hash_value_content(plist, 0, &mut hasher),
-                None => hasher.write_u8(0xff),
+            let Some(plist) = self.overlay_plist(overlay) else {
+                hasher.write_u8(0xff);
+                continue;
+            };
+            let mut cursor = plist;
+            while cursor.is_cons() {
+                let key = cursor.cons_car();
+                let rest = cursor.cons_cdr();
+                if !rest.is_cons() {
+                    break;
+                }
+                match properties.classify(key) {
+                    OverlayPropertyRelevance::CategoryIndirection => return None,
+                    OverlayPropertyRelevance::Rendered => {
+                        hash_value_content(key, 0, &mut hasher);
+                        hash_value_content(rest.cons_car(), 0, &mut hasher);
+                    }
+                    OverlayPropertyRelevance::Unrendered => {}
+                }
+                cursor = rest.cons_cdr();
             }
         }
-        hasher.finish()
+        Some(hasher.finish())
     }
 
     pub fn overlays_in_accessible_emacs_byte_range(
@@ -1782,6 +1800,81 @@ mod tests;
 /// `depth` only bounds pathological self-referential structure; a plist that
 /// deep is folded by identity from there down, which over-invalidates rather
 /// than under-invalidates. Unlike `sxhash`, nothing is skipped for being long.
+/// What an overlay property means to [`OverlayList::content_digest`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OverlayPropertyRelevance {
+    /// Redisplay reads it, so the digest must fold its value.
+    Rendered,
+    /// `category`: the value is a SYMBOL whose plist supplies the real
+    /// properties, and that plist can be rewritten without touching any
+    /// overlay, so no digest of the overlay itself can be trusted.
+    CategoryIndirection,
+    /// Nothing that builds a glyph can see it.
+    Unrendered,
+}
+
+/// The overlay properties redisplay reads, and therefore the only ones a
+/// content digest has to cover.
+///
+/// This is an ALLOWLIST rather than "hash the whole plist", and the reason is
+/// concrete: application code routinely parks freshly allocated objects on
+/// overlays that nothing renders. The `rust-lsp-typing` fixture puts a
+/// `json-parse-string` hash table under `lsp-diagnostic` on every overlay it
+/// makes, so a digest that folded the whole plist would move on every frame --
+/// not conservatively slow, simply inert.
+///
+/// The list is auditable, not guessed: redisplay resolves a fixed set of
+/// property NAMES, so a property outside the set cannot reach a glyph. It was
+/// taken by reading the layout engine's property lookups, and anything added
+/// there has to be added here. `help-echo` is deliberately absent: the layout
+/// engine names it only in its own tests, and mouse highlight re-reads overlays
+/// live rather than consulting the glyph matrix.
+struct DisplayOverlayProperties {
+    rendered: [Value; 12],
+    category: Value,
+}
+
+impl DisplayOverlayProperties {
+    /// Interning once per digest costs thirteen obarray lookups per frame,
+    /// against one lookup per plist key if this were done per comparison.
+    /// Symbol ids are NOT cached across calls: a pdump load replaces the
+    /// interner, and a stale id here would silently classify every key as
+    /// unrendered.
+    fn intern() -> Self {
+        Self {
+            rendered: [
+                Value::symbol("face"),
+                Value::symbol("display"),
+                Value::symbol("invisible"),
+                Value::symbol("before-string"),
+                Value::symbol("after-string"),
+                Value::symbol("line-prefix"),
+                Value::symbol("wrap-prefix"),
+                Value::symbol("priority"),
+                Value::symbol("window"),
+                Value::symbol("cursor"),
+                Value::symbol("mouse-face"),
+                Value::symbol("neomacs-cursor-effect"),
+            ],
+            category: Value::symbol("category"),
+        }
+    }
+
+    fn classify(&self, key: Value) -> OverlayPropertyRelevance {
+        if key.bits() == self.category.bits() {
+            return OverlayPropertyRelevance::CategoryIndirection;
+        }
+        if self
+            .rendered
+            .iter()
+            .any(|rendered| rendered.bits() == key.bits())
+        {
+            return OverlayPropertyRelevance::Rendered;
+        }
+        OverlayPropertyRelevance::Unrendered
+    }
+}
+
 fn hash_value_content(value: Value, depth: u32, hasher: &mut rustc_hash::FxHasher) {
     use crate::emacs_core::value::ValueKind;
     use std::hash::Hasher;
@@ -1805,7 +1898,16 @@ fn hash_value_content(value: Value, depth: u32, hasher: &mut rustc_hash::FxHashe
         ValueKind::String => {
             hasher.write_u8(5);
             match value.as_lisp_string() {
-                Some(s) => hasher.write(s.as_bytes()),
+                Some(s) => {
+                    hasher.write(s.as_bytes());
+                    // A `before-string`'s own text properties are part of what
+                    // it renders as, and `put-text-property` on it moves no
+                    // overlay tick. Folding the interval table's mutation
+                    // counter catches that; two strings built the same way
+                    // reach the same counter, so it does not over-invalidate
+                    // an honest rebuild.
+                    hasher.write_u64(s.intervals().mutation_tick());
+                }
                 None => hasher.write_u64(value.bits() as u64),
             }
         }

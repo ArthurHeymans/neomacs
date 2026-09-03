@@ -2322,6 +2322,11 @@ pub struct Buffer {
     pub(crate) saved_point_before_command: SavedPointBeforeCommand,
 }
 
+/// Stand-in digest for an overlay set that cannot be content-addressed. Mixed
+/// with the overlay tick so consecutive frames differ, which is precisely the
+/// pre-digest behaviour.
+const NO_OVERLAY_CONTENT_DIGEST: u64 = 0x4e6f_4469_6765_7374;
+
 impl Buffer {
     /// Return the chartable Value stored in this buffer's syntax-table
     /// slot. Mirrors GNU `BVAR (buf, syntax_table)` — reading directly
@@ -4024,7 +4029,14 @@ impl Buffer {
         {
             return digest;
         }
-        let digest = self.overlays().content_digest();
+        // No digest means the set cannot be content-addressed at all (an
+        // overlay carries `category`, whose real properties live on a symbol
+        // plist nothing here can watch). Falling back to the tick reproduces
+        // exactly the pre-digest behaviour: every touch invalidates.
+        let digest = self
+            .overlays()
+            .content_digest()
+            .unwrap_or(NO_OVERLAY_CONTENT_DIGEST ^ tick as u64);
         self.overlay_digest_cache.set(Some((tick, digest)));
         digest
     }

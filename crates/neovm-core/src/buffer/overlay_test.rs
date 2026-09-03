@@ -1516,14 +1516,19 @@ fn content_digest_survives_deleting_and_recreating_the_identical_overlay_set() {
 
     let mut list = OverlayList::new();
     let first_generation = build(&mut list);
-    let before = list.content_digest();
+    let before = list
+        .content_digest()
+        .expect("no category property, so the set is content-addressable");
 
     for overlay in &first_generation {
         assert!(list.delete_overlay(*overlay));
     }
     assert_eq!(
-        list.content_digest(),
-        OverlayList::new().content_digest(),
+        list.content_digest()
+            .expect("no category property, so the set is content-addressable"),
+        OverlayList::new()
+            .content_digest()
+            .expect("an empty set is trivially content-addressable"),
         "an emptied list must digest as an empty one"
     );
 
@@ -1537,7 +1542,8 @@ fn content_digest_survives_deleting_and_recreating_the_identical_overlay_set() {
     );
     assert_eq!(
         before,
-        list.content_digest(),
+        list.content_digest()
+            .expect("no category property, so the set is content-addressable"),
         "identical content must digest identically"
     );
 }
@@ -1558,6 +1564,7 @@ fn content_digest_moves_for_span_property_and_deep_plist_changes() {
         list.overlay_put(overlay, face, Value::symbol("error"))
             .unwrap();
         list.content_digest()
+            .expect("no category property, so the set is content-addressable")
     };
 
     let moved_end = {
@@ -1567,6 +1574,7 @@ fn content_digest_moves_for_span_property_and_deep_plist_changes() {
         list.overlay_put(overlay, face, Value::symbol("error"))
             .unwrap();
         list.content_digest()
+            .expect("no category property, so the set is content-addressable")
     };
     assert_ne!(baseline, moved_end, "a changed end must move the digest");
 
@@ -1577,14 +1585,23 @@ fn content_digest_moves_for_span_property_and_deep_plist_changes() {
         list.overlay_put(overlay, face, Value::symbol("warning"))
             .unwrap();
         list.content_digest()
+            .expect("no category property, so the set is content-addressable")
     };
-    assert_ne!(baseline, changed_face, "a changed face must move the digest");
+    assert_ne!(
+        baseline, changed_face,
+        "a changed face must move the digest"
+    );
 
-    // Eight properties deep, one string differs by a single character.
+    // `overlay-put` prepends, so putting `before-string` FIRST leaves it at
+    // the TAIL of an eight-pair plist. `sxhash`'s `equal` form stops before
+    // reaching it (GNU `SXHASH_MAX_LEN`), which is why the digest folds the
+    // plist itself instead of calling into it.
     let deep = |tail: &str| {
         let mut list = OverlayList::new();
         let overlay = alloc_overlay(3, 7);
         list.insert_overlay(overlay);
+        list.overlay_put(overlay, Value::symbol("before-string"), Value::string(tail))
+            .unwrap();
         for index in 0..7 {
             list.overlay_put(
                 overlay,
@@ -1593,13 +1610,66 @@ fn content_digest_moves_for_span_property_and_deep_plist_changes() {
             )
             .unwrap();
         }
-        list.overlay_put(overlay, Value::symbol("before-string"), Value::string(tail))
-            .unwrap();
         list.content_digest()
+            .expect("no category property, so the set is content-addressable")
     };
     assert_ne!(
         deep("a"),
         deep("b"),
-        "a change past the eighth property must still move the digest"
+        "a change in the LAST plist pair must still move the digest"
+    );
+}
+
+/// The reason the digest folds an allowlist rather than the whole plist:
+/// application code parks freshly allocated objects that nothing renders on
+/// overlays. `rust-lsp-typing.el:131` puts a `json-parse-string` hash table
+/// under `lsp-diagnostic` on every overlay it makes, so folding the whole
+/// plist would move the digest every frame while the screen is identical.
+#[test]
+fn content_digest_ignores_a_property_redisplay_never_reads() {
+    crate::test_utils::init_test_tracing();
+    let digest_carrying = |payload: Value| {
+        let mut list = OverlayList::new();
+        let overlay = alloc_overlay(3, 7);
+        list.insert_overlay(overlay);
+        list.overlay_put(overlay, Value::symbol("face"), Value::symbol("error"))
+            .unwrap();
+        list.overlay_put(overlay, Value::symbol("lsp-diagnostic"), payload)
+            .unwrap();
+        list.content_digest()
+            .expect("no category property, so the set is content-addressable")
+    };
+
+    // Two distinct heap objects standing in for two parses of the same JSON.
+    let first = alloc_overlay(0, 1);
+    let second = alloc_overlay(0, 1);
+    assert_ne!(first.bits(), second.bits(), "the payloads must not be eq");
+    assert_eq!(
+        digest_carrying(first),
+        digest_carrying(second),
+        "an unrendered property must not move the digest"
+    );
+}
+
+/// `category` names a symbol whose plist supplies the real properties, and
+/// that plist can be rewritten without touching any overlay. Nothing the
+/// overlay set alone can hash covers it, so the digest declines rather than
+/// claiming a freshness it cannot prove.
+#[test]
+fn content_digest_declines_for_an_overlay_carrying_a_category() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let overlay = alloc_overlay(3, 7);
+    list.insert_overlay(overlay);
+    assert!(list.content_digest().is_some());
+    list.overlay_put(
+        overlay,
+        Value::symbol("category"),
+        Value::symbol("my-category"),
+    )
+    .unwrap();
+    assert!(
+        list.content_digest().is_none(),
+        "a category overlay cannot be content-addressed"
     );
 }
