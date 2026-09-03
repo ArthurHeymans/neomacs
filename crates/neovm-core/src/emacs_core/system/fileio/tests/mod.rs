@@ -5349,6 +5349,58 @@ fn test_write_region_visit_sets_file_name_and_clears_modified() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn write_region_reports_nonvisiting_interactive_operation() {
+    crate::test_utils::init_test_tracing();
+
+    let dir =
+        std::env::temp_dir().join(format!("neovm_write_region_report_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+
+    for (label, append, initial, expected_prefix) in [
+        ("truncate", Value::NIL, "old", "Wrote "),
+        ("append", Value::T, "old", "Added to "),
+        ("seek", Value::fixnum(1), "old", "Updated "),
+    ] {
+        let out_path = dir.join(format!("{label}.txt"));
+        let out_str = out_path.to_string_lossy().to_string();
+        write_string_to_file(initial, &out_str, false).unwrap();
+
+        let mut eval = Context::new();
+        eval.set_variable("noninteractive", Value::NIL);
+        eval.buffers.current_buffer_mut().unwrap().insert("neo");
+        builtin_write_region(
+            &mut eval,
+            vec![
+                Value::NIL,
+                Value::NIL,
+                Value::string(&out_str),
+                append,
+                Value::NIL,
+            ],
+        )
+        .expect("non-visiting write-region should succeed");
+
+        assert_eq!(
+            eval.current_message_text().as_deref(),
+            Some(format!("{expected_prefix}{out_str}").as_str()),
+            "GNU reports the completed write operation even when VISIT is nil"
+        );
+        let buffer = eval.buffers.current_buffer().expect("current buffer");
+        assert!(
+            buffer.file_name_value().is_nil(),
+            "VISIT=nil must not make the buffer visit the output"
+        );
+        assert!(
+            buffer.is_modified(),
+            "VISIT=nil must not mark the source buffer saved"
+        );
+    }
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
 #[cfg(unix)]
 #[test]
 fn write_region_unlocks_a_successfully_saved_file() {

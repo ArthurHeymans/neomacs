@@ -1373,6 +1373,80 @@ enum FileWriteMode {
     Excl,
 }
 
+/// The three meanings GNU assigns to `write-region`'s VISIT argument.
+///
+/// GNU always retains a `visit_file` for locking and completion messages, but
+/// only `t` and strings make the current buffer visit that file.  A different
+/// non-nil value requests a quiet, non-visiting write.  Keeping those states
+/// distinct prevents the reporting path from being accidentally coupled to
+/// the buffer-visiting path.
+enum WriteRegionVisit {
+    ReportOnly(LispString),
+    Visit(LispString),
+    Quiet(LispString),
+}
+
+impl WriteRegionVisit {
+    fn from_lisp(eval: &Context, argument: Value, output_file: &LispString) -> Self {
+        if argument.is_t() {
+            Self::Visit(output_file.clone())
+        } else if let Some(visit_file) = argument.as_lisp_string() {
+            Self::Visit(resolve_filename_lisp_for_eval(eval, visit_file))
+        } else if argument.is_nil() {
+            Self::ReportOnly(output_file.clone())
+        } else {
+            Self::Quiet(output_file.clone())
+        }
+    }
+
+    fn file_name(&self) -> &LispString {
+        match self {
+            Self::ReportOnly(file) | Self::Visit(file) | Self::Quiet(file) => file,
+        }
+    }
+
+    fn visited_file(&self) -> Option<&LispString> {
+        match self {
+            Self::Visit(file) => Some(file),
+            Self::ReportOnly(_) | Self::Quiet(_) => None,
+        }
+    }
+
+    fn reports_completion(&self) -> bool {
+        match self {
+            Self::ReportOnly(_) | Self::Visit(_) => true,
+            Self::Quiet(_) => false,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum WriteRegionCompletion {
+    Wrote,
+    AddedTo,
+    Updated,
+}
+
+impl WriteRegionCompletion {
+    fn from_append_argument(append: Value) -> Self {
+        if append.is_number() {
+            Self::Updated
+        } else if append.is_truthy() {
+            Self::AddedTo
+        } else {
+            Self::Wrote
+        }
+    }
+
+    fn message_format(self) -> &'static str {
+        match self {
+            Self::Wrote => "Wrote %s",
+            Self::AddedTo => "Added to %s",
+            Self::Updated => "Updated %s",
+        }
+    }
+}
+
 /// Write raw bytes to a file, returning the open `File` handle so the caller
 /// can optionally `sync_all()` before the handle is dropped.
 fn write_bytes_to_file_with_mode(
@@ -6508,15 +6582,9 @@ pub(crate) fn builtin_write_region(
     // the expand-file-name magic handler before the write-region handler.
     let expanded = builtin_expand_file_name(eval, vec![args[2], Value::NIL])?;
     let resolved = resolve_filename_lisp_for_eval(eval, &expect_lisp_string_strict(&expanded)?);
-    let visit_file = match args.get(4) {
-        Some(v) if v.is_t() => Some(resolved.clone()),
-        Some(v) if v.is_string() => Some(resolve_filename_lisp_for_eval(
-            eval,
-            &expect_lisp_string_strict(v)?,
-        )),
-        _ => None,
-    };
-    let default_lock_name = visit_file.clone().unwrap_or_else(|| resolved.clone());
+    let visit_argument = args.get(4).copied().unwrap_or(Value::NIL);
+    let visit = WriteRegionVisit::from_lisp(eval, visit_argument, &resolved);
+    let default_lock_name = visit.file_name().clone();
 
     // GNU `Fwrite_region`, immediately after `Fexpand_file_name` and before the
     // file-name-handler dispatch:
@@ -6591,7 +6659,7 @@ pub(crate) fn builtin_write_region(
     };
     let current_id = current_buffer_id_or_error(&eval.buffers)?;
 
-    if visit_file.is_some() {
+    if visit.visited_file().is_some() {
         let buf = eval
             .buffers
             .get(current_id)
@@ -6692,7 +6760,7 @@ pub(crate) fn builtin_write_region(
         }
         drop(file);
 
-        let visiting_modtime = if visit_file.is_some() {
+        let visiting_modtime = if visit.visited_file().is_some() {
             let meta = std::fs::metadata(&resolved_path).map_err(|err| {
                 signal_file_action_error_value(
                     err,
@@ -6742,8 +6810,7 @@ pub(crate) fn builtin_write_region(
         (Ok(visiting_modtime), Ok(_), Ok(_)) => visiting_modtime,
     };
 
-    let wrote_message_path = visit_file.clone();
-    if let Some(visit_path) = visit_file {
+    if let Some(visit_path) = visit.visited_file().cloned() {
         let _ = eval
             .buffers
             .set_buffer_file_name(current_id, Value::heap_string(visit_path));
@@ -6760,10 +6827,15 @@ pub(crate) fn builtin_write_region(
         "last-coding-system-used",
         Value::symbol(encoded.coding_system),
     );
-    if let Some(path) = wrote_message_path.filter(|_| !eval.noninteractive()) {
+    if visit.reports_completion() && !eval.noninteractive() {
+        let completion =
+            WriteRegionCompletion::from_append_argument(args.get(3).copied().unwrap_or(Value::NIL));
         crate::emacs_core::builtins::builtin_message(
             eval,
-            vec![Value::string("Wrote %s"), Value::heap_string(path)],
+            vec![
+                Value::string(completion.message_format()),
+                Value::heap_string(visit.file_name().clone()),
+            ],
         )?;
     }
     Ok(Value::NIL)
