@@ -57,12 +57,6 @@ the test oracle, so every rewritten subsystem is verified to behave identically.
 > has been fully replaced by Rust. Fork provenance and rationale: [FAQ](docs/faq.md).
 
 
-## ❤️ Sponsoring
-
-NEO Emacs is a long-term project that takes significant ongoing work to build, test, and
-maintain. If NEO Emacs is useful or exciting to you, please consider supporting its
-development on [❤️ GitHub Sponsors](https://github.com/sponsors/eval-exec).
-
 
 
 ## Showcase
@@ -191,7 +185,15 @@ and editor state, the render thread owns the GPU.
 Design principles, the full module map, and why Rust/wgpu:
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+-----
 
+## ❤️ [Sponsoring](https://github.com/sponsors/eval-exec) ❤️
+
+NEO Emacs is a long-term project that takes significant ongoing work to build, test, and
+maintain. If NEO Emacs is useful or exciting to you, please consider supporting its
+development on ❤️ [GitHub Sponsors](https://github.com/sponsors/eval-exec) ❤️.
+
+-----
 
 ## Acknowledgments
 
