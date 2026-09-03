@@ -9,6 +9,8 @@ pub mod device_request;
 pub mod external_buffer;
 pub mod frame_post;
 pub mod glyph_atlas;
+#[cfg(feature = "video")]
+mod gpu_frame_timing;
 pub mod image_cache;
 mod image_sequence;
 pub mod media_budget;

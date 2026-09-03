@@ -157,6 +157,9 @@ pub struct WgpuRenderer {
     pub(super) uniform_bind_group: wgpu::BindGroup,
     /// Texture/media caches
     pub(super) caches: RenderCaches,
+    /// Bounded asynchronous timestamp queries for frame-content passes.
+    #[cfg(feature = "video")]
+    pub(super) gpu_frame_timer: crate::gpu_frame_timing::GpuFrameTimer,
     /// Per-frame reusable vertex upload arenas
     pub(super) arenas: VertexArenas,
     pub(super) width: u32,
@@ -606,7 +609,9 @@ impl WgpuRenderer {
 
         // Create video cache
         #[cfg(feature = "video")]
-        let video_cache = VideoCache::new(
+        let gpu_frame_timer = crate::gpu_frame_timing::GpuFrameTimer::new(&device, &queue);
+        #[cfg(feature = "video")]
+        let mut video_cache = VideoCache::new(
             &device,
             &queue,
             image_cache.bind_group_layout(),
@@ -614,6 +619,8 @@ impl WgpuRenderer {
             video_generation,
             video_wake,
         );
+        #[cfg(feature = "video")]
+        video_cache.set_gpu_timing_status(gpu_frame_timer.status());
 
         // Create the WebView texture cache.
         #[cfg(all(feature = "webview", target_os = "linux"))]
@@ -1152,6 +1159,8 @@ impl WgpuRenderer {
                 webview: webview_cache,
                 surface: shader_surface_cache,
             },
+            #[cfg(feature = "video")]
+            gpu_frame_timer,
             arenas: VertexArenas::new(),
             frame_post: None,
             media_budget: crate::media_budget::MediaBudget::new(),

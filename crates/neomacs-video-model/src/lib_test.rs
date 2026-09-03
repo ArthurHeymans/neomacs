@@ -131,6 +131,8 @@ fn diagnostic_identity_remapping_drops_stale_native_sessions() {
         output_reconfigurations: 0,
         import_counts: VideoImportCounts::default(),
         presentation_counts: super::VideoPresentationCounts::default(),
+        presentation_timing: super::VideoPresentationTiming::default(),
+        gpu_timing: super::VideoGpuTiming::default(),
         terminal_error: None,
     };
     let diagnostics = VideoDiagnostics {

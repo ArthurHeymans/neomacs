@@ -17,9 +17,10 @@ use neomacs_video_model::{
     BiPlanarVideoFormat, InitialPlayback, LoopMode, PackedVideoFormat, PlaybackAction,
     VideoChromaLocation, VideoColorPrimaries, VideoColorRange, VideoColorimetry,
     VideoCompositorImport, VideoDecodeBackend, VideoDecodeResidency, VideoDiagnostics,
-    VideoFrameFormat, VideoFramePath, VideoImportCounts, VideoMatrixCoefficients, VideoOpenRequest,
-    VideoPresentationCounts, VideoPresentationPath, VideoSessionDiagnostics, VideoSessionState,
-    VideoSource, VideoSurfacePoolDiagnostics, VideoSurfacePoolRole, VideoTransferCharacteristic,
+    VideoFrameFormat, VideoFramePath, VideoGpuTiming, VideoGpuTimingStatus, VideoImportCounts,
+    VideoMatrixCoefficients, VideoOpenRequest, VideoPresentationCounts, VideoPresentationPath,
+    VideoPresentationTiming, VideoSessionDiagnostics, VideoSessionState, VideoSource,
+    VideoSurfacePoolDiagnostics, VideoSurfacePoolRole, VideoTransferCharacteristic,
 };
 use std::path::PathBuf;
 
@@ -415,8 +416,45 @@ fn presentation_counts_to_lisp(counts: VideoPresentationCounts) -> Value {
     plist.finish()
 }
 
+fn presentation_timing_to_lisp(timing: VideoPresentationTiming) -> Value {
+    let optional_integer = |value: Option<u64>| value.map_or(Value::NIL, diagnostic_integer);
+    let mut plist = RootedListBuilder::with_capacity(14);
+    plist.field(
+        "interval-samples",
+        diagnostic_integer(timing.interval_samples),
+    );
+    plist.field(
+        "interval-total-us",
+        diagnostic_integer(timing.interval_total_us),
+    );
+    plist.field("interval-min-us", optional_integer(timing.interval_min_us));
+    plist.field("interval-max-us", optional_integer(timing.interval_max_us));
+    plist.field("interval-p50-us", optional_integer(timing.interval_p50_us));
+    plist.field("interval-p95-us", optional_integer(timing.interval_p95_us));
+    plist.field("interval-p99-us", optional_integer(timing.interval_p99_us));
+    plist.finish()
+}
+
+fn gpu_timing_to_lisp(timing: VideoGpuTiming) -> Value {
+    let optional_integer = |value: Option<u64>| value.map_or(Value::NIL, diagnostic_integer);
+    let mut plist = RootedListBuilder::with_capacity(10);
+    plist.field(
+        "status",
+        diagnostic_symbol(match timing.status {
+            VideoGpuTimingStatus::Disabled => "disabled",
+            VideoGpuTimingStatus::Unsupported => "unsupported",
+            VideoGpuTimingStatus::Enabled => "enabled",
+        }),
+    );
+    plist.field("pass-samples", diagnostic_integer(timing.pass_samples));
+    plist.field("pass-total-us", diagnostic_integer(timing.pass_total_us));
+    plist.field("pass-min-us", optional_integer(timing.pass_min_us));
+    plist.field("pass-max-us", optional_integer(timing.pass_max_us));
+    plist.finish()
+}
+
 fn session_diagnostics_to_lisp(session: VideoSessionDiagnostics) -> Value {
-    let mut plist = RootedListBuilder::with_capacity(32);
+    let mut plist = RootedListBuilder::with_capacity(36);
     plist.field("id", diagnostic_integer(session.id.get()));
     plist.field(
         "backend",
@@ -481,6 +519,11 @@ fn session_diagnostics_to_lisp(session: VideoSessionDiagnostics) -> Value {
         "presentation-counts",
         presentation_counts_to_lisp(session.presentation_counts),
     );
+    plist.field(
+        "presentation-timing",
+        presentation_timing_to_lisp(session.presentation_timing),
+    );
+    plist.field("gpu-timing", gpu_timing_to_lisp(session.gpu_timing));
     plist.field(
         "terminal-error",
         session

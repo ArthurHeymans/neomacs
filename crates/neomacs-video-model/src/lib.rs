@@ -865,6 +865,47 @@ pub struct VideoPresentationCounts {
     pub presented_frames: u64,
 }
 
+/// Renderer-observed spacing between successful surface presentations.
+///
+/// Percentiles cover the renderer's bounded recent observation window.  They
+/// measure the complete composited surface cadence for frames containing this
+/// video; they are not decoder timestamps and do not claim scan-out timing.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct VideoPresentationTiming {
+    pub interval_samples: u64,
+    pub interval_total_us: u64,
+    pub interval_min_us: Option<u64>,
+    pub interval_max_us: Option<u64>,
+    pub interval_p50_us: Option<u64>,
+    pub interval_p95_us: Option<u64>,
+    pub interval_p99_us: Option<u64>,
+}
+
+/// GPU timestamp-query observations for render passes containing a video.
+///
+/// This is the complete frame-content pass, including text and other inline
+/// media in that pass.  It deliberately does not call this decoder time or
+/// video-only shader time.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum VideoGpuTimingStatus {
+    /// Instrumentation was not requested, so ordinary playback pays no query cost.
+    #[default]
+    Disabled,
+    /// Instrumentation was requested but the selected adapter cannot provide it.
+    Unsupported,
+    /// Timestamp queries are active and samples may be reported.
+    Enabled,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct VideoGpuTiming {
+    pub status: VideoGpuTimingStatus,
+    pub pass_samples: u64,
+    pub pass_total_us: u64,
+    pub pass_min_us: Option<u64>,
+    pub pass_max_us: Option<u64>,
+}
+
 /// Truthful counters and effective frame-path evidence for one playback session.
 /// Platform handles stay private; absent native details are never fabricated.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -883,6 +924,8 @@ pub struct VideoSessionDiagnostics {
     pub output_reconfigurations: u64,
     pub import_counts: VideoImportCounts,
     pub presentation_counts: VideoPresentationCounts,
+    pub presentation_timing: VideoPresentationTiming,
+    pub gpu_timing: VideoGpuTiming,
     pub terminal_error: Option<VideoCommandError>,
 }
 

@@ -1,10 +1,14 @@
 //! One renderer-device policy for every Neomacs GPU entry point.
 
 fn requested_features(adapter: &wgpu::Adapter) -> wgpu::Features {
-    adapter.features()
-        & (wgpu::Features::TEXTURE_FORMAT_16BIT_NORM
-            | wgpu::Features::TEXTURE_FORMAT_NV12
-            | wgpu::Features::TEXTURE_FORMAT_P010)
+    let mut requested = wgpu::Features::TEXTURE_FORMAT_16BIT_NORM
+        | wgpu::Features::TEXTURE_FORMAT_NV12
+        | wgpu::Features::TEXTURE_FORMAT_P010;
+    #[cfg(feature = "video")]
+    if std::env::var_os("NEOMACS_GPU_FRAME_TIMING").as_deref() == Some(std::ffi::OsStr::new("1")) {
+        requested |= wgpu::Features::TIMESTAMP_QUERY;
+    }
+    adapter.features() & requested
 }
 
 /// Create the renderer's device and queue with platform interop enabled when

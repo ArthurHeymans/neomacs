@@ -75,6 +75,22 @@ impl DisplayHost for RecordingVideoDisplayHost {
                     submitted_frames: 3,
                     presented_frames: 2,
                 },
+                presentation_timing: neomacs_video_model::VideoPresentationTiming {
+                    interval_samples: 99,
+                    interval_total_us: 1_650_000,
+                    interval_min_us: Some(15_900),
+                    interval_max_us: Some(20_000),
+                    interval_p50_us: Some(16_667),
+                    interval_p95_us: Some(17_100),
+                    interval_p99_us: Some(20_000),
+                },
+                gpu_timing: neomacs_video_model::VideoGpuTiming {
+                    status: neomacs_video_model::VideoGpuTimingStatus::Enabled,
+                    pass_samples: 97,
+                    pass_total_us: 48_500,
+                    pass_min_us: Some(400),
+                    pass_max_us: Some(900),
+                },
                 terminal_error: None,
             }],
             surface_pools: vec![VideoSurfacePoolDiagnostics {
@@ -154,6 +170,9 @@ fn diagnostics_reports_the_observed_end_to_end_path_and_pool_pressure() {
                                :submitted-frames)
                     (plist-get (plist-get session :presentation-counts)
                                :presented-frames)
+                    (plist-get (plist-get session :presentation-timing)
+                               :interval-p99-us)
+                    (plist-get (plist-get session :gpu-timing) :pass-samples)
                     (plist-get session :terminal-error)
                     (plist-get snapshot :gpu-memory-bytes)
                      (plist-get pool :role)
@@ -168,7 +187,7 @@ fn diagnostics_reports_the_observed_end_to_end_path_and_pool_pressure() {
             .and_then(|value| value.as_utf8_str()),
         Some(
             "(42 gstreamer playing hardware-shared-pool borrowed-native-surface \
-             wgpu-composited nv12 9 4 3 2 nil 4096 compositor-import 64 3 2 1)"
+             wgpu-composited nv12 9 4 3 2 20000 97 nil 4096 compositor-import 64 3 2 1)"
         )
     );
 }

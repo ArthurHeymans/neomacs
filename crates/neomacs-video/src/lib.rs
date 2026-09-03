@@ -22,13 +22,13 @@ pub use model::{
     VideoColorPrimaries, VideoColorRange, VideoColorimetry, VideoCommand, VideoCommandError,
     VideoCompositorImport, VideoDecodeBackend, VideoDecodeResidency, VideoDiagnostics, VideoEvent,
     VideoFrameFormat, VideoFrameLayoutError, VideoFramePath, VideoFrameReady, VideoGeometry,
-    VideoImportCounts, VideoInitError, VideoInstallerHint, VideoMatrixCoefficients,
-    VideoModelError, VideoOpenRequest, VideoPlaneFormat, VideoPresentationCounts,
-    VideoPresentationPath, VideoRecoveryManifest, VideoRotation, VideoSampleKind,
-    VideoSamplingTransform, VideoServiceRequest, VideoServiceResult, VideoServiceTiming,
-    VideoSessionDiagnostics, VideoSessionRecovery, VideoSessionState, VideoSource,
-    VideoSurfacePoolDiagnostics, VideoSurfacePoolRole, VideoTextureCoordinates,
-    VideoTransferCharacteristic,
+    VideoGpuTiming, VideoGpuTimingStatus, VideoImportCounts, VideoInitError, VideoInstallerHint,
+    VideoMatrixCoefficients, VideoModelError, VideoOpenRequest, VideoPlaneFormat,
+    VideoPresentationCounts, VideoPresentationPath, VideoPresentationTiming, VideoRecoveryManifest,
+    VideoRotation, VideoSampleKind, VideoSamplingTransform, VideoServiceRequest,
+    VideoServiceResult, VideoServiceTiming, VideoSessionDiagnostics, VideoSessionRecovery,
+    VideoSessionState, VideoSource, VideoSurfacePoolDiagnostics, VideoSurfacePoolRole,
+    VideoTextureCoordinates, VideoTransferCharacteristic,
 };
 pub(crate) use sampling::GpuVideoFrame;
 pub use sampling::{GpuGeneration, PreparedVideoDraw, PreparedVideoDraws, VideoSamplingResources};

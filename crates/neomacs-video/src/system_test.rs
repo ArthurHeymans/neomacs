@@ -535,6 +535,8 @@ fn service_preserves_the_next_future_frame_then_imports_the_latest_due_frame() {
                 cpu_upload_bytes: 0,
             },
             presentation_counts: super::VideoPresentationCounts::default(),
+            presentation_timing: super::VideoPresentationTiming::default(),
+            gpu_timing: super::VideoGpuTiming::default(),
             terminal_error: None,
         }]
     );

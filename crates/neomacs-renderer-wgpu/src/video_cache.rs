@@ -1,6 +1,6 @@
 //! Renderer-facing facade over the cross-platform native video subsystem.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use neomacs_display_protocol::types::VideoId;
 use neomacs_video::{
@@ -63,10 +63,94 @@ enum SurfacePresentationState {
 #[derive(Default)]
 struct VideoPresentationTracker {
     counts: HashMap<VideoId, neomacs_video::VideoPresentationCounts>,
+    timing: HashMap<VideoId, PresentationTimingState>,
+    gpu_timing_status: neomacs_video::VideoGpuTimingStatus,
+    gpu_timing: HashMap<VideoId, GpuTimingState>,
     surface: SurfacePresentationState,
 }
 
+#[derive(Default)]
+struct GpuTimingState {
+    samples: u64,
+    total_us: u64,
+    min_us: Option<u64>,
+    max_us: Option<u64>,
+}
+
+impl GpuTimingState {
+    fn record(&mut self, duration_us: u64) {
+        self.samples = self.samples.saturating_add(1);
+        self.total_us = self.total_us.saturating_add(duration_us);
+        self.min_us = Some(self.min_us.map_or(duration_us, |old| old.min(duration_us)));
+        self.max_us = Some(self.max_us.map_or(duration_us, |old| old.max(duration_us)));
+    }
+}
+
+const PRESENTATION_TIMING_WINDOW: usize = 4096;
+
+#[derive(Default)]
+struct PresentationTimingState {
+    last_presented_at: Option<std::time::Instant>,
+    intervals_us: VecDeque<u64>,
+    interval_samples: u64,
+    interval_total_us: u64,
+    interval_min_us: Option<u64>,
+    interval_max_us: Option<u64>,
+}
+
+impl PresentationTimingState {
+    fn record(&mut self, presented_at: std::time::Instant) {
+        let Some(previous) = self.last_presented_at.replace(presented_at) else {
+            return;
+        };
+        let Some(interval) = presented_at.checked_duration_since(previous) else {
+            return;
+        };
+        let interval_us = u64::try_from(interval.as_micros()).unwrap_or(u64::MAX);
+        self.interval_samples = self.interval_samples.saturating_add(1);
+        self.interval_total_us = self.interval_total_us.saturating_add(interval_us);
+        self.interval_min_us = Some(
+            self.interval_min_us
+                .map_or(interval_us, |old| old.min(interval_us)),
+        );
+        self.interval_max_us = Some(
+            self.interval_max_us
+                .map_or(interval_us, |old| old.max(interval_us)),
+        );
+        if self.intervals_us.len() == PRESENTATION_TIMING_WINDOW {
+            self.intervals_us.pop_front();
+        }
+        self.intervals_us.push_back(interval_us);
+    }
+
+    fn diagnostics(&self) -> neomacs_video::VideoPresentationTiming {
+        let mut sorted: Vec<_> = self.intervals_us.iter().copied().collect();
+        sorted.sort_unstable();
+        neomacs_video::VideoPresentationTiming {
+            interval_samples: self.interval_samples,
+            interval_total_us: self.interval_total_us,
+            interval_min_us: self.interval_min_us,
+            interval_max_us: self.interval_max_us,
+            interval_p50_us: percentile(&sorted, 50),
+            interval_p95_us: percentile(&sorted, 95),
+            interval_p99_us: percentile(&sorted, 99),
+        }
+    }
+}
+
+fn percentile(sorted: &[u64], percentile: usize) -> Option<u64> {
+    if sorted.is_empty() {
+        return None;
+    }
+    let rank = percentile.saturating_mul(sorted.len()).div_ceil(100);
+    sorted.get(rank.saturating_sub(1)).copied()
+}
+
 impl VideoPresentationTracker {
+    fn set_gpu_timing_status(&mut self, status: neomacs_video::VideoGpuTimingStatus) {
+        self.gpu_timing_status = status;
+    }
+
     fn begin_surface(&mut self) {
         self.surface = SurfacePresentationState::Recording(HashSet::new());
     }
@@ -83,12 +167,17 @@ impl VideoPresentationTracker {
     }
 
     fn finish_presented_surface(&mut self) {
+        self.finish_presented_surface_at(std::time::Instant::now());
+    }
+
+    fn finish_presented_surface_at(&mut self, presented_at: std::time::Instant) {
         let SurfacePresentationState::Recording(pending) = std::mem::take(&mut self.surface) else {
             return;
         };
         for id in pending {
             let counts = self.counts.entry(id).or_default();
             counts.presented_frames = counts.presented_frames.saturating_add(1);
+            self.timing.entry(id).or_default().record(presented_at);
         }
     }
 
@@ -100,8 +189,33 @@ impl VideoPresentationTracker {
         self.counts.get(&id).copied().unwrap_or_default()
     }
 
+    fn timing(&self, id: VideoId) -> neomacs_video::VideoPresentationTiming {
+        self.timing
+            .get(&id)
+            .map_or_else(Default::default, PresentationTimingState::diagnostics)
+    }
+
+    fn record_gpu_frame_time(&mut self, ids: impl IntoIterator<Item = VideoId>, duration_us: u64) {
+        for id in ids.into_iter().collect::<HashSet<_>>() {
+            self.gpu_timing.entry(id).or_default().record(duration_us);
+        }
+    }
+
+    fn gpu_timing(&self, id: VideoId) -> neomacs_video::VideoGpuTiming {
+        let timing = self.gpu_timing.get(&id);
+        neomacs_video::VideoGpuTiming {
+            status: self.gpu_timing_status,
+            pass_samples: timing.map_or(0, |timing| timing.samples),
+            pass_total_us: timing.map_or(0, |timing| timing.total_us),
+            pass_min_us: timing.and_then(|timing| timing.min_us),
+            pass_max_us: timing.and_then(|timing| timing.max_us),
+        }
+    }
+
     fn remove(&mut self, id: VideoId) {
         self.counts.remove(&id);
+        self.timing.remove(&id);
+        self.gpu_timing.remove(&id);
         if let SurfacePresentationState::Recording(pending) = &mut self.surface {
             pending.remove(&id);
         }
@@ -638,6 +752,18 @@ impl VideoCache {
         self.presentation.record_submitted(ids);
     }
 
+    pub(crate) fn set_gpu_timing_status(&mut self, status: neomacs_video::VideoGpuTimingStatus) {
+        self.presentation.set_gpu_timing_status(status);
+    }
+
+    pub(crate) fn record_gpu_frame_time(
+        &mut self,
+        ids: impl IntoIterator<Item = VideoId>,
+        duration_us: u64,
+    ) {
+        self.presentation.record_gpu_frame_time(ids, duration_us);
+    }
+
     pub fn play(&mut self, id: u32) {
         let typed_id = VideoId::new(id);
         let result = if let Some(native_id) = self.videos.get(&typed_id).and_then(|v| v.native_id) {
@@ -1046,6 +1172,8 @@ impl VideoCache {
         .filter_map_session_ids(|id| self.native_to_video.get(&NativeVideoSessionId(id)).copied());
         for session in &mut diagnostics.sessions {
             session.presentation_counts = self.presentation.counts(session.id);
+            session.presentation_timing = self.presentation.timing(session.id);
+            session.gpu_timing = self.presentation.gpu_timing(session.id);
         }
         diagnostics.sessions.extend(
             self.terminal_diagnostics
@@ -1218,6 +1346,8 @@ impl VideoCache {
             diagnostic.id = id;
             diagnostic.state = VideoSessionState::Failed;
             diagnostic.presentation_counts = self.presentation.counts(id);
+            diagnostic.presentation_timing = self.presentation.timing(id);
+            diagnostic.gpu_timing = self.presentation.gpu_timing(id);
             diagnostic.terminal_error = Some(error.clone());
             self.terminal_diagnostics.insert(id, diagnostic);
         }
@@ -1276,6 +1406,8 @@ impl VideoCache {
             "terminal video failure must detach its native incarnation first"
         );
         let presentation_counts = self.presentation.counts(id);
+        let presentation_timing = self.presentation.timing(id);
+        let gpu_timing = self.presentation.gpu_timing(id);
         self.terminal_diagnostics
             .entry(id)
             .and_modify(|diagnostic| {
@@ -1297,6 +1429,8 @@ impl VideoCache {
                 output_reconfigurations: 0,
                 import_counts: Default::default(),
                 presentation_counts,
+                presentation_timing,
+                gpu_timing,
                 terminal_error: Some(error.clone()),
             });
         let already_diagnosed = match &error {

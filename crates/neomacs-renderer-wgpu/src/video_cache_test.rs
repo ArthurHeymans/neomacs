@@ -10,6 +10,7 @@ use neomacs_video::{
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 
 #[test]
 fn native_bi_planar_shader_parses_and_validates() {
@@ -197,6 +198,55 @@ fn presentation_tracker_distinguishes_gpu_submission_from_surface_present() {
             presented_frames: 1,
         }
     );
+}
+
+#[test]
+fn presentation_tracker_reports_exact_frame_pacing_percentiles() {
+    let id = VideoId::new(18);
+    let mut tracker = super::VideoPresentationTracker::default();
+    let started = Instant::now();
+
+    for offset_ms in [0, 16, 33, 50, 100] {
+        tracker.begin_surface();
+        tracker.record_submitted([id]);
+        tracker.finish_presented_surface_at(started + Duration::from_millis(offset_ms));
+    }
+
+    assert_eq!(
+        tracker.timing(id),
+        neomacs_video::VideoPresentationTiming {
+            interval_samples: 4,
+            interval_total_us: 100_000,
+            interval_min_us: Some(16_000),
+            interval_max_us: Some(50_000),
+            interval_p50_us: Some(17_000),
+            interval_p95_us: Some(50_000),
+            interval_p99_us: Some(50_000),
+        }
+    );
+}
+
+#[test]
+fn presentation_tracker_aggregates_supported_gpu_pass_timings() {
+    let first = VideoId::new(19);
+    let second = VideoId::new(20);
+    let mut tracker = super::VideoPresentationTracker::default();
+
+    tracker.set_gpu_timing_status(neomacs_video::VideoGpuTimingStatus::Enabled);
+    tracker.record_gpu_frame_time([first, second, first], 750);
+    tracker.record_gpu_frame_time([first], 1_250);
+
+    assert_eq!(
+        tracker.gpu_timing(first),
+        neomacs_video::VideoGpuTiming {
+            status: neomacs_video::VideoGpuTimingStatus::Enabled,
+            pass_samples: 2,
+            pass_total_us: 2_000,
+            pass_min_us: Some(750),
+            pass_max_us: Some(1_250),
+        }
+    );
+    assert_eq!(tracker.gpu_timing(second).pass_samples, 1);
 }
 
 #[test]

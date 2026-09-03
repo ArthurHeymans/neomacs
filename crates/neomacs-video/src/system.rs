@@ -935,6 +935,8 @@ impl<P: Platform> VideoSystemImpl<P> {
                 output_reconfigurations: session.diagnostics.output_reconfigurations,
                 import_counts: session.diagnostics.import_counts,
                 presentation_counts: crate::VideoPresentationCounts::default(),
+                presentation_timing: crate::VideoPresentationTiming::default(),
+                gpu_timing: crate::VideoGpuTiming::default(),
                 terminal_error: None,
             })
             .collect();
