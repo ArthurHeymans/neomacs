@@ -338,6 +338,15 @@ opt-level = 0
 # third-party dependencies with release-like code generation. Cargo package
 # overrides cannot set `lto`, `panic`, or `rpath`, so those continue to inherit
 # from the dev profile.
+# Workspace members: keep what a panic needs, drop what the linker copies.
+# Cargo's default dev profile is full DWARF, and it was 61% of every 245 MB
+# test binary -- relinked into each of the crate's integration targets.
+# `line-tables-only` keeps file:line in backtraces (the test suites read them)
+# and `unpacked` leaves the remainder beside the binary instead of inside it.
+[profile.dev]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
 [profile.dev.package."*"]
 opt-level = 3
 debug = false
