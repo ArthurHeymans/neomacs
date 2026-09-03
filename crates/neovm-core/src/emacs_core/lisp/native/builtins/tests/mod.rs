@@ -3288,6 +3288,25 @@ fn kill_all_local_variables_clears_buffer_locals() {
 }
 
 #[test]
+fn kill_all_local_variables_crosses_the_global_mode_line_menu_boundary_while_offscreen() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    let visible = eval.buffers.create_buffer("kill-locals-visible");
+    eval.frames.create_frame("F1", 800, 600, visible);
+    let offscreen = eval.buffers.create_buffer("kill-locals-offscreen");
+    eval.buffers.set_current(offscreen);
+
+    let initial = eval.menu_bar_rebuild_generation();
+    builtin_kill_all_local_variables(&mut eval, vec![])
+        .expect("kill-all-local-variables should reset the offscreen buffer");
+
+    // Every GNU major-mode function enters through this primitive. Its final
+    // `bset_update_mode_line` raises global `update_mode_lines` regardless of
+    // whether CURRENT-BUFFER is displayed (src/buffer.c:3019-3048).
+    assert_ne!(eval.menu_bar_rebuild_generation(), initial);
+}
+
+#[test]
 fn ntake_destructively_truncates_lists() {
     crate::test_utils::init_test_tracing();
     let list = Value::list(vec![
@@ -6211,6 +6230,31 @@ fn pure_dispatch_buffer_placeholder_mutators_match_compat_contracts() {
         .expect("builtin set-buffer-redisplay should evaluate");
         assert!(redisplay.is_nil());
     }
+}
+
+#[test]
+fn rename_buffer_crosses_the_global_mode_line_menu_boundary_while_offscreen() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let visible = eval.buffers.create_buffer("rename-visible");
+    eval.frames.create_frame("F1", 800, 600, visible);
+    let offscreen = eval.buffers.create_buffer("rename-offscreen");
+    eval.buffers.set_current(offscreen);
+
+    let initial = eval.menu_bar_rebuild_generation();
+    dispatch_builtin(
+        &mut eval,
+        "rename-buffer",
+        vec![Value::string("rename-offscreen-new")],
+    )
+    .expect("rename-buffer should resolve")
+    .expect("rename-buffer should rename an offscreen buffer");
+
+    // GNU `Frename_buffer` calls `bset_update_mode_line` after a real rename.
+    // Unlike the public local `force-mode-line-update` operation, that helper
+    // unconditionally raises global `update_mode_lines`, even when the renamed
+    // buffer is not displayed yet (src/buffer.c, src/xdisp.c).
+    assert_ne!(eval.menu_bar_rebuild_generation(), initial);
 }
 
 #[test]

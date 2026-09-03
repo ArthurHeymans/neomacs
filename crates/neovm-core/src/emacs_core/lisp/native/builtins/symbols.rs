@@ -2024,12 +2024,6 @@ pub(crate) fn builtin_rename_buffer(
         }
     };
     let old_name_text = expect_string_lossy(&old_name)?;
-    // GNU `Frename_buffer` calls `bset_update_mode_line` (buffer.c:1718)
-    // with the comment "Catch redisplay's attention.  Unless we do this, the
-    // mode lines for any windows displaying current_buffer will stay
-    // unchanged." `%b` is the reason.
-    eval.mark_chrome_dirty_all();
-
     let unique = args.get(1).copied().unwrap_or(Value::NIL);
 
     let new_name = match eval.buffers.find_buffer_by_name(&name) {
@@ -2055,6 +2049,12 @@ pub(crate) fn builtin_rename_buffer(
     };
 
     let _ = eval.buffers.rename_buffer(current_id, new_name);
+    // GNU `Frename_buffer` calls `bset_update_mode_line` only after a real
+    // rename (buffer.c:1690-1720).  That helper raises global
+    // `update_mode_lines` even when CURRENT-BUFFER is offscreen, which makes
+    // a subsequent file/Dired buffer switch rebuild the selected window's
+    // menu as well as its chrome.
+    eval.request_global_mode_line_update();
 
     // GNU `Frename_buffer` (buffer.c:1726) runs `buffer-list-update-hook'
     // after updating the buffer's name in `Vbuffer_alist', unless the buffer

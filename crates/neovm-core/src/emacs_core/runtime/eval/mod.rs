@@ -8659,6 +8659,17 @@ impl Context {
         self.invalidate_redisplay();
     }
 
+    /// Raise GNU's global `update_mode_lines` flag.
+    ///
+    /// `bset_update_mode_line` does this unconditionally for buffer-owned
+    /// mutations such as `rename-buffer`, even when that buffer is not yet
+    /// displayed.  Keep the menu and chrome effects inseparable here: both
+    /// are consumers of the same GNU flag.
+    pub(crate) fn request_global_mode_line_update(&mut self) {
+        self.request_menu_bar_rebuild(MenuBarRebuildReason::UpdateModeLines);
+        self.mark_chrome_dirty_all();
+    }
+
     /// Apply GNU's local/global `force-mode-line-update` boundary.
     pub(crate) fn request_mode_line_update(&mut self, target: ModeLineUpdateTarget) {
         let has_mode_line_to_update = match target {
@@ -8671,8 +8682,7 @@ impl Context {
             return;
         }
 
-        self.request_menu_bar_rebuild(MenuBarRebuildReason::UpdateModeLines);
-        self.mark_chrome_dirty_all();
+        self.request_global_mode_line_update();
     }
 
     /// Mark redisplay dirty when a display-affecting variable is set.
