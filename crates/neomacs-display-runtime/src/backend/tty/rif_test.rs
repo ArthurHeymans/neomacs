@@ -2236,24 +2236,76 @@ fn diff_and_render_preclears_composite_cell_rewrites() {
     rif.diff_and_render();
     let output = String::from_utf8(rif.take_output()).expect("utf8 output");
 
-    let first_goto = output
-        .find("\x1b[1;1H")
-        .expect("composite rewrite should move to the changed cell for preclear");
-    let clear_space = output[first_goto..]
-        .find(' ')
-        .map(|offset| first_goto + offset)
-        .expect("composite rewrite should emit a clearing space");
-    let second_goto = output[clear_space..]
-        .find("\x1b[1;1H")
-        .map(|offset| clear_space + offset)
-        .expect("composite rewrite should move back before repainting");
     assert!(
-        first_goto < clear_space && clear_space < second_goto,
-        "composite rewrites should clear the changed cell before repainting: {output:?}"
+        output.contains("\x1b[1;1H\x1b[KA\u{0301}"),
+        "composite rewrites should erase the changed tail before repainting it: {output:?}"
     );
     assert!(
         output.contains("A\u{0301}"),
         "replacement composite should still be painted after preclear: {output:?}"
+    );
+}
+
+#[test]
+fn composite_repaint_does_not_write_an_erasable_tail_after_extenders() {
+    let mut caps = TermCaps::default();
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(16, 2, caps);
+    let attrs = CellAttrs::default();
+
+    rif.desired.set_cluster(0, 9, ' ', "ꦮ", attrs, false);
+    rif.desired.set(0, 10, ')', attrs, false);
+    rif.desired.set(0, 11, ';', attrs, false);
+    let _ = render_output(&mut rif);
+
+    rif.desired = rif.current.clone();
+    rif.desired.set_cluster(0, 9, ' ', "ꦶ", attrs, false);
+    let output = String::from_utf8(render_output(&mut rif)).expect("UTF-8 terminal output");
+
+    // GNU `update_frame_line' trims the default-face suffix before calling
+    // `write_glyphs' and clears the stale tail with `ce' (dispnew.c:6019-6022,
+    // 6234-6238). Emitting that suffix after a cluster is observably wrong:
+    // a terminal whose Unicode-width table differs from Emacs advances the
+    // spaces from its physical cursor, reaches the margin, and marks the row
+    // wrapped even though the modeled row is short.
+    assert!(
+        output.contains("\x1b[K ꦶ);"),
+        "the stale composite tail must be erased before its meaningful prefix is repainted: {output:?}",
+    );
+    assert!(
+        !output.contains("    "),
+        "erasable trailing cells must not be retransmitted after extenders: {output:?}",
+    );
+    assert!(
+        !output.contains("\r\n"),
+        "a short logical row must not enter the right-margin state: {output:?}",
+    );
+}
+
+#[test]
+fn composite_repaint_without_el_keeps_clear_and_write_extents_distinct() {
+    let mut caps = TermCaps::default();
+    caps.blank_tail = BlankTailMethod::WriteSpaces;
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(16, 2, caps);
+    let attrs = CellAttrs::default();
+
+    rif.desired.set_cluster(0, 9, ' ', "ꦮ", attrs, false);
+    rif.desired.set(0, 10, ')', attrs, false);
+    rif.desired.set(0, 11, ';', attrs, false);
+    let _ = render_output(&mut rif);
+
+    rif.desired = rif.current.clone();
+    rif.desired.set_cluster(0, 9, ' ', "ꦶ", attrs, false);
+    assert_eq!(
+        rif.plan_for_test(),
+        vec![TermOp::RefreshCompositeRow {
+            row: 0,
+            start: 9,
+            write_end: 12,
+            clear: CompositeRowClear::WriteSpaces { end: 16, attrs },
+        }],
+        "a terminal without EL must clear the full stale tail but repaint only the meaningful prefix",
     );
 }
 
@@ -3738,7 +3790,7 @@ fn scroll_plan_is_one_scroll_op_plus_exposed_row_runs() {
     for op in &ops[1..] {
         match op {
             TermOp::WriteRun { row, .. }
-            | TermOp::ClearThenWriteRun { row, .. }
+            | TermOp::RefreshCompositeRow { row, .. }
             | TermOp::EraseToEol { row, .. } => {
                 assert_eq!(*row, 9, "only the exposed row may be rewritten: {ops:?}");
             }
@@ -4458,7 +4510,7 @@ fn reused_damage_rows_carry_verbatim_and_plan_nothing() {
     let ops = rif.plan_for_test();
     assert!(
         ops.iter().all(|op| match op {
-            TermOp::WriteRun { row, .. } | TermOp::ClearThenWriteRun { row, .. } => *row == 3,
+            TermOp::WriteRun { row, .. } | TermOp::RefreshCompositeRow { row, .. } => *row == 3,
             _ => false,
         }) && !ops.is_empty(),
         "only the edited row may be written: {ops:?}"

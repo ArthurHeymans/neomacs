@@ -614,6 +614,20 @@ enum ScrollDir {
     Down(std::num::NonZeroU16),
 }
 
+/// Capability-resolved preparation for repainting a row with composites.
+///
+/// The terminal's Unicode-width table can disagree with Emacs's glyph grid,
+/// so stale clusters must be cleared before repainting.  Clearing and writing
+/// have deliberately separate bounds: trailing cells can require clearing
+/// without being safe to retransmit after variable-width cluster bytes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CompositeRowClear {
+    /// Clear through `end` by writing spaces with the tail's attributes.
+    WriteSpaces { end: u16, attrs: CellAttrs },
+    /// Clear from the repaint start through the physical row end with EL.
+    EraseToEol { bg: Option<TerminalColor> },
+}
+
 /// One planned terminal-update operation.
 ///
 /// The planner (grid diff) decides WHAT changes; [`TtyRif::encode_ops`] is
@@ -634,10 +648,16 @@ enum TermOp {
     },
     /// Move the cursor and rewrite desired cells `start..end` of `row`.
     WriteRun { row: u16, start: u16, end: u16 },
-    /// Composite-row repaint: space-clear `start..end` of `row` first, then
-    /// rewrite it — the terminal's cluster-width opinion may differ from the
-    /// cell grid, so the range is wiped before new glyphs land.
-    ClearThenWriteRun { row: u16, start: u16, end: u16 },
+    /// Atomically prepare a composite row and repaint only its meaningful
+    /// prefix. `clear` is capability-resolved by the planner; `write_end` is
+    /// independent of the clear extent so an erasable suffix is never emitted
+    /// after cluster bytes whose physical width the terminal decides.
+    RefreshCompositeRow {
+        row: u16,
+        start: u16,
+        write_end: u16,
+        clear: CompositeRowClear,
+    },
     /// Erase from `from` to the physical end of `row` (ESC[K), filling with
     /// `bg` via back-color-erase. Plannable only when every desired cell of
     /// that tail is an erasable blank of that background — see
@@ -1511,18 +1531,45 @@ impl TtyRif {
             // grapheme clusters is rewritten with different text. If the
             // terminal's idea of the cluster width differs from our cell
             // grid, stale glyphs can remain past the internal changed span.
-            // Clear and repaint the whole row tail for composite rows so
-            // shrunk cluster rows cannot leave visible residue; the clear
-            // also means every cell of the range must be rewritten
-            // regardless of what the model recorded.
+            // Clear the whole changed tail for composite rows so shrunk
+            // clusters cannot leave visible residue, then repaint only the
+            // meaningful prefix. GNU trims default-face trailing blanks before
+            // `write_glyphs' and handles the remainder with `ce'
+            // (dispnew.c:6019-6022, 6234-6238). Keeping the clear extent and
+            // write extent distinct is essential when the terminal's Unicode
+            // width table disagrees with Emacs: retransmitting the blank tail
+            // after extenders can spuriously reach the right margin.
             let composite_row =
                 row_has_composite_cells(desired_row) || row_has_composite_cells(current_row);
             if composite_row {
-                last_changed = desired_row.len() - 1;
-                ops.push(TermOp::ClearThenWriteRun {
+                let row_end = u16::try_from(desired_row.len()).unwrap_or(u16::MAX);
+                let (write_end, clear) = match uniform_erasable_tail(desired_row, first_changed) {
+                    Some((split, bg)) if self.caps.blank_tail.can_erase(bg) => {
+                        (split, CompositeRowClear::EraseToEol { bg })
+                    }
+                    Some((split, bg)) => (
+                        split,
+                        CompositeRowClear::WriteSpaces {
+                            end: row_end,
+                            attrs: CellAttrs {
+                                bg,
+                                ..CellAttrs::default()
+                            },
+                        },
+                    ),
+                    None => (
+                        desired_row.len(),
+                        CompositeRowClear::WriteSpaces {
+                            end: row_end,
+                            attrs: CellAttrs::default(),
+                        },
+                    ),
+                };
+                ops.push(TermOp::RefreshCompositeRow {
                     row: row as u16,
                     start: first_changed as u16,
-                    end: last_changed as u16 + 1,
+                    write_end: u16::try_from(write_end).unwrap_or(u16::MAX),
+                    clear,
                 });
                 continue;
             }
@@ -1744,12 +1791,38 @@ impl TtyRif {
     fn reconcile_desired_materialization(&mut self, ops: &[TermOp]) {
         for op in ops {
             match *op {
-                TermOp::WriteRun { row, start, end }
-                | TermOp::ClearThenWriteRun { row, start, end } => {
+                TermOp::WriteRun { row, start, end } => {
                     let row = row as usize;
                     let start = row * self.desired.width + start as usize;
                     let end = row * self.desired.width + end as usize;
                     for cell in &mut self.desired.cells[start..end] {
+                        cell.materialization = CellMaterialization::Written;
+                    }
+                }
+                TermOp::RefreshCompositeRow {
+                    row,
+                    start,
+                    write_end,
+                    clear,
+                } => {
+                    let row = row as usize;
+                    let row_start = row * self.desired.width;
+                    let clear_end = match clear {
+                        CompositeRowClear::WriteSpaces { end, .. } => end as usize,
+                        CompositeRowClear::EraseToEol { .. } => self.desired.width,
+                    };
+                    let clear_materialization = match clear {
+                        CompositeRowClear::WriteSpaces { .. } => CellMaterialization::Written,
+                        CompositeRowClear::EraseToEol { .. } => CellMaterialization::Erased,
+                    };
+                    for cell in
+                        &mut self.desired.cells[row_start + start as usize..row_start + clear_end]
+                    {
+                        cell.materialization = clear_materialization;
+                    }
+                    for cell in &mut self.desired.cells
+                        [row_start + start as usize..row_start + write_end as usize]
+                    {
                         cell.materialization = CellMaterialization::Written;
                     }
                 }
@@ -1826,21 +1899,41 @@ impl TtyRif {
                     self.output.extend_from_slice(b"\x1b[r");
                     cursor = EncodedCursorState::Unknown;
                 }
-                TermOp::ClearThenWriteRun { row, start, end } => {
+                TermOp::RefreshCompositeRow {
+                    row,
+                    start,
+                    write_end,
+                    clear,
+                } => {
                     cursor.move_to(&mut self.output, row, start);
-                    write_face_transition(&mut self.output, &mut last_attrs, &CellAttrs::default());
-                    for _ in start..end {
-                        self.output.push(b' ');
+                    match clear {
+                        CompositeRowClear::WriteSpaces { end, attrs } => {
+                            write_face_transition(&mut self.output, &mut last_attrs, &attrs);
+                            for _ in start..end {
+                                self.output.push(b' ');
+                            }
+                            cursor.finish_write(
+                                &mut self.output,
+                                row,
+                                end,
+                                width,
+                                height,
+                                self.caps.right_margin,
+                            );
+                        }
+                        CompositeRowClear::EraseToEol { bg } => {
+                            self.frame_stats.erase_ops += 1;
+                            let attrs = CellAttrs {
+                                bg,
+                                ..CellAttrs::default()
+                            };
+                            write_face_transition(&mut self.output, &mut last_attrs, &attrs);
+                            self.output.extend_from_slice(b"\x1b[K");
+                        }
                     }
-                    cursor.finish_write(
-                        &mut self.output,
-                        row,
-                        end,
-                        width,
-                        height,
-                        self.caps.right_margin,
-                    );
-                    self.encode_write_run(row, start, end, &mut last_attrs, &mut cursor);
+                    if start < write_end {
+                        self.encode_write_run(row, start, write_end, &mut last_attrs, &mut cursor);
+                    }
                 }
                 TermOp::WriteRun { row, start, end } => {
                     self.encode_write_run(row, start, end, &mut last_attrs, &mut cursor);
