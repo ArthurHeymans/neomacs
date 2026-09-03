@@ -3819,8 +3819,11 @@ fn x_popup_menu_interactive_keymap_returns_selected_event() {
         Value::symbol("open"),
         Value::cons(Value::string("Open"), Value::T),
     );
-    tx.send(crate::keyboard::InputEvent::MenuSelection { index: 0 })
-        .unwrap();
+    tx.send(crate::keyboard::InputEvent::KeyPress {
+        key: crate::keyboard::KeyEvent::named(crate::keyboard::NamedKey::Return),
+        emacs_frame_id: 0,
+    })
+    .unwrap();
 
     let result = super::builtin_x_popup_menu(
         &mut eval,
@@ -3836,6 +3839,123 @@ fn x_popup_menu_interactive_keymap_returns_selected_event() {
     assert_eq!(shown[0].entries.len(), 1);
     assert_eq!(shown[0].entries[0].label, "Open");
     assert_eq!(*hidden.lock().unwrap(), 1);
+}
+
+#[test]
+fn old_style_menu_help_keeps_the_real_submenu_definition() {
+    let submenu = crate::emacs_core::keymap::make_sparse_list_keymap();
+    let definition = Value::cons(
+        Value::string("Parent"),
+        Value::cons(Value::string("Open child choices"), submenu),
+    );
+
+    let (entry, parsed_submenu) =
+        super::popup_menu_item_from_binding(Value::symbol("parent"), definition, 0, true)
+            .expect("parse old-style menu item");
+
+    assert_eq!(entry.help.as_deref(), Some("Open child choices"));
+    assert_eq!(
+        parsed_submenu,
+        Some(submenu),
+        "GNU parse_menu_item removes the old-format help cell before reading DEF"
+    );
+}
+
+/// GNU's native TTY menu path carries a menu item's `:help` property from
+/// `parse_menu_item` through `MENU_ITEMS_ITEM_HELP` and publishes it with
+/// `tty_menu_help_callback`/`show_help_echo` (`keyboard.c`, `menu.c`, and
+/// `term.c`).  Destroying the popup clears only the terminal menu's internal
+/// help pointer; it does not retract the help that was published.
+#[test]
+fn x_popup_menu_publishes_selected_item_help_and_keeps_it_after_teardown() {
+    let mut eval = crate::emacs_core::Context::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    eval.input_rx = Some(rx);
+    eval.set_display_host(Box::new(RecordingPopupHost::default()));
+    eval.eval_str(
+        r##"(progn
+               (defvar neomacs-test-menu-help nil)
+               (defvar neomacs-test-menu-help-inhibit-redisplay nil)
+               (defvar neomacs-test-menu-previous-message nil)
+               (setq show-help-function
+                     (lambda (help)
+                       (setq neomacs-test-menu-help help
+                             neomacs-test-menu-previous-message
+                             (current-message)
+                             neomacs-test-menu-help-inhibit-redisplay
+                             inhibit-redisplay))))"##,
+    )
+    .expect("install a recording show-help-function");
+    eval.set_current_message(Some(crate::heap_types::LispString::from_utf8(
+        "Previous menu help",
+    )));
+
+    let menu = crate::emacs_core::keymap::make_sparse_list_keymap();
+    crate::emacs_core::keymap::list_keymap_define(
+        menu,
+        Value::symbol("open"),
+        Value::list(vec![
+            Value::symbol("menu-item"),
+            Value::string("Open"),
+            Value::T,
+            Value::symbol(":help"),
+            Value::string("Open the selected document"),
+        ]),
+    );
+    crate::emacs_core::keymap::list_keymap_define(
+        menu,
+        Value::symbol("plain"),
+        Value::list(vec![
+            Value::symbol("menu-item"),
+            Value::string("Plain"),
+            Value::T,
+        ]),
+    );
+    tx.send(crate::keyboard::InputEvent::MenuSelection { index: 1 })
+        .unwrap();
+
+    let result = super::builtin_x_popup_menu(
+        &mut eval,
+        vec![Value::list(vec![Value::NIL, Value::NIL]), menu],
+    )
+    .expect("select helped popup item");
+
+    let events = crate::emacs_core::value::list_to_vec(&result).expect("event list");
+    assert_eq!(events, vec![Value::symbol("open")]);
+    assert_eq!(
+        eval.eval_symbol("neomacs-test-menu-help")
+            .expect("read published menu help")
+            .as_utf8_str(),
+        Some("Open the selected document")
+    );
+    assert_eq!(
+        eval.eval_symbol("neomacs-test-menu-help-inhibit-redisplay")
+            .expect("read native menu redisplay guard"),
+        Value::T,
+        "GNU tty_menu_activate inhibits ordinary redisplay while menu help runs"
+    );
+    assert_eq!(
+        eval.eval_symbol("neomacs-test-menu-previous-message")
+            .expect("read previous message observed by menu help"),
+        Value::NIL,
+        "GNU read_menu_command still clears the prior logical echo message"
+    );
+}
+
+#[test]
+fn tty_menu_help_tracker_distinguishes_no_publication_from_a_clear() {
+    let mut help = super::TtyMenuHelpTracker::default();
+
+    assert_eq!(help.select(None), super::TtyMenuHelpUpdate::Unchanged);
+    assert_eq!(
+        help.select(Some("First help")),
+        super::TtyMenuHelpUpdate::Show("First help".to_owned())
+    );
+    assert_eq!(
+        help.select(Some("First help")),
+        super::TtyMenuHelpUpdate::Unchanged
+    );
+    assert_eq!(help.select(None), super::TtyMenuHelpUpdate::Clear);
 }
 
 #[test]

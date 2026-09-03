@@ -1293,6 +1293,22 @@ fn popup_menu_key_event_from_path(path: &[Value]) -> Value {
     Value::list(path.to_vec())
 }
 
+fn popup_menu_help_from_properties(mut properties: Value) -> Option<String> {
+    while properties.is_cons() {
+        let property = properties.cons_car();
+        properties = properties.cons_cdr();
+        if !properties.is_cons() {
+            break;
+        }
+        let value = properties.cons_car();
+        properties = properties.cons_cdr();
+        if super::keymap::MenuItemProperty::Help.is_value(property) {
+            return popup_menu_string(value);
+        }
+    }
+    None
+}
+
 fn popup_menu_item_from_binding(
     _key: Value,
     def: Value,
@@ -1314,11 +1330,22 @@ fn popup_menu_item_from_binding(
         } else {
             Value::NIL
         };
+        let mut properties = if tail.is_cons() {
+            tail.cons_cdr()
+        } else {
+            Value::NIL
+        };
+        // GNU accepts an obsolete key-equivalence cache between DEF and the
+        // property list. It is a cons rather than a keyword/value pair.
+        if properties.is_cons() && properties.cons_car().is_cons() {
+            properties = properties.cons_cdr();
+        }
         let submenu = super::keymap::is_list_keymap(&command);
         return Some((
             PopupMenuEntry {
                 label: submenu_label(label, submenu, is_tty),
                 shortcut: String::new(),
+                help: popup_menu_help_from_properties(properties),
                 enabled: !command.is_nil(),
                 separator: false,
                 submenu,
@@ -1329,17 +1356,23 @@ fn popup_menu_item_from_binding(
     }
 
     let label = popup_menu_string(car)?;
-    let submenu = super::keymap::is_list_keymap(&cdr);
+    let (help, command) = if cdr.is_cons() && cdr.cons_car().is_string() {
+        (popup_menu_string(cdr.cons_car()), cdr.cons_cdr())
+    } else {
+        (None, cdr)
+    };
+    let submenu = super::keymap::is_list_keymap(&command);
     Some((
         PopupMenuEntry {
             label: submenu_label(label, submenu, is_tty),
             shortcut: String::new(),
-            enabled: !cdr.is_nil(),
+            help,
+            enabled: !command.is_nil(),
             separator: false,
             submenu,
             depth,
         },
-        submenu.then_some(cdr),
+        submenu.then_some(command),
     ))
 }
 
@@ -1641,6 +1674,65 @@ impl TtyMenuNavigationCommand {
     }
 }
 
+/// Whether this modal popup has published help yet.
+///
+/// `Unpublished` is observably different from `Published(None)`: GNU does not
+/// clear an unrelated echo-area message merely because the initially selected
+/// item lacks help, but it does clear help when selection moves from an item
+/// with help to one without it.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+enum TtyMenuHelpPublication {
+    #[default]
+    Unpublished,
+    Published(Option<String>),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum TtyMenuHelpUpdate {
+    Unchanged,
+    Show(String),
+    Clear,
+}
+
+#[derive(Default)]
+struct TtyMenuHelpTracker {
+    publication: TtyMenuHelpPublication,
+}
+
+impl TtyMenuHelpTracker {
+    fn select(&mut self, help: Option<&str>) -> TtyMenuHelpUpdate {
+        let next = help.map(str::to_owned);
+        let update = match (&self.publication, next.as_ref()) {
+            (TtyMenuHelpPublication::Unpublished, None) => TtyMenuHelpUpdate::Unchanged,
+            (TtyMenuHelpPublication::Unpublished, Some(help)) => {
+                TtyMenuHelpUpdate::Show(help.clone())
+            }
+            (TtyMenuHelpPublication::Published(previous), _) if previous == &next => {
+                TtyMenuHelpUpdate::Unchanged
+            }
+            (TtyMenuHelpPublication::Published(_), Some(help)) => {
+                TtyMenuHelpUpdate::Show(help.clone())
+            }
+            (TtyMenuHelpPublication::Published(_), None) => TtyMenuHelpUpdate::Clear,
+        };
+        if !matches!(update, TtyMenuHelpUpdate::Unchanged) {
+            self.publication = TtyMenuHelpPublication::Published(next);
+        }
+        update
+    }
+}
+
+impl TtyMenuHelpUpdate {
+    fn publish(self, ctx: &mut Context, selected: usize) -> Result<(), Flow> {
+        let help = match self {
+            Self::Unchanged => return Ok(()),
+            Self::Show(help) => Value::string(help),
+            Self::Clear => Value::NIL,
+        };
+        ctx.show_help_echo(help, Value::NIL, Value::NIL, Value::fixnum(selected as i64))
+    }
+}
+
 fn popup_dialog_from_contents(
     contents: Value,
 ) -> Option<(String, Vec<PopupMenuEntry>, Vec<Value>)> {
@@ -1656,6 +1748,7 @@ fn popup_dialog_from_contents(
             entries.push(PopupMenuEntry {
                 label: String::new(),
                 shortcut: String::new(),
+                help: None,
                 enabled: false,
                 separator: true,
                 submenu: false,
@@ -1666,6 +1759,7 @@ fn popup_dialog_from_contents(
             entries.push(PopupMenuEntry {
                 label: popup_menu_string(item)?,
                 shortcut: String::new(),
+                help: None,
                 enabled: false,
                 separator: false,
                 submenu: false,
@@ -1678,6 +1772,7 @@ fn popup_dialog_from_contents(
             entries.push(PopupMenuEntry {
                 label,
                 shortcut: String::new(),
+                help: None,
                 enabled: true,
                 separator: false,
                 submenu: false,
@@ -1708,6 +1803,65 @@ fn popup_dialog_position(ctx: &Context, position: Value) -> (FrameId, f32, f32) 
         .unwrap_or((0.0, 0.0));
 
     (frame_id, x, y)
+}
+
+/// One complete native popup transaction.
+///
+/// Owning the menu data here makes the modal invariants impossible for dialog
+/// and menu call sites to apply differently: event values remain GC-rooted,
+/// ordinary redisplay stays inhibited while the host owns the glass, and all
+/// dynamic bindings are restored before the editor redraws the exposed frame.
+struct NativePopupSession {
+    position: Value,
+    entries: Vec<PopupMenuEntry>,
+    events: Vec<Value>,
+    visible_rows: usize,
+    placement: neomacs_display_protocol::PopupPlacement,
+    frame_id: FrameId,
+    title: Option<String>,
+    selected: usize,
+}
+
+impl NativePopupSession {
+    fn run(mut self, ctx: &mut Context) -> EvalResult {
+        let specpdl_count = ctx.specpdl.len();
+        for event in &self.events {
+            ctx.push_specpdl_root(*event);
+        }
+        // GNU's native popup is modal in the display layer.  Its terminal
+        // driver consumes navigation without exposing mouse tracking or an
+        // overriding terminal map to ordinary key dispatch.
+        ctx.try_specbind_or_unwind_to(
+            specpdl_count,
+            intern("overriding-terminal-local-map"),
+            Value::NIL,
+        )?;
+        ctx.try_specbind_or_unwind_to(specpdl_count, intern("track-mouse"), Value::NIL)?;
+        // `tty_menu_activate` owns the glass while active: delayed menu-help
+        // callbacks may update echo-area state, but ordinary redisplay must
+        // not paint through the popup before teardown.
+        ctx.try_specbind_or_unwind_to(specpdl_count, intern("inhibit-redisplay"), Value::T)?;
+
+        let result = x_popup_menu_interactive_loop(
+            ctx,
+            self.position,
+            &self.entries,
+            &self.events,
+            self.visible_rows,
+            self.placement,
+            self.frame_id,
+            self.title.as_deref(),
+            &mut self.selected,
+        );
+
+        let result_root_scope = ctx.save_vm_roots();
+        ctx.push_eval_result_roots(&result);
+        let _ = ctx.display_host.as_mut().map(|host| host.hide_popup_menu());
+        let result = ctx.unbind_to_with_result(specpdl_count, result);
+        ctx.redisplay_with_force(true);
+        ctx.restore_vm_roots(result_root_scope);
+        result
+    }
 }
 
 pub(crate) fn builtin_x_popup_dialog(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
@@ -1758,40 +1912,22 @@ pub(crate) fn builtin_x_popup_dialog(ctx: &mut Context, args: Vec<Value>) -> Eva
         "x-popup-dialog interactive: showing popup"
     );
 
-    let mut selected = entries
+    let selected = entries
         .iter()
         .position(|entry| entry.enabled && !entry.separator)
         .unwrap_or(0);
 
-    let specpdl_count = ctx.specpdl.len();
-    for value in &values {
-        ctx.push_specpdl_root(*value);
-    }
-    ctx.try_specbind_or_unwind_to(
-        specpdl_count,
-        intern("overriding-terminal-local-map"),
-        Value::NIL,
-    )?;
-    ctx.try_specbind_or_unwind_to(specpdl_count, intern("track-mouse"), Value::NIL)?;
-
-    let result = x_popup_menu_interactive_loop(
-        ctx,
-        args[0],
-        &entries,
-        &values,
+    NativePopupSession {
+        position: args[0],
+        entries,
+        events: values,
         visible_rows,
         placement,
         frame_id,
-        Some(&title),
-        &mut selected,
-    );
-
-    let result_root_scope = ctx.save_vm_roots();
-    ctx.push_eval_result_roots(&result);
-    let _ = ctx.display_host.as_mut().map(|host| host.hide_popup_menu());
-    ctx.redisplay_with_force(true);
-    ctx.restore_vm_roots(result_root_scope);
-    ctx.unbind_to_with_result(specpdl_count, result)
+        title: Some(title),
+        selected,
+    }
+    .run(ctx)
 }
 
 fn x_popup_menu_interactive(ctx: &mut Context, position: Value, menu: Value) -> EvalResult {
@@ -1844,46 +1980,24 @@ fn x_popup_menu_interactive(ctx: &mut Context, position: Value, menu: Value) -> 
         visible_rows,
         "x-popup-menu interactive: showing popup"
     );
-    let mut selected = 0;
+    let selected = 0;
     let frame_id = ctx
         .frame_manager()
         .selected_frame()
         .map(|frame| frame.id)
         .unwrap_or(FrameId(0));
 
-    let specpdl_count = ctx.specpdl.len();
-    for event in &events {
-        ctx.push_specpdl_root(*event);
-    }
-    // Native popup menus are modal in the display layer.  The renderer owns
-    // hover/keyboard navigation and reports only committed selections here.
-    // Letting the TTY menu map see raw mouse movement can execute menu items
-    // from hover alone.
-    ctx.try_specbind_or_unwind_to(
-        specpdl_count,
-        intern("overriding-terminal-local-map"),
-        Value::NIL,
-    )?;
-    ctx.try_specbind_or_unwind_to(specpdl_count, intern("track-mouse"), Value::NIL)?;
-
-    let result = x_popup_menu_interactive_loop(
-        ctx,
+    NativePopupSession {
         position,
-        &entries,
-        &events,
+        entries,
+        events,
         visible_rows,
         placement,
         frame_id,
-        None,
-        &mut selected,
-    );
-
-    let result_root_scope = ctx.save_vm_roots();
-    ctx.push_eval_result_roots(&result);
-    let _ = ctx.display_host.as_mut().map(|host| host.hide_popup_menu());
-    ctx.redisplay_with_force(true);
-    ctx.restore_vm_roots(result_root_scope);
-    ctx.unbind_to_with_result(specpdl_count, result)
+        title: None,
+        selected,
+    }
+    .run(ctx)
 }
 
 #[allow(clippy::too_many_arguments)] // popup-loop inputs mirror the display-host boundary
@@ -1898,15 +2012,30 @@ fn x_popup_menu_interactive_loop(
     title: Option<&str>,
     selected: &mut usize,
 ) -> EvalResult {
-    show_popup_menu_selection(ctx, frame_id, placement, title, entries, *selected)?;
+    let mut help = TtyMenuHelpTracker::default();
+    show_popup_menu_selection(
+        ctx, frame_id, placement, title, entries, *selected, &mut help,
+    )?;
 
     loop {
+        // GNU `read_menu_command` calls the ordinary `read_key_sequence`:
+        // input clears the previous logical echo message even though the TTY
+        // menu keeps ordinary redisplay inhibited while it owns the screen.
         let (keys, binding) = ctx.read_key_sequence()?;
-        if let Some(index) = popup_menu_selection_index(&keys) {
-            if index < 0 {
-                return Ok(Value::NIL);
+        if let Some(selection) = popup_menu_selection(&keys) {
+            match selection {
+                NativePopupSelection::Cancelled => return Ok(Value::NIL),
+                NativePopupSelection::Entry(index) => {
+                    let Some(event) = events.get(index).copied() else {
+                        return Ok(Value::NIL);
+                    };
+                    *selected = index;
+                    show_popup_menu_selection(
+                        ctx, frame_id, placement, title, entries, *selected, &mut help,
+                    )?;
+                    return Ok(event);
+                }
             }
-            return Ok(events.get(index as usize).copied().unwrap_or(Value::NIL));
         }
 
         let command = binding
@@ -1917,11 +2046,15 @@ fn x_popup_menu_interactive_loop(
         match command {
             Some(TtyMenuNavigationCommand::TtyMenuNextItem) => {
                 *selected = (*selected + 1).min(visible_rows.saturating_sub(1));
-                show_popup_menu_selection(ctx, frame_id, placement, title, entries, *selected)?;
+                show_popup_menu_selection(
+                    ctx, frame_id, placement, title, entries, *selected, &mut help,
+                )?;
             }
             Some(TtyMenuNavigationCommand::TtyMenuPrevItem) => {
                 *selected = (*selected).saturating_sub(1);
-                show_popup_menu_selection(ctx, frame_id, placement, title, entries, *selected)?;
+                show_popup_menu_selection(
+                    ctx, frame_id, placement, title, entries, *selected, &mut help,
+                )?;
             }
             Some(TtyMenuNavigationCommand::TtyMenuNextMenu) => {
                 if let Some(new_position) =
@@ -1961,18 +2094,28 @@ fn show_popup_menu_selection(
     title: Option<&str>,
     entries: &[PopupMenuEntry],
     selected: usize,
+    help: &mut TtyMenuHelpTracker,
 ) -> Result<(), Flow> {
-    let Some(host) = ctx.display_host.as_mut() else {
-        return Ok(());
-    };
-    host.show_popup_menu(PopupMenuRequest {
-        frame_id,
-        placement,
-        title: title.map(str::to_owned),
-        entries: entries.to_vec(),
-        selected,
-    })
-    .map_err(|err| signal("error", vec![Value::string(err)]))
+    {
+        let Some(host) = ctx.display_host.as_mut() else {
+            return Ok(());
+        };
+        host.show_popup_menu(PopupMenuRequest {
+            frame_id,
+            placement,
+            title: title.map(str::to_owned),
+            entries: entries.to_vec(),
+            selected,
+        })
+        .map_err(|err| signal("error", vec![Value::string(err)]))?;
+    }
+
+    help.select(
+        entries
+            .get(selected)
+            .and_then(|entry| entry.help.as_deref()),
+    )
+    .publish(ctx, selected)
 }
 
 fn popup_menu_entry_selectable(entries: &[PopupMenuEntry], index: usize) -> bool {
@@ -1981,13 +2124,24 @@ fn popup_menu_entry_selectable(entries: &[PopupMenuEntry], index: usize) -> bool
         .is_some_and(|entry| entry.enabled && !entry.separator)
 }
 
-fn popup_menu_selection_index(keys: &[Value]) -> Option<i32> {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum NativePopupSelection {
+    Cancelled,
+    Entry(usize),
+}
+
+fn popup_menu_selection(keys: &[Value]) -> Option<NativePopupSelection> {
     let event = keys.first()?;
     let parts = list_to_vec(event)?;
     if parts.len() != 2 || parts[0].as_symbol_name() != Some("menu-selection") {
         return None;
     }
-    Some(parts[1].as_fixnum()? as i32)
+    let index = parts[1].as_fixnum()?;
+    Some(if index < 0 {
+        NativePopupSelection::Cancelled
+    } else {
+        NativePopupSelection::Entry(usize::try_from(index).ok()?)
+    })
 }
 
 fn native_popup_navigation_command(keys: &[Value]) -> Option<TtyMenuNavigationCommand> {

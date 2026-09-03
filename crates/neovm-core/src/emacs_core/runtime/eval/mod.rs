@@ -2288,6 +2288,12 @@ pub struct ResolvedSurface {
 pub struct PopupMenuEntry {
     pub label: String,
     pub shortcut: String,
+    /// Echo-area help attached to this menu item.
+    ///
+    /// This is owned editor state, not renderer state: the display host may
+    /// ignore it, while the modal popup controller publishes it through
+    /// GNU's `show-help-function` contract as selection changes.
+    pub help: Option<String>,
     pub enabled: bool,
     pub separator: bool,
     pub submenu: bool,

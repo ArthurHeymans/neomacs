@@ -2432,6 +2432,7 @@ fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
     let entry = PopupMenuEntry {
         label: "Open".to_string(),
         shortcut: "C-x C-f".to_string(),
+        help: None,
         enabled: true,
         separator: false,
         submenu: false,

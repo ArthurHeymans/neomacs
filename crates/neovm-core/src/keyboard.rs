@@ -4159,9 +4159,11 @@ impl crate::emacs_core::eval::Context {
 
     /// Read a complete key sequence through keymaps.
     ///
-    /// Mirrors GNU Emacs `read_key_sequence()` (keyboard.c:10098).
-    /// Reads keys one at a time, following prefix keymaps until a
-    /// complete binding (command) or undefined key is found.
+    /// Mirrors GNU Emacs `read_key_sequence()` (keyboard.c:10098). Reads keys
+    /// one at a time, following prefix keymaps until a complete binding or
+    /// undefined key is found. Accepting fresh input also clears a previous
+    /// logical echo-area message; GNU's `read_menu_command` deliberately uses
+    /// this same reader.
     ///
     /// After each key, checks translation maps in order:
     /// 1. `input-decode-map` — terminal-specific key decoding
@@ -4169,8 +4171,8 @@ impl crate::emacs_core::eval::Context {
     ///    key translation
     /// 3. `key-translation-map` — user-defined key translations
     ///
-    /// Returns (key_events_as_emacs_values, binding).
-    /// binding is Value::NIL if the key sequence is undefined.
+    /// Returns `(key_events_as_emacs_values, binding)`; binding is nil if the
+    /// key sequence is undefined.
     pub(crate) fn read_key_sequence(
         &mut self,
     ) -> Result<(Vec<Value>, Value), crate::emacs_core::error::Flow> {
@@ -5157,6 +5159,11 @@ impl crate::emacs_core::eval::Context {
                 unreachable!("internal frontend events are serviced before read_char")
             }
             InputEvent::MenuSelection { index } => {
+                // A native-menu selection is fresh user input, like the event
+                // returned by GNU Emacs's read_menu_command/read_char path.
+                // Clear only the logical echo-area message here; redisplay may
+                // remain inhibited by the modal native-menu session.
+                self.clear_current_message_for_keyboard_input();
                 let event = Value::list(vec![
                     Value::symbol("menu-selection"),
                     Value::fixnum(index as i64),
@@ -5790,14 +5797,23 @@ impl crate::emacs_core::eval::Context {
             return Ok(false);
         }
         let head = parts[0];
-        let mut help = parts[2];
-        let window = parts[3];
-        let object = parts[4];
-        let pos = parts[5];
         if !head.is_symbol_named("help-echo") {
             return Ok(false);
         }
 
+        self.show_help_echo(parts[2], parts[3], parts[4], parts[5])?;
+        Ok(true)
+    }
+
+    /// Resolve and publish GNU `show_help_echo` state for mouse regions and
+    /// native menus through one path.
+    pub(crate) fn show_help_echo(
+        &mut self,
+        mut help: Value,
+        window: Value,
+        object: Value,
+        pos: Value,
+    ) -> Result<(), crate::emacs_core::error::Flow> {
         if !help.is_nil() && !help.is_string() {
             help = if self.function_value_is_callable(&help) {
                 self.funcall_general(help, vec![window, object, pos])?
@@ -5805,7 +5821,7 @@ impl crate::emacs_core::eval::Context {
                 self.eval_value(&help)?
             };
             if !help.is_nil() && !help.is_string() {
-                return Ok(true);
+                return Ok(());
             }
         }
 
@@ -5830,7 +5846,7 @@ impl crate::emacs_core::eval::Context {
         }
 
         self.timer_resume_idle();
-        Ok(true)
+        Ok(())
     }
 
     fn fixup_help_echo_message(
