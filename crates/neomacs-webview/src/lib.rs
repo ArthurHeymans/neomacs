@@ -6,6 +6,9 @@
 #![cfg_attr(not(feature = "webview"), allow(dead_code))]
 
 mod backend;
+#[cfg(any(test, target_os = "macos", target_os = "windows"))]
+#[cfg_attr(target_os = "windows", allow(dead_code))]
+mod load_state;
 mod model;
 mod platform;
 mod presentation;
@@ -21,9 +24,9 @@ mod system_test;
 
 pub use model::{
     BrowsingRelationship, ButtonState, DeveloperToolsPolicy, DmaBufFrame, DmaBufPlane,
-    DmaBufReadiness, FocusIntent, HistoryAction, HostWindowId, JavaScriptPolicy, NavigationId,
-    NavigationTarget, PixelFrame, PointerButton, PolicyDecisionId, ScriptError, ScriptRequest,
-    ScriptRequestId, ScriptWorld, StoragePartition, WebContentPoint, WebContentSize,
+    DmaBufReadiness, FocusIntent, HistoryAction, HostWindowId, JavaScriptPolicy, LoadPhase,
+    NavigationId, NavigationTarget, PixelFrame, PointerButton, PolicyDecisionId, ScriptError,
+    ScriptRequest, ScriptRequestId, ScriptWorld, StoragePartition, WebContentPoint, WebContentSize,
     WebContentSizeError, WebProcessFailure, WebProfileId, WebValue, WebViewCommand,
     WebViewCommandError, WebViewCreate, WebViewEvent, WebViewFrame, WebViewFrameTransport,
     WebViewGeneration, WebViewHost, WebViewInitError, WebViewInput, WebViewInputTarget,

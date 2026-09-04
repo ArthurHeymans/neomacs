@@ -1,5 +1,7 @@
 use neomacs_display_protocol::WebViewId;
 
+#[cfg(any(test, target_os = "macos", target_os = "windows"))]
+use crate::LoadPhase;
 use crate::{
     BrowsingRelationship, FocusIntent, HistoryAction, HostWindowId, NavigationTarget,
     ResolvedWebViewPlacement, ScriptRequest, StoragePartition, WebContentSize, WebViewEvent,
@@ -120,37 +122,63 @@ pub(crate) enum PlatformUpdate<'a> {
 #[cfg_attr(any(target_os = "macos", target_os = "windows"), allow(dead_code))]
 pub(crate) enum NavigationMilestone {
     Started,
-    StateChanged,
+    Redirected,
+    Committed,
     Finished,
 }
 
 #[cfg(any(test, target_os = "macos", target_os = "windows"))]
 impl NavigationMilestone {
+    /// The GNU `load-changed` phase this milestone is delivered as.
+    pub(crate) fn phase(self) -> LoadPhase {
+        match self {
+            Self::Started => LoadPhase::Started,
+            Self::Redirected => LoadPhase::Redirected,
+            Self::Committed => LoadPhase::Committed,
+            Self::Finished => LoadPhase::Finished,
+        }
+    }
+
+    /// The progress a milestone pins by itself: the two ends of a load.
+    /// The middle comes from the browser's own progress property.
+    pub(crate) fn progress_marker(self) -> Option<f64> {
+        match self {
+            Self::Started => Some(0.0),
+            Self::Redirected | Self::Committed => None,
+            Self::Finished => Some(1.0),
+        }
+    }
+
+    /// The events a milestone implies with no other progress source.  A
+    /// backend that also observes progress must not use this directly:
+    /// `crate::load_state::PageLoadState` owns the deduplication then.
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub(crate) fn normalized_events(
         self,
         id: WebViewId,
         generation: WebViewGeneration,
     ) -> Vec<WebViewEvent> {
-        match self {
-            Self::Started => vec![WebViewEvent::LoadProgressChanged {
+        let mut events = Vec::new();
+        if let Some(progress) = self.progress_marker() {
+            events.push(WebViewEvent::LoadProgressChanged {
                 id,
                 generation,
-                progress: 0.0,
-            }],
-            Self::StateChanged => Vec::new(),
-            Self::Finished => vec![
-                WebViewEvent::LoadProgressChanged {
-                    id,
-                    generation,
-                    progress: 1.0,
-                },
-                WebViewEvent::LoadFinished {
-                    id,
-                    generation,
-                    navigation: None,
-                },
-            ],
+                progress,
+            });
         }
+        events.push(WebViewEvent::LoadChanged {
+            id,
+            generation,
+            phase: self.phase(),
+        });
+        if self == Self::Finished {
+            events.push(WebViewEvent::LoadFinished {
+                id,
+                generation,
+                navigation: None,
+            });
+        }
+        events
     }
 }
 
@@ -165,12 +193,31 @@ pub(crate) enum PlatformPresentation<'a> {
     },
 }
 
+/// What registering a native host changed at the platform seam.
+///
+/// A logical [`HostWindowId`] can survive recreation of the native window
+/// behind it.  The system must reapply its current scene after
+/// [`HostRegistration::Replaced`], even when redisplay produced no new scene
+/// revision; otherwise native-overlay views remain attached to the dead host.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[must_use]
+// Native-overlay adapters use every outcome.  Composited/unsupported target
+// builds intentionally collapse the host capability and therefore construct
+// only a subset.
+#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
+pub(crate) enum HostRegistration {
+    Added,
+    Unchanged,
+    Replaced,
+    Unavailable,
+}
+
 pub(crate) trait Platform {
     type Host;
     type PendingCreate;
     type View;
 
-    fn register_host(&mut self, id: HostWindowId, host: Self::Host);
+    fn register_host(&mut self, id: HostWindowId, host: Self::Host) -> HostRegistration;
     fn unregister_host(&mut self, host: HostWindowId);
 
     fn missing_prerequisites(&self, request: &PlatformCreateRequest) -> MissingPrerequisites;

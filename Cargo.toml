@@ -43,7 +43,10 @@ cargo-features = ["video"]
 video-backend = "linked-gstreamer"
 
 [workspace.metadata.neomacs-production-capabilities.darwin]
-cargo-features = []
+# The inline browser is the system WKWebView (`crates/neomacs-webview`,
+# `platform/macos`); nothing to install, so production builds ship it and
+# `xwidget-internal` can be provided honestly.
+cargo-features = ["webview"]
 video-backend = "none"
 
 [workspace.metadata.neomacs-production-capabilities.windows]
@@ -229,17 +232,19 @@ raw-window-handle = "0.6"
 # dependency graph keeps a single objc2 major.
 objc2 = "0.6"
 block2 = "0.6"
-objc2-app-kit = { version = "0.3", features = ["NSView", "NSResponder", "NSWindow"] }
+objc2-app-kit = { version = "0.3", features = ["NSEvent", "NSView", "NSResponder", "NSWindow"] }
 objc2-foundation = { version = "0.3", features = [
     "NSData",
     "NSError",
     "NSGeometry",
     "NSJSONSerialization",
+    "NSKeyValueObserving",
     "NSObjCRuntime",
     "NSUUID",
     "NSString",
     "NSURL",
     "NSURLRequest",
+    "NSValue",
 ] }
 objc2-web-kit = { version = "0.3", features = [
     "block2",
@@ -248,6 +253,10 @@ objc2-web-kit = { version = "0.3", features = [
     "WKNavigation",
     "WKNavigationDelegate",
     "WKPreferences",
+    "WKScriptMessage",
+    "WKScriptMessageHandler",
+    "WKUserContentController",
+    "WKUserScript",
     "WKWebView",
     "WKWebViewConfiguration",
     "WKWebsiteDataStore",

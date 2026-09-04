@@ -372,6 +372,37 @@ pub enum WebViewState {
     Closing,
 }
 
+/// The phases of one page load, as GNU Emacs reports them to Lisp.
+///
+/// GNU's `webkit_view_load_changed_cb` (src/xwidget.c:2427-2447) maps
+/// WebKitGTK's `WebKitLoadEvent` onto the strings "load-started",
+/// "load-redirected", "load-committed" and "load-finished" of an
+/// `(xwidget-event load-changed XWIDGET STRING)` input event, and
+/// `lisp/xwidget.el`'s `xwidget-webkit-callback` keys its progress timer and
+/// buffer renaming on exactly those strings.  WebKitGTK reports FINISHED
+/// after a failed load as well, so a failed navigation ends in `Finished`
+/// here too, and GNU has no separate load-failed event.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LoadPhase {
+    Started,
+    Redirected,
+    Committed,
+    Finished,
+}
+
+impl LoadPhase {
+    /// The string GNU stores in the `load-changed` event.
+    #[must_use]
+    pub const fn gnu_name(self) -> &'static str {
+        match self {
+            Self::Started => "load-started",
+            Self::Redirected => "load-redirected",
+            Self::Committed => "load-committed",
+            Self::Finished => "load-finished",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum WebViewEvent {
     Ready {
@@ -402,6 +433,12 @@ pub enum WebViewEvent {
         generation: WebViewGeneration,
         progress: f64,
     },
+    /// One GNU-visible phase of a page load; see [`LoadPhase`].
+    LoadChanged {
+        id: WebViewId,
+        generation: WebViewGeneration,
+        phase: LoadPhase,
+    },
     LoadFinished {
         id: WebViewId,
         generation: WebViewGeneration,
@@ -423,6 +460,33 @@ pub enum WebViewEvent {
         generation: WebViewGeneration,
         focused: bool,
     },
+}
+
+impl WebViewEvent {
+    /// The browser instance and generation this event is about.
+    ///
+    /// Every variant carries both, so the match is exhaustive here, once,
+    /// where every platform compiles it: the Linux reactor keys its
+    /// per-view queues on this, and a variant added without an arm fails on
+    /// the developer's machine rather than on Linux CI.
+    #[must_use]
+    pub fn identity(&self) -> (WebViewId, WebViewGeneration) {
+        match self {
+            Self::Ready { id, generation }
+            | Self::Failed { id, generation, .. }
+            | Self::Closed { id, generation }
+            | Self::TitleChanged { id, generation, .. }
+            | Self::UriChanged { id, generation, .. }
+            | Self::LoadProgressChanged { id, generation, .. }
+            | Self::LoadChanged { id, generation, .. }
+            | Self::LoadFinished { id, generation, .. }
+            | Self::ProcessFailed { id, generation, .. }
+            | Self::FocusChanged { id, generation, .. } => (*id, *generation),
+            Self::ScriptFinished {
+                view, generation, ..
+            } => (*view, *generation),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
