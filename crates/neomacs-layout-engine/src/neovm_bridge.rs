@@ -232,12 +232,38 @@ impl LayoutBufferSnapshot {
         snapshot.category_symbol_plists = capture_layout_category_symbol_plists(buffer, obarray);
         snapshot.automatic_composition_spans =
             capture_automatic_composition_spans(buffer, obarray, &snapshot.vars);
+        SNAPSHOTS_BUILT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         snapshot
     }
 
     pub(crate) fn name(&self) -> &str {
         &self.name
     }
+}
+
+/// ADMITTED-WORK counters, read and reset once per accepted frame into
+/// [`crate::incremental_layout::LayoutStats`].
+///
+/// Process-wide atomics, matching the row-route telemetry next door: the
+/// buffer snapshot is built far from the engine that owns the stats, and
+/// threading a counter through every constructor would be worse than the
+/// problem. Counting only -- nothing here decides anything.
+pub(crate) static SNAPSHOTS_BUILT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+pub(crate) static COMPOSITION_BYTES_SCANNED: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+/// Chrome rows installed from a retained matrix rather than walked.
+pub(crate) static CHROME_ROWS_REUSED: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// Take and reset both counters.
+pub(crate) fn take_snapshot_work() -> (usize, usize, usize) {
+    use std::sync::atomic::Ordering::Relaxed;
+    (
+        SNAPSHOTS_BUILT.swap(0, Relaxed),
+        COMPOSITION_BYTES_SCANNED.swap(0, Relaxed),
+        CHROME_ROWS_REUSED.swap(0, Relaxed),
+    )
 }
 
 fn capture_automatic_composition_spans(
@@ -260,6 +286,9 @@ fn capture_automatic_composition_spans(
         return Vec::new();
     };
     let text = buffer.buffer_string();
+    // `text.len()` is O(1); counting chars here would make the instrument
+    // pay the very cost it exists to expose.
+    COMPOSITION_BYTES_SCANNED.fetch_add(text.len(), std::sync::atomic::Ordering::Relaxed);
     let offset = buffer.point_min_char_pos().get();
     let spans =
         neovm_core::emacs_core::composite::automatic_composition_spans(buffer, table, &text);

@@ -4199,6 +4199,18 @@ fn try_bytecode_equal(
 
 /// Collect a proper list into a Vec.
 pub fn list_to_vec(value: &Value) -> Option<Vec<Value>> {
+    // Answer the two non-list cases BEFORE reserving anything. The capacity
+    // below is deliberate but it is not free, and callers in hot loops ask
+    // this question of nil far more often than of a real list: the automatic
+    // composition scan asked it once per character of the whole buffer, and
+    // paid a 16-element malloc/free for every character that had no
+    // composition rule. `Vec::new()` does not allocate.
+    if value.is_nil() {
+        return Some(Vec::new());
+    }
+    if !value.is_cons() {
+        return None;
+    }
     // Argument lists and parse states are short; one allocation instead of
     // the 0->4->8->16 growth chain (three reallocations for an 11-element
     // `parse-partial-sexp' state, ~600 Ir of a 1K call).

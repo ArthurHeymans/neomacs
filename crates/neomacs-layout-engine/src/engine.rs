@@ -2827,6 +2827,18 @@ impl LayoutEngine {
         self.retained_window_chrome_metrics
             .extend(accepted_window_chrome_metrics);
         self.layout_stats = next_layout_stats;
+        // Admitted work: what the frame SPENT to decide, not what it emitted.
+        let (snapshots, composition_bytes, reused_chrome) =
+            crate::neovm_bridge::take_snapshot_work();
+        self.layout_stats.buffer_snapshots_built = snapshots;
+        self.layout_stats.composition_bytes_scanned = composition_bytes;
+        self.layout_stats.reused_chrome_rows = reused_chrome;
+        // `relaid_chrome_rows` accumulated EVERY enabled chrome row above,
+        // reused or not. Reused rows were never walked, so take them back out.
+        self.layout_stats.relaid_chrome_rows = self
+            .layout_stats
+            .relaid_chrome_rows
+            .saturating_sub(reused_chrome);
         // Per-frame incremental-layout observability: append one line per
         // accepted frame when NEOMACS_LAYOUT_STATS_FILE names a path. This is
         // the only consumer-facing view of LayoutStats; the TTY typing
@@ -2843,7 +2855,7 @@ impl LayoutEngine {
             {
                 let _ = writeln!(
                     f,
-                    "full={} cursor_only={} scroll={} edit={} relaid_body={} relaid_chrome={} reused={} reused_shifted={}",
+                    "full={} cursor_only={} scroll={} edit={} relaid_body={} relaid_chrome={} reused={} reused_shifted={} reused_chrome={} snapshots={} compose_bytes={}",
                     s.full_windows,
                     s.cursor_only_windows,
                     s.scroll_windows,
@@ -2852,6 +2864,9 @@ impl LayoutEngine {
                     s.relaid_chrome_rows,
                     s.reused_rows,
                     s.reused_shifted_rows,
+                    s.reused_chrome_rows,
+                    s.buffer_snapshots_built,
+                    s.composition_bytes_scanned,
                 );
             }
         }
@@ -3014,7 +3029,11 @@ impl LayoutEngine {
         };
         if prev.chrome_reusable_after_cursor_move(&replay, chrome_reuse_context(params, evaluator))
         {
-            replay.chrome = prev.retained_chrome();
+            if let Some(chrome) = prev.retained_chrome() {
+                crate::neovm_bridge::CHROME_ROWS_REUSED
+                    .fetch_add(chrome.rows.len(), std::sync::atomic::Ordering::Relaxed);
+                replay.chrome = Some(chrome);
+            }
         }
         Some(replay)
     }
@@ -3269,7 +3288,11 @@ impl LayoutEngine {
                 })
             },
         ) {
-            replay.chrome = prev.retained_chrome();
+            if let Some(chrome) = prev.retained_chrome() {
+                crate::neovm_bridge::CHROME_ROWS_REUSED
+                    .fetch_add(chrome.rows.len(), std::sync::atomic::Ordering::Relaxed);
+                replay.chrome = Some(chrome);
+            }
         }
         Some(replay)
     }

@@ -1586,6 +1586,25 @@ pub struct LayoutStats {
     /// because the predicate could approach relayout cost for screenfuls of
     /// short rows when the dirty set is small (spec §6).
     pub reuse_predicate_cpu: std::time::Duration,
+    /// Chrome rows installed from the retained matrix instead of walked.
+    ///
+    /// Without this, `relaid_chrome_rows` counted every enabled chrome row
+    /// whether or not it was re-walked, so the stat COULD NOT show chrome
+    /// reuse and a change that altered chrome cost left the numbers
+    /// untouched.
+    pub reused_chrome_rows: usize,
+    /// ADMITTED WORK, not emitted rows. Everything above counts what the
+    /// frame produced; these count what it spent to decide, which is where
+    /// two regressions hid in one day: a chrome reuse that deep-cloned a
+    /// snapshot per frame, and a composition scan that swept the whole
+    /// buffer per window per frame. Both left every row counter identical.
+    /// A statistic that cannot move when the cost moves is worse than none.
+    pub buffer_snapshots_built: usize,
+    /// Bytes of buffer text handed to the automatic-composition scan this
+    /// frame. Proportional to BUFFER size today; it should be proportional to
+    /// what is visible. Bytes rather than characters so the instrument stays
+    /// O(1).
+    pub composition_bytes_scanned: usize,
 }
 
 impl LayoutStats {
