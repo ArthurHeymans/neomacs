@@ -2311,6 +2311,15 @@ pub struct Buffer {
     /// Not part of the buffer's identity: it is derived state, so clones and
     /// dumps may leave it empty and it recomputes on demand.
     pub(crate) overlay_digest_cache: std::cell::Cell<Option<(i64, u64)>>,
+    /// Memo for [`Self::automatic_composition_spans`], keyed on everything
+    /// the scan reads. Derived state: clones and dumps may leave it empty and
+    /// it recomputes on demand.
+    pub(crate) automatic_composition_cache: std::cell::RefCell<
+        Option<(
+            AutomaticCompositionKey,
+            std::rc::Rc<Vec<crate::emacs_core::composite::AutomaticCompositionSpan>>,
+        )>,
+    >,
     /// Shared undo owner for this text.
     pub(crate) undo_state: SharedUndoState,
     /// Handle on the editor's ONE saved point-before-command-or-undo, GNU's
@@ -2326,6 +2335,22 @@ pub struct Buffer {
 /// with the overlay tick so consecutive frames differ, which is precisely the
 /// pre-digest behaviour.
 const NO_OVERLAY_CONTENT_DIGEST: u64 = 0x4e6f_4469_6765_7374;
+
+/// Everything [`Buffer::automatic_composition_spans`] reads, so the memo can
+/// say when its answer is still good.
+///
+/// The scan consumes the buffer TEXT and the composition rule table, and
+/// matches rules with regexes that consult this buffer's syntax table -- so
+/// all four belong in the key. Keying on the text ticks alone would go stale
+/// on `set-syntax-table`, which is exactly the class of silent staleness that
+/// makes a cache worse than no cache.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AutomaticCompositionKey {
+    chars_tick: i64,
+    props_tick: i64,
+    table: usize,
+    syntax_table: usize,
+}
 
 impl Buffer {
     /// Return the chartable Value stored in this buffer's syntax-table
@@ -2493,6 +2518,7 @@ impl Buffer {
             overlays: OverlayList::new(),
             overlay_modified_tick: 1,
             overlay_digest_cache: std::cell::Cell::new(None),
+            automatic_composition_cache: std::cell::RefCell::new(None),
             undo_state: SharedUndoState::new(),
             saved_point_before_command,
         }
@@ -2526,6 +2552,7 @@ impl Buffer {
             overlays: parts.overlays,
             overlay_modified_tick: parts.overlay_modified_tick,
             overlay_digest_cache: std::cell::Cell::new(None),
+            automatic_composition_cache: std::cell::RefCell::new(None),
             undo_state: parts.undo_state,
             saved_point_before_command: parts.saved_point_before_command,
         }
@@ -4039,6 +4066,42 @@ impl Buffer {
             .unwrap_or(NO_OVERLAY_CONTENT_DIGEST ^ tick as u64);
         self.overlay_digest_cache.set(Some((tick, digest)));
         digest
+    }
+
+    /// The buffer's automatic-composition spans, recomputed only when
+    /// something the scan reads has changed.
+    ///
+    /// GNU never sweeps a whole buffer for this -- `composition_compute_stop_pos`
+    /// searches from the current position toward a bounded stop inside the
+    /// visible region. Until this port does the same, the scan is O(buffer),
+    /// and it was being run once per WINDOW per FRAME. Memoizing on the inputs
+    /// makes it once per change, which is what lets an idle frame and every
+    /// extra window on the same buffer cost nothing.
+    pub fn automatic_composition_spans(
+        &self,
+        composition_function_table: Value,
+    ) -> std::rc::Rc<Vec<crate::emacs_core::composite::AutomaticCompositionSpan>> {
+        let key = AutomaticCompositionKey {
+            chars_tick: self.chars_modified_tick(),
+            props_tick: self.props_modified_tick(),
+            table: composition_function_table.bits(),
+            syntax_table: self.slots[BUFFER_SLOT_SYNTAX_TABLE.index()].bits(),
+        };
+        if let Some((cached_key, spans)) = self.automatic_composition_cache.borrow().as_ref()
+            && *cached_key == key
+        {
+            return std::rc::Rc::clone(spans);
+        }
+        let text = self.buffer_string();
+        crate::emacs_core::composite::BYTES_SCANNED
+            .fetch_add(text.len(), std::sync::atomic::Ordering::Relaxed);
+        let spans = std::rc::Rc::new(crate::emacs_core::composite::automatic_composition_spans(
+            self,
+            composition_function_table,
+            &text,
+        ));
+        *self.automatic_composition_cache.borrow_mut() = Some((key, std::rc::Rc::clone(&spans)));
+        spans
     }
 
     pub fn increment_overlay_modified_tick(&mut self) {

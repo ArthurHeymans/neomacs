@@ -250,8 +250,6 @@ impl LayoutBufferSnapshot {
 /// problem. Counting only -- nothing here decides anything.
 pub(crate) static SNAPSHOTS_BUILT: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
-pub(crate) static COMPOSITION_BYTES_SCANNED: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
 /// Chrome rows installed from a retained matrix rather than walked.
 pub(crate) static CHROME_ROWS_REUSED: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
@@ -261,7 +259,7 @@ pub(crate) fn take_snapshot_work() -> (usize, usize, usize) {
     use std::sync::atomic::Ordering::Relaxed;
     (
         SNAPSHOTS_BUILT.swap(0, Relaxed),
-        COMPOSITION_BYTES_SCANNED.swap(0, Relaxed),
+        neovm_core::emacs_core::composite::take_bytes_scanned(),
         CHROME_ROWS_REUSED.swap(0, Relaxed),
     )
 }
@@ -285,15 +283,14 @@ fn capture_automatic_composition_spans(
     let Some(table) = obarray.symbol_value_id(table_id).copied() else {
         return Vec::new();
     };
-    let text = buffer.buffer_string();
-    // `text.len()` is O(1); counting chars here would make the instrument
-    // pay the very cost it exists to expose.
-    COMPOSITION_BYTES_SCANNED.fetch_add(text.len(), std::sync::atomic::Ordering::Relaxed);
     let offset = buffer.point_min_char_pos().get();
-    let spans =
-        neovm_core::emacs_core::composite::automatic_composition_spans(buffer, table, &text);
+    // Memoized on everything the scan reads, so an unedited buffer and every
+    // extra window showing it cost nothing. The counter records only the
+    // scans that actually ran; `text.len()` is O(1), where counting
+    // characters would make the instrument pay the cost it exists to expose.
+    let spans = buffer.automatic_composition_spans(table);
     spans
-        .into_iter()
+        .iter()
         .map(|span| {
             CharRange::new(
                 CharPos0::new(offset.saturating_add(span.start())),

@@ -3721,3 +3721,51 @@ fn changed_char_range_tracks_real_edits() {
     ));
     assert_eq!(buf.changed_char_range(), Some((10, 10)));
 }
+
+/// The automatic-composition memo must answer from cache only while every
+/// input it reads is unchanged, and must recompute when any of them moves.
+/// A cache that goes stale silently is worse than no cache: the scan feeds
+/// glyph composition, so a stale answer is a wrong screen.
+#[test]
+fn automatic_composition_memo_recomputes_when_any_input_it_reads_changes() {
+    crate::test_utils::init_test_tracing();
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("compose"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
+    buf.insert("hello");
+
+    // Not a char-table: the scan declines, but the memo still has to behave.
+    let table = Value::NIL;
+    let scans =
+        || crate::emacs_core::composite::BYTES_SCANNED.load(std::sync::atomic::Ordering::Relaxed);
+
+    let before = scans();
+    let first = buf.automatic_composition_spans(table);
+    let after_first = scans();
+    assert!(after_first > before, "the first call must actually scan");
+
+    // Same inputs: served from the memo, no further scanning.
+    let second = buf.automatic_composition_spans(table);
+    assert_eq!(scans(), after_first, "an unchanged buffer must not rescan");
+    assert!(
+        std::rc::Rc::ptr_eq(&first, &second),
+        "the memo must hand back the same allocation"
+    );
+
+    // Text changed: rescan.
+    buf.insert("!");
+    let _ = buf.automatic_composition_spans(table);
+    let after_edit = scans();
+    assert!(after_edit > after_first, "an edit must invalidate the memo");
+
+    // Syntax table changed with no edit: the regexes consult it, so rescan.
+    // Keying on the text ticks alone would go stale here.
+    buf.slots[BUFFER_SLOT_SYNTAX_TABLE.index()] = Value::string("a different table");
+    let _ = buf.automatic_composition_spans(table);
+    assert!(
+        scans() > after_edit,
+        "a syntax-table change must invalidate the memo"
+    );
+}

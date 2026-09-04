@@ -824,6 +824,17 @@ impl AutomaticCompositionSpan {
 /// explicit lookback, and are tried in list order.  Once a rule matches, the
 /// next search begins after the complete match so a later rule cannot form the
 /// partially overlapping composition GNU rejects.
+/// Bytes of buffer text this process has actually scanned for automatic
+/// compositions. Bumped only when the memo misses, so it reports work DONE
+/// rather than work asked for. Read once per accepted frame into
+/// `LayoutStats::composition_bytes_scanned`.
+pub static BYTES_SCANNED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Take and reset [`BYTES_SCANNED`].
+pub fn take_bytes_scanned() -> usize {
+    BYTES_SCANNED.swap(0, std::sync::atomic::Ordering::Relaxed)
+}
+
 pub fn automatic_composition_spans(
     buffer: &crate::buffer::Buffer,
     composition_function_table: Value,
