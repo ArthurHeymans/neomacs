@@ -833,27 +833,48 @@ pub fn automatic_composition_spans(
         return Vec::new();
     }
 
-    let chars = text.chars().collect::<Vec<_>>();
+    // Byte offsets only: the scan jumps (`trigger = committed_end`), so it
+    // needs random access, but a parallel `Vec<char>` of the whole buffer is
+    // half a megabyte of pure duplication -- the character is one `chars()`
+    // step from the offset we already keep.
     let mut byte_offsets = text
         .char_indices()
         .map(|(offset, _)| offset)
         .collect::<Vec<_>>();
     byte_offsets.push(text.len());
+    let char_count = byte_offsets.len() - 1;
 
     let mut spans = Vec::new();
     let mut committed_end = 0usize;
     let mut trigger = 0usize;
-    while trigger < chars.len() {
+    while trigger < char_count {
+        let Some(trigger_char) = text[byte_offsets[trigger]..].chars().next() else {
+            break;
+        };
         let rules = super::chartable::ct_lookup(
             &composition_function_table,
-            i64::from(chars[trigger] as u32),
+            i64::from(trigger_char as u32),
         )
-        .ok()
-        .and_then(|value| list_to_vec(&value))
-        .unwrap_or_default();
+        .unwrap_or(Value::NIL);
+        // Nearly every character in an ordinary buffer has NO composition
+        // rule. `list_to_vec` opens with `Vec::with_capacity(16)` and so
+        // allocates even for nil, which made this one malloc/free pair per
+        // character of the whole buffer, per frame.
+        if rules.is_nil() {
+            trigger += 1;
+            continue;
+        }
 
         let mut matched = None;
-        for rule in rules {
+        // Walk the rule list in place. Advancing BEFORE the body keeps every
+        // `continue` below correct; the step cap is the same cheap guard
+        // `list_to_vec` gets from its tortoise-and-hare, without its Vec.
+        let mut cursor = rules;
+        let mut steps = 0u32;
+        while cursor.is_cons() && steps < 4096 {
+            let rule = cursor.cons_car();
+            cursor = cursor.cons_cdr();
+            steps += 1;
             let Some(fields) = rule.as_vector_data() else {
                 continue;
             };
@@ -895,7 +916,7 @@ pub fn automatic_composition_spans(
                 };
                 group.end()
             };
-            let end = start.saturating_add(match_len).min(chars.len());
+            let end = start.saturating_add(match_len).min(char_count);
             if start < end && trigger < end {
                 matched = Some(AutomaticCompositionSpan::new(start, end));
                 break;
