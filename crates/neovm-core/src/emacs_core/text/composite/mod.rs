@@ -840,6 +840,38 @@ pub fn automatic_composition_spans(
     composition_function_table: Value,
     text: &str,
 ) -> Vec<AutomaticCompositionSpan> {
+    automatic_composition_spans_in(buffer, composition_function_table, text, 0)
+}
+
+/// GNU's look-back bound for automatic compositions (composite.c:156).
+///
+/// A rule may claim up to this many characters BEFORE the one that triggered
+/// it, so a scan that wants every composition starting in a range must begin
+/// this far ahead of it. GNU calls the same number "a limitation imposed by
+/// composition rules in composition-function-table" (composite.c:1597).
+pub const MAX_AUTO_COMPOSITION_LOOKBACK: usize = 3;
+
+/// The scan over a SLICE of a buffer's text.
+///
+/// `text` is the slice to examine and `char_offset` is the char index of its
+/// first character within the whole text, so the spans come back in absolute
+/// coordinates. This exists so a caller can scan what a window shows instead
+/// of what a buffer holds: GNU never sweeps a whole buffer for compositions
+/// (`composition_compute_stop_pos` searches from the current position toward a
+/// bounded stop), and sweeping one costs time proportional to buffer size on
+/// every frame.
+///
+/// A slice is NOT equivalent to the whole text at its edges: a rule may look
+/// back up to [`MAX_AUTO_COMPOSITION_LOOKBACK`] characters, and a match may
+/// run past the end. A caller wanting every span that STARTS in `a..b` must
+/// pass a slice covering `a - MAX_AUTO_COMPOSITION_LOOKBACK .. b + (longest
+/// match)` and filter, which is what the equivalence pin checks.
+pub fn automatic_composition_spans_in(
+    buffer: &crate::buffer::Buffer,
+    composition_function_table: Value,
+    text: &str,
+    char_offset: usize,
+) -> Vec<AutomaticCompositionSpan> {
     if !super::chartable::is_char_table(&composition_function_table) || text.is_empty() {
         return Vec::new();
     }
@@ -921,13 +953,16 @@ pub fn automatic_composition_spans(
             };
             let end = start.saturating_add(match_len).min(char_count);
             if start < end && trigger < end {
-                matched = Some(AutomaticCompositionSpan::new(start, end));
+                matched = Some(AutomaticCompositionSpan::new(
+                    start + char_offset,
+                    end + char_offset,
+                ));
                 break;
             }
         }
 
         if let Some(span) = matched {
-            committed_end = span.end();
+            committed_end = span.end() - char_offset;
             trigger = committed_end;
             spans.push(span);
         } else {

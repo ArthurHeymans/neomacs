@@ -1168,3 +1168,52 @@ fn find_composition_internal_rule_based_width_is_geometry() {
         "rule-based width must be geometry-computed (1), not max glyph width (2)"
     );
 }
+
+/// THE GATE for scanning a window's worth of text instead of a buffer's.
+///
+/// For every split point of a composing string, scanning only the tail --
+/// started `MAX_AUTO_COMPOSITION_LOOKBACK` characters early, as GNU's own
+/// bound requires -- must find exactly the spans the whole-text scan finds
+/// starting at or after that point. If this holds, a bounded scan is a
+/// faithful substitute for the whole-buffer sweep; if it does not, bounding
+/// the scan would silently drop compositions, which on screen is a wrong
+/// glyph rather than a slow one.
+#[test]
+fn bounded_scan_finds_the_same_spans_as_the_whole_text_scan() {
+    crate::test_utils::init_test_tracing();
+    let eval = super::super::eval::Context::new();
+    let table = eval.visible_variable_value_or_nil("composition-function-table");
+    let rule = Value::vector(vec![
+        Value::string(r##"[ꦏ-ꦲ]ꦶ"##),
+        Value::fixnum(1),
+        Value::symbol("font-shape-gstring"),
+    ]);
+    crate::emacs_core::chartable::builtin_set_char_table_range(
+        vec![table, Value::fixnum(0xA9B6), Value::list(vec![rule])],
+        Some(&eval.obarray),
+    )
+    .expect("install Javanese composition rule");
+    let buffer = eval.buffers.current_buffer().expect("current buffer");
+
+    // Several shapes: a composition at the end, in the middle, and two of them.
+    for text in ["ꦧꦱꦗꦮꦶ", "ꦗꦮꦶabcꦗꦮꦶ", "abcꦗꦮꦶdef", "plain ascii only"]
+    {
+        let whole = automatic_composition_spans(buffer, table, text);
+        let chars: Vec<char> = text.chars().collect();
+        let offsets: Vec<usize> = text.char_indices().map(|(o, _)| o).collect();
+
+        for split in 0..=chars.len() {
+            let scan_from = split.saturating_sub(MAX_AUTO_COMPOSITION_LOOKBACK);
+            let byte = offsets.get(scan_from).copied().unwrap_or(text.len());
+            let bounded = automatic_composition_spans_in(buffer, table, &text[byte..], scan_from);
+
+            let expected: Vec<_> = whole.iter().filter(|s| s.start() >= split).collect();
+            let got: Vec<_> = bounded.iter().filter(|s| s.start() >= split).collect();
+            assert_eq!(
+                got, expected,
+                "text {text:?} split at {split}: a scan started {MAX_AUTO_COMPOSITION_LOOKBACK} \
+                 chars early must agree with the whole-text scan"
+            );
+        }
+    }
+}
