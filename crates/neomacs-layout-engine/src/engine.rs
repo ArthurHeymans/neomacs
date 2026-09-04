@@ -1027,6 +1027,28 @@ struct RetainedFrameState {
     chrome_metrics: rustc_hash::FxHashMap<DisplayWindowId, WindowChromeMetrics>,
 }
 
+/// An upper bound on the characters a window can display, as
+/// `(first_char, budget)`.
+///
+/// Deliberately generous. The automatic-composition scan may look at MORE
+/// text than a window shows with no consequence beyond time, but looking at
+/// less drops a composition, which is a wrong glyph. `window_start` is in
+/// 0-based char coordinates (`WindowParams::window_start`), and the budget is
+/// four screenfuls of cells so that soft-wrapped lines, a scroll that lands
+/// past the start, and narrow glyphs all stay inside it -- while still being
+/// proportional to the WINDOW rather than to the buffer, which is the entire
+/// point.
+fn visible_char_bound(params: &WindowParams) -> (usize, usize) {
+    let cols = (params.text_bounds.width / params.char_width.max(1.0)).ceil() as usize;
+    let rows = (params.text_bounds.height / params.char_height.max(1.0)).ceil() as usize;
+    let screenful = rows.saturating_mul(cols).max(1);
+    let first = params.window_start.max(0) as usize;
+    (
+        first.saturating_sub(screenful),
+        screenful.saturating_mul(4).max(8192),
+    )
+}
+
 fn admit_retained_frame_faces(
     plans: &[IncrementalWindowPlan],
     face_attempt: &mut FrameFaceAttempt,
@@ -3426,9 +3448,10 @@ impl LayoutEngine {
         // `params` already names the semantic display source chosen before
         // fontification and incremental classification.
         let layout_buffer = match evaluator.buffer_manager().get(buf_id) {
-            Some(buffer) => super::neovm_bridge::LayoutBufferSnapshot::from_buffer_with_obarray(
+            Some(buffer) => super::neovm_bridge::LayoutBufferSnapshot::from_buffer_for_window(
                 buffer,
                 evaluator.obarray(),
+                Some(visible_char_bound(params)),
             ),
             None => {
                 tracing::debug!("layout_window_rust: buffer {} not found", params.buffer_id);

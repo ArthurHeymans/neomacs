@@ -4095,13 +4095,73 @@ impl Buffer {
         let text = self.buffer_string();
         crate::emacs_core::composite::BYTES_SCANNED
             .fetch_add(text.len(), std::sync::atomic::Ordering::Relaxed);
-        let spans = std::rc::Rc::new(crate::emacs_core::composite::automatic_composition_spans(
-            self,
-            composition_function_table,
-            &text,
-        ));
+        // Absolute char coordinates, like the visible-bounded scan next door.
+        // `buffer_string` yields the ACCESSIBLE portion, so a narrowed buffer
+        // starts at point-min, not zero -- and a caller that then added the
+        // offset itself would count it twice.
+        let spans = std::rc::Rc::new(
+            crate::emacs_core::composite::automatic_composition_spans_in(
+                self,
+                composition_function_table,
+                &text,
+                self.point_min_char_pos().get(),
+            ),
+        );
         *self.automatic_composition_cache.borrow_mut() = Some((key, std::rc::Rc::clone(&spans)));
         spans
+    }
+
+    /// The composition spans a window could show, scanning only that much text.
+    ///
+    /// `first_char` is the window's start and `budget` an upper bound on the
+    /// characters it can display. GNU never sweeps a whole buffer for this
+    /// (`composition_compute_stop_pos` searches toward a bounded stop inside
+    /// the visible region); sweeping one costs time proportional to buffer
+    /// size on every frame, which is what made this scan 53% of an edit.
+    ///
+    /// The scan starts `MAX_AUTO_COMPOSITION_LOOKBACK` characters early
+    /// because a rule may claim that many before its trigger -- the bound is
+    /// GNU's own (composite.c:156), and
+    /// `bounded_scan_finds_the_same_spans_as_the_whole_text_scan` is what says
+    /// starting there is enough. Over-scanning is safe; under-scanning drops a
+    /// composition, which is a wrong glyph rather than a slow one.
+    ///
+    /// NOT memoized: the range moves with the window, so a memo keyed on the
+    /// buffer alone would answer a different question than the one asked.
+    pub fn automatic_composition_spans_visible(
+        &self,
+        composition_function_table: Value,
+        first_char: usize,
+        budget: usize,
+    ) -> std::rc::Rc<Vec<crate::emacs_core::composite::AutomaticCompositionSpan>> {
+        use crate::emacs_core::composite::MAX_AUTO_COMPOSITION_LOOKBACK;
+        let accessible_start = self.point_min_char_pos().get();
+        let accessible_end = self.point_max_char_pos().get();
+        let start = first_char
+            .saturating_sub(MAX_AUTO_COMPOSITION_LOOKBACK)
+            .max(accessible_start);
+        let end = first_char
+            .saturating_add(budget)
+            .saturating_add(MAX_AUTO_COMPOSITION_LOOKBACK)
+            .min(accessible_end);
+        if start >= end {
+            return std::rc::Rc::new(Vec::new());
+        }
+        let byte_range = EmacsByteRange::new(
+            self.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(start)),
+            self.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(end)),
+        );
+        let text = self.buffer_substring_range(byte_range);
+        crate::emacs_core::composite::BYTES_SCANNED
+            .fetch_add(text.len(), std::sync::atomic::Ordering::Relaxed);
+        std::rc::Rc::new(
+            crate::emacs_core::composite::automatic_composition_spans_in(
+                self,
+                composition_function_table,
+                &text,
+                start,
+            ),
+        )
     }
 
     pub fn increment_overlay_modified_tick(&mut self) {

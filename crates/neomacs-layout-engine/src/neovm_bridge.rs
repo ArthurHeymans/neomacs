@@ -226,12 +226,26 @@ impl LayoutBufferSnapshot {
     }
 
     pub fn from_buffer_with_obarray(buffer: &Buffer, obarray: &Obarray) -> Self {
+        Self::from_buffer_for_window(buffer, obarray, None)
+    }
+
+    /// Snapshot a buffer for one window.
+    ///
+    /// `visible` bounds the automatic-composition scan to what that window
+    /// could possibly display, as `(first_char, char_budget)`. `None` keeps
+    /// the whole-buffer scan, which is what a caller with no window in hand
+    /// (a test, a display query) must use.
+    pub fn from_buffer_for_window(
+        buffer: &Buffer,
+        obarray: &Obarray,
+        visible: Option<(usize, usize)>,
+    ) -> Self {
         let mut snapshot = Self::from_buffer(buffer);
         snapshot.vars =
             resolve_layout_vars(snapshot.local_var_alist, &snapshot.slots, Some(obarray));
         snapshot.category_symbol_plists = capture_layout_category_symbol_plists(buffer, obarray);
         snapshot.automatic_composition_spans =
-            capture_automatic_composition_spans(buffer, obarray, &snapshot.vars);
+            capture_automatic_composition_spans(buffer, obarray, &snapshot.vars, visible);
         SNAPSHOTS_BUILT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         snapshot
     }
@@ -268,6 +282,7 @@ fn capture_automatic_composition_spans(
     buffer: &Buffer,
     obarray: &Obarray,
     vars: &[Option<Value>; <LayoutVar as strum::EnumCount>::COUNT],
+    visible: Option<(usize, usize)>,
 ) -> Vec<CharRange> {
     if !buffer.get_multibyte()
         || vars[LayoutVar::AutoCompositionMode as usize].is_none_or(Value::is_nil)
@@ -283,20 +298,18 @@ fn capture_automatic_composition_spans(
     let Some(table) = obarray.symbol_value_id(table_id).copied() else {
         return Vec::new();
     };
-    let offset = buffer.point_min_char_pos().get();
-    // Memoized on everything the scan reads, so an unedited buffer and every
-    // extra window showing it cost nothing. The counter records only the
-    // scans that actually ran; `text.len()` is O(1), where counting
-    // characters would make the instrument pay the cost it exists to expose.
-    let spans = buffer.automatic_composition_spans(table);
+    // Both paths report ABSOLUTE char positions, so nothing is added here.
+    // The bounded one is memoized only in its whole-buffer form: a memo keyed
+    // on the buffer alone cannot answer a question that moves with the window.
+    let spans = match visible {
+        Some((first_char, budget)) => {
+            buffer.automatic_composition_spans_visible(table, first_char, budget)
+        }
+        None => buffer.automatic_composition_spans(table),
+    };
     spans
         .iter()
-        .map(|span| {
-            CharRange::new(
-                CharPos0::new(offset.saturating_add(span.start())),
-                CharPos0::new(offset.saturating_add(span.end())),
-            )
-        })
+        .map(|span| CharRange::new(CharPos0::new(span.start()), CharPos0::new(span.end())))
         .collect()
 }
 
