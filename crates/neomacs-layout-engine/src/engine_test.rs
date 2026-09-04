@@ -4398,15 +4398,23 @@ fn laying_out_one_frame_keeps_another_frames_retained_matrices() {
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_a);
     let key_a = neomacs_display_protocol::types::DisplayWindowId::new(window_a.0 as i64);
+    assert_eq!(engine.retained_frame, Some(frame_a));
     assert!(
         engine.retained_window_matrices.contains_key(&key_a),
-        "frame A must retain its window after its own layout"
+        "the loaded maps must hold the frame just laid out"
     );
 
+    // Laying out B PARKS A's state rather than discarding it: the loaded maps
+    // always describe exactly one frame, which is what makes the wholesale
+    // replacement at the commit correct.
     engine.layout_frame_rust(&mut eval, frame_b);
+    assert_eq!(engine.retained_frame, Some(frame_b));
     assert!(
-        engine.retained_window_matrices.contains_key(&key_a),
-        "laying out frame B must not discard frame A's retained matrix"
+        engine
+            .retained_by_frame
+            .get(&frame_a)
+            .is_some_and(|parked| parked.matrices.contains_key(&key_a)),
+        "frame A's retained matrix must be parked, not discarded"
     );
 
     // The payoff: frame A's window can still take a fast path instead of

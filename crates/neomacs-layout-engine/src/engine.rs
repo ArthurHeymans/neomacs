@@ -693,21 +693,25 @@ pub struct LayoutEngine {
     /// engine still rebuilds every window every cycle. The container a later
     /// phase reuses rows out of.
     retained_window_matrices: rustc_hash::FxHashMap<DisplayWindowId, RetainedWindowMatrix>,
-    /// The window ids each FRAME contributed to the two retained maps above.
+    /// Every OTHER frame's retained state, parked while this one is laid out.
     ///
     /// One `LayoutEngine` serves every visible frame -- `RedisplayRuntime` owns
     /// exactly one (`redisplay.rs:106`) and the drivers lay out the root frame
-    /// and then each visible child through it. The retained maps are keyed by
-    /// window alone, so REPLACING them wholesale at the accepted break made
-    /// laying out frame B discard frame A's windows, which nothing had touched:
-    /// with any second frame visible -- a corfu/vertico-posframe popup, a
-    /// tooltip, lsp-ui-doc, a second top-level frame -- every window lost its
-    /// retained matrix on every cycle and all three fast paths died.
+    /// and then each visible child through it. The two maps above are keyed by
+    /// WINDOW alone, so replacing them wholesale at the accepted break used to
+    /// discard every window of every other frame: with a corfu or
+    /// vertico-posframe popup, a tooltip, lsp-ui-doc or a second top-level
+    /// frame visible, every window lost its retained matrix on each cycle and
+    /// all three fast paths died.
     ///
-    /// Recording the ids per frame keeps the wholesale-replace semantics that
-    /// prune a frame's own deleted windows, while leaving other frames alone.
-    retained_frame_window_ids:
-        rustc_hash::FxHashMap<neovm_core::window::FrameId, Vec<DisplayWindowId>>,
+    /// The fix that reads as an invariant rather than as bookkeeping: the two
+    /// maps above hold exactly ONE frame's windows -- the frame named by
+    /// `retained_frame` -- and everything else waits here. Wholesale
+    /// replacement is then correct by construction, and it still prunes that
+    /// frame's own deleted windows, which is what it was always for.
+    retained_by_frame: rustc_hash::FxHashMap<neovm_core::window::FrameId, RetainedFrameState>,
+    /// Which frame [`Self::retained_window_matrices`] currently belongs to.
+    retained_frame: Option<neovm_core::window::FrameId>,
     /// Accepted intrinsic chrome metrics, the Rust equivalent of GNU's
     /// current-matrix tab/header/mode-line heights.  They seed the next
     /// speculative layout and are replaced only by a sealed frame.
@@ -1011,6 +1015,18 @@ fn chrome_reuse_context(
     }
 }
 
+/// One frame's retained layout state, parked while another frame is laid out.
+///
+/// The matrix and its chrome metrics travel together because they are keyed
+/// the same way and committed at the same instant. Keeping them in one type is
+/// the point: they previously sat in two sibling maps next to a third keyed by
+/// `FrameId`, and only the frame-keyed one was right.
+#[derive(Default)]
+struct RetainedFrameState {
+    matrices: rustc_hash::FxHashMap<DisplayWindowId, RetainedWindowMatrix>,
+    chrome_metrics: rustc_hash::FxHashMap<DisplayWindowId, WindowChromeMetrics>,
+}
+
 fn admit_retained_frame_faces(
     plans: &[IncrementalWindowPlan],
     face_attempt: &mut FrameFaceAttempt,
@@ -1231,7 +1247,8 @@ impl LayoutEngine {
             last_frame_display_state: None,
             frame_face_arenas: rustc_hash::FxHashMap::default(),
             retained_window_matrices: rustc_hash::FxHashMap::default(),
-            retained_frame_window_ids: rustc_hash::FxHashMap::default(),
+            retained_by_frame: rustc_hash::FxHashMap::default(),
+            retained_frame: None,
             retained_window_chrome_metrics: rustc_hash::FxHashMap::default(),
             cursor_only_window_ids: rustc_hash::FxHashSet::default(),
             scroll_window_ids: rustc_hash::FxHashMap::default(),
@@ -1260,7 +1277,8 @@ impl LayoutEngine {
             last_frame_display_state: None,
             frame_face_arenas: rustc_hash::FxHashMap::default(),
             retained_window_matrices: rustc_hash::FxHashMap::default(),
-            retained_frame_window_ids: rustc_hash::FxHashMap::default(),
+            retained_by_frame: rustc_hash::FxHashMap::default(),
+            retained_frame: None,
             retained_window_chrome_metrics: rustc_hash::FxHashMap::default(),
             cursor_only_window_ids: rustc_hash::FxHashSet::default(),
             scroll_window_ids: rustc_hash::FxHashMap::default(),
@@ -1372,6 +1390,7 @@ impl LayoutEngine {
         purpose: LayoutPurpose,
     ) -> Option<neovm_core::window::WindowLayoutQuery> {
         let query_window = purpose.query_window();
+        self.load_retained_frame(frame_id);
         // Incremental-layout instrumentation (Phase 0a): start each frame from
         // a clean slate; populated as the accepted frame is committed below.
         if query_window.is_none() {
@@ -2822,10 +2841,7 @@ impl LayoutEngine {
         // Commit retained state only after the visual, spatial, and revision
         // invariants have sealed. A rejected presentation cannot acknowledge
         // buffer edits or replace the GNU "current matrix" analogue.
-        // Merged, not replaced, for the same reason as the matrices below: the
-        // stale ids this frame previously owned are removed at the commit.
-        self.retained_window_chrome_metrics
-            .extend(accepted_window_chrome_metrics);
+        self.retained_window_chrome_metrics = accepted_window_chrome_metrics;
         self.layout_stats = next_layout_stats;
         // Admitted work: what the frame SPENT to decide, not what it emitted.
         let (snapshots, composition_bytes, reused_chrome) =
@@ -2874,22 +2890,10 @@ impl LayoutEngine {
         // CUMULATIVE counters line per accepted frame; aggregation takes the
         // last line per pid.
         crate::buffer_source::row_route::route_stats_append_report();
-        // Scope the replacement to THIS frame: drop only the ids this frame
-        // retained last time, then install the new ones. Other frames' windows
-        // survive a cycle that did not lay them out. See
-        // `retained_frame_window_ids`.
-        if let Some(previous) = self.retained_frame_window_ids.get(&frame_id) {
-            for window_id in previous {
-                self.retained_window_matrices.remove(window_id);
-                self.retained_window_chrome_metrics.remove(window_id);
-            }
-        }
-        let this_frame_window_ids: Vec<DisplayWindowId> =
-            next_retained_window_matrices.keys().copied().collect();
-        self.retained_window_matrices
-            .extend(next_retained_window_matrices);
-        self.retained_frame_window_ids
-            .insert(frame_id, this_frame_window_ids);
+        // Wholesale, and correct because these maps hold exactly this frame's
+        // windows -- `load_retained_frame` saw to that. Windows this frame
+        // deleted are pruned by the replacement, which is what it is for.
+        self.retained_window_matrices = next_retained_window_matrices;
         self.frame_face_arenas.insert(frame_id, sealed_face_arena);
         for buffer_id in acked_buffer_ids {
             if let Some(buffer) = evaluator
@@ -2987,6 +2991,30 @@ impl LayoutEngine {
     /// return the replay bundle; else `None` (→ full rebuild). Reads the retained
     /// matrix from the *previous* frame (committed at the prior frame's accepted
     /// break; never overwritten until this frame's commit).
+    /// Make [`Self::retained_window_matrices`] belong to `frame_id`.
+    ///
+    /// Parks whichever frame's state is loaded and loads this one. Parking
+    /// rather than dropping is what lets an aborted layout keep its retained
+    /// state: nothing is lost, it is merely somewhere else.
+    fn load_retained_frame(&mut self, frame_id: neovm_core::window::FrameId) {
+        if self.retained_frame == Some(frame_id) {
+            return;
+        }
+        if let Some(parked) = self.retained_frame.take() {
+            self.retained_by_frame.insert(
+                parked,
+                RetainedFrameState {
+                    matrices: std::mem::take(&mut self.retained_window_matrices),
+                    chrome_metrics: std::mem::take(&mut self.retained_window_chrome_metrics),
+                },
+            );
+        }
+        let loaded = self.retained_by_frame.remove(&frame_id).unwrap_or_default();
+        self.retained_window_matrices = loaded.matrices;
+        self.retained_window_chrome_metrics = loaded.chrome_metrics;
+        self.retained_frame = Some(frame_id);
+    }
+
     fn build_cursor_only_replay(
         &self,
         params: &WindowParams,
