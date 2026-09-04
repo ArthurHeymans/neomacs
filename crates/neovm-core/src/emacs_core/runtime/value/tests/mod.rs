@@ -1285,3 +1285,56 @@ fn sxhash_equal_obeys_the_contract_for_constants_and_captured_environments() {
         "the environment participates in structure"
     );
 }
+
+/// `list_iter` exists so that walking a list costs nothing. The allocating
+/// alternative is what made the automatic-composition scan pay a
+/// `Vec::with_capacity(16)` malloc/free for every character of the whole
+/// buffer that had no composition rule.
+#[test]
+fn list_iter_walks_a_proper_list_without_allocating() {
+    let list = Value::list(vec![Value::fixnum(1), Value::fixnum(2), Value::fixnum(3)]);
+    let seen: Vec<i64> = list_iter(list).filter_map(|v| v.as_fixnum()).collect();
+    assert_eq!(seen, vec![1, 2, 3]);
+
+    // The empty list yields nothing, and asks for no memory to say so.
+    assert_eq!(list_iter(Value::NIL).count(), 0);
+}
+
+/// An improper list yields its elements and stops at the non-cons tail,
+/// where `list_to_vec` instead reports `None`. Both contracts are wanted:
+/// the iterator is for consuming, `list_to_vec` for validating.
+#[test]
+fn list_iter_stops_at_an_improper_tail_where_list_to_vec_reports_none() {
+    let improper = Value::cons(Value::fixnum(1), Value::fixnum(2));
+    let seen: Vec<i64> = list_iter(improper).filter_map(|v| v.as_fixnum()).collect();
+    assert_eq!(
+        seen,
+        vec![1],
+        "the car is yielded, the non-cons tail ends it"
+    );
+    assert_eq!(list_to_vec(&improper), None);
+
+    // A non-list is not a one-element list.
+    assert_eq!(list_iter(Value::fixnum(7)).count(), 0);
+}
+
+/// A circular list TERMINATES the iteration rather than hanging. This is the
+/// guard that hand-rolled cons walks keep forgetting, which is the reason to
+/// have one iterator instead of many loops.
+#[test]
+fn list_iter_terminates_on_a_circular_list() {
+    let tail = Value::cons(Value::fixnum(2), Value::NIL);
+    let head = Value::cons(Value::fixnum(1), tail);
+    tail.set_cdr(head);
+
+    let count = list_iter(head).take(64).count();
+    assert!(
+        count < 64,
+        "a circular list must stop the iterator, got {count} elements"
+    );
+    assert_eq!(
+        list_to_vec(&head),
+        None,
+        "list_to_vec still reports the cycle"
+    );
+}

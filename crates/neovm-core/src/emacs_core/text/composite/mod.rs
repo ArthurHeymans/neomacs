@@ -866,15 +866,7 @@ pub fn automatic_composition_spans(
         }
 
         let mut matched = None;
-        // Walk the rule list in place. Advancing BEFORE the body keeps every
-        // `continue` below correct; the step cap is the same cheap guard
-        // `list_to_vec` gets from its tortoise-and-hare, without its Vec.
-        let mut cursor = rules;
-        let mut steps = 0u32;
-        while cursor.is_cons() && steps < 4096 {
-            let rule = cursor.cons_car();
-            cursor = cursor.cons_cdr();
-            steps += 1;
+        for rule in crate::emacs_core::value::list_iter(rules) {
             let Some(fields) = rule.as_vector_data() else {
                 continue;
             };

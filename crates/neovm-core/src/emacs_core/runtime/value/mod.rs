@@ -4198,6 +4198,58 @@ fn try_bytecode_equal(
 // ---------------------------------------------------------------------------
 
 /// Collect a proper list into a Vec.
+/// Walk a Lisp list without materializing it.
+///
+/// The safe thing and the cheap thing should be the same thing. Before this
+/// existed the only way to consume a list was [`list_to_vec`], which
+/// allocates, or a hand-rolled cons walk, which is where cycle bugs come
+/// from -- and the allocating one is what a hot loop reached for, because it
+/// was the only one. The automatic-composition scan asked `list_to_vec` a
+/// question once per character of the whole buffer and paid a 16-element
+/// malloc/free for every character that had no answer.
+///
+/// Circular lists TERMINATE the iteration rather than reporting an error; a
+/// caller that must distinguish a proper list from an improper or circular
+/// one wants [`list_to_vec`], which keeps that contract.
+pub struct ListIter {
+    hare: Value,
+    tortoise: Value,
+    step: u64,
+}
+
+impl Iterator for ListIter {
+    type Item = Value;
+
+    fn next(&mut self) -> Option<Value> {
+        if !self.hare.is_cons() {
+            return None;
+        }
+        let car = self.hare.cons_car();
+        self.hare = self.hare.cons_cdr();
+        self.step += 1;
+        // Floyd, exactly as `list_to_vec` does it: advance the tortoise every
+        // other step and stop if the hare laps it.
+        if self.step.is_multiple_of(2) {
+            if self.tortoise.is_cons() {
+                self.tortoise = self.tortoise.cons_cdr();
+            }
+            if self.tortoise.bits() == self.hare.bits() {
+                self.hare = Value::NIL;
+            }
+        }
+        Some(car)
+    }
+}
+
+/// Iterate the elements of a Lisp list. See [`ListIter`].
+pub fn list_iter(value: Value) -> ListIter {
+    ListIter {
+        hare: value,
+        tortoise: value,
+        step: 0,
+    }
+}
+
 pub fn list_to_vec(value: &Value) -> Option<Vec<Value>> {
     // Answer the two non-list cases BEFORE reserving anything. The capacity
     // below is deliberate but it is not free, and callers in hot loops ask
