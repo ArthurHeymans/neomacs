@@ -77,6 +77,80 @@ pub enum MatrixValidity {
 /// is identical. f32 fields compare bitwise-exactly — for an unchanged frame the
 /// values are recomputed from identical inputs, so they are bit-identical; any
 /// real geometry/metric change makes them differ and forces a full rebuild.
+/// What actually moved between two layout keys.
+///
+/// The fast-path predicates were written as "clone the previous key, align the
+/// fields this path tolerates, compare". The trick is a good one -- a field
+/// ADDED to the key escalates by default, which is the safe direction -- but
+/// it left every guard reading an anonymous pile of booleans, with no name for
+/// the case that matters most. Four bugs in one day came from a guard
+/// justified by MOTION being evaluated when nothing had moved: two scroll
+/// bails, a cursor-row identity, and a displayed-column refusal.
+///
+/// Naming the delta makes "nothing moved" something a new guard has to think
+/// about rather than something it falls through. `other` keeps the
+/// align-and-compare trick, so a new key field still escalates until someone
+/// deliberately accounts for it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowDelta {
+    /// Point moved. NOT on its own a reason to relay anything.
+    pub point_moved: bool,
+    /// Buffer text changed -- the chars tick, or the size that follows it.
+    pub text_changed: bool,
+    /// Text properties changed (font-lock refontifying the edited region).
+    pub properties_changed: bool,
+    /// The overlay SET changed. Keyed on the content digest, not the tick, so
+    /// tooling that rebuilds an identical set does not count as a change --
+    /// see `RetainedWindowKey::overlay_digest`.
+    pub overlays_changed: bool,
+    /// The visible region moved.
+    pub window_start_moved: bool,
+    /// Anything else in the key: geometry, faces, display variables, the
+    /// wrap and tab settings, selection. The catch-all is what makes a newly
+    /// added field safe by default.
+    pub other_changed: bool,
+}
+
+impl WindowDelta {
+    /// Decompose the difference between two keys.
+    pub fn between(prev: &RetainedWindowKey, curr: &RetainedWindowKey) -> Self {
+        let mut aligned = prev.clone();
+        aligned.point = curr.point;
+        aligned.chars_modified_tick = curr.chars_modified_tick;
+        aligned.buffer_size = curr.buffer_size;
+        aligned.props_modified_tick = curr.props_modified_tick;
+        // The TICK is aligned away everywhere; `overlay_digest` is the field
+        // that decides, so an identical rebuild is not a change.
+        aligned.overlay_modified_tick = curr.overlay_modified_tick;
+        aligned.overlay_digest = curr.overlay_digest;
+        aligned.window_start = curr.window_start;
+        Self {
+            point_moved: prev.point != curr.point,
+            text_changed: prev.chars_modified_tick != curr.chars_modified_tick
+                || prev.buffer_size != curr.buffer_size,
+            properties_changed: prev.props_modified_tick != curr.props_modified_tick,
+            overlays_changed: prev.overlay_digest != curr.overlay_digest,
+            window_start_moved: prev.window_start != curr.window_start,
+            other_changed: aligned != *curr,
+        }
+    }
+
+    /// Nothing about this window changed at all -- not even point.
+    pub fn is_still(self) -> bool {
+        !self.point_moved && self.only_point_moved_at_most()
+    }
+
+    /// Nothing changed except possibly point: the retained body is verbatim
+    /// reusable.
+    pub fn only_point_moved_at_most(self) -> bool {
+        !self.text_changed
+            && !self.properties_changed
+            && !self.overlays_changed
+            && !self.window_start_moved
+            && !self.other_changed
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct RetainedWindowKey {
     /// Generation of asynchronously decoded media (see
@@ -246,9 +320,16 @@ impl RetainedWindowKey {
     /// properties, overlays, faces, or the viewport changed, so the retained body
     /// rows are no longer trustworthy).
     pub fn cursor_only_eligible(prev: &Self, curr: &Self) -> bool {
-        let mut aligned = prev.clone();
-        aligned.point = curr.point;
-        aligned == *curr
+        // Nothing moved except possibly point.
+        //
+        // Note what this now tolerates that it did not before: an overlay set
+        // rebuilt identically. This predicate compared the raw
+        // `overlay_modified_tick`, while `edit_eligible` compared the digest,
+        // so the same identical rebuild was a change to one path and a
+        // non-change to the other. That inconsistency was invisible while the
+        // two predicates were written as separate field-alignment recipes;
+        // saying "the overlay SET changed" once makes it impossible.
+        WindowDelta::between(prev, curr).only_point_moved_at_most()
     }
 
     /// Whether a window may take the pure-scroll fast path: every layout input is
@@ -257,13 +338,13 @@ impl RetainedWindowKey {
     /// escalates to a full rebuild. Whether the scroll is by WHOLE rows is decided
     /// separately against the retained matrix ([`RetainedWindowMatrix::scroll_replay`]).
     pub fn scroll_eligible(prev: &Self, curr: &Self) -> bool {
-        if prev.window_start == curr.window_start {
-            return false;
-        }
-        let mut aligned = prev.clone();
-        aligned.window_start = curr.window_start;
-        aligned.point = curr.point;
-        aligned == *curr
+        let delta = WindowDelta::between(prev, curr);
+        // The visible region moved and nothing else did.
+        delta.window_start_moved
+            && !delta.text_changed
+            && !delta.properties_changed
+            && !delta.overlays_changed
+            && !delta.other_changed
     }
 
     /// Whether a window may take the localized-edit fast path: the CHARS tick
@@ -277,29 +358,22 @@ impl RetainedWindowKey {
     /// modiff (xdisp.c GIVE_UP 200). An overlay/face move still escalates to
     /// a full rebuild. `point` may also move with the edit.
     pub fn edit_eligible(prev: &Self, curr: &Self) -> bool {
-        if prev.chars_modified_tick == curr.chars_modified_tick
-            && prev.props_modified_tick == curr.props_modified_tick
-        {
-            return false;
-        }
-        let mut aligned = prev.clone();
-        aligned.chars_modified_tick = curr.chars_modified_tick;
-        aligned.props_modified_tick = curr.props_modified_tick;
-        aligned.point = curr.point;
-        // A char edit necessarily changes the buffer size; that is the expected
-        // consequence, not an escalation. `buffer_begv` is NOT aligned, so a
-        // narrowing change (or an edit before BEGV) still escalates to Full.
-        aligned.buffer_size = curr.buffer_size;
-        // The overlay TICK may move freely: `overlay_digest` is the field that
-        // decides, and it is NOT aligned, so a set that really changed still
-        // escalates. GNU has to give up here (xdisp.c:22593 GIVE_UP (200))
+        let delta = WindowDelta::between(prev, curr);
+        // Something about the TEXT changed -- characters or properties -- and
+        // nothing else did. An unchanged buffer is the cursor-only path's
+        // business, not this one's.
+        //
+        // The buffer SIZE follows a char edit, so it counts as text rather
+        // than as an escalation; `buffer_begv` does not, so a narrowing change
+        // still lands in `other_changed`. The overlay TICK may move freely
+        // because `overlays_changed` is keyed on the content digest: GNU has
+        // to give up on any overlay modification (xdisp.c:22598 GIVE_UP (200))
         // because `OVERLAY_MODIFF` is its only signal and it has no per-window
-        // retained key to hang a digest on -- its own comment just below asks
-        // for exactly this. Tooling that deletes and re-creates identical
-        // overlays on every keystroke, as LSP diagnostics do, would otherwise
-        // force a full relayout of the window on every edit.
-        aligned.overlay_modified_tick = curr.overlay_modified_tick;
-        aligned == *curr
+        // retained key to hang a digest on.
+        (delta.text_changed || delta.properties_changed)
+            && !delta.overlays_changed
+            && !delta.window_start_moved
+            && !delta.other_changed
     }
 
     /// The names of every field that differs between two keys — the
@@ -2178,6 +2252,40 @@ mod scroll_classifier_tests {
         );
     }
 
+    /// The two fast paths agreed on what an overlay CHANGE is only after the
+    /// delta was named. `cursor_only_eligible` compared the raw
+    /// `overlay_modified_tick` while `edit_eligible` compared the digest, so
+    /// an identical rebuild -- LSP diagnostics tearing down and recreating the
+    /// same overlays -- was a change to one path and a non-change to the
+    /// other. Nothing pointed at the inconsistency while each predicate was
+    /// its own private recipe of field alignments.
+    #[test]
+    fn an_identical_overlay_rebuild_is_not_a_change_to_either_fast_path() {
+        let prev = synthetic_key(0, 10);
+
+        // Tick moved, digest did not: the set was rebuilt exactly as it was.
+        let mut rebuilt = prev.clone();
+        rebuilt.overlay_modified_tick = prev.overlay_modified_tick + 1;
+        let delta = WindowDelta::between(&prev, &rebuilt);
+        assert!(
+            !delta.overlays_changed,
+            "an identical rebuild is not a change"
+        );
+        assert!(delta.is_still(), "nothing moved at all");
+        assert!(
+            RetainedWindowKey::cursor_only_eligible(&prev, &rebuilt),
+            "the cursor-only path must reuse the body across an identical rebuild"
+        );
+
+        // A set that really changed still escalates on both paths.
+        let mut changed = rebuilt.clone();
+        changed.overlay_digest = prev.overlay_digest ^ 0x5bf0_3635;
+        assert!(WindowDelta::between(&prev, &changed).overlays_changed);
+        assert!(!RetainedWindowKey::cursor_only_eligible(&prev, &changed));
+        let mut edited = changed.clone();
+        edited.chars_modified_tick += 1;
+        assert!(!RetainedWindowKey::edit_eligible(&prev, &edited));
+    }
     /// Props tick movement alone now qualifies for the edit path (GNU
     /// try_window_id proceeds through property changes); overlay/face moves
     /// still escalate.
