@@ -17,6 +17,7 @@ use crate::buffer::BufferId;
 use crate::face::{Face as RuntimeFace, FaceHeight};
 use crate::heap_types::LispString;
 use crate::window::FrameFullscreen;
+pub use neomacs_display_protocol::GraphicalFaceAttribute;
 use neomacs_display_protocol::{VideoId, WebViewId};
 use neomacs_video_model::{PlaybackAction, VideoDiagnostics, VideoOpenRequest};
 
@@ -258,6 +259,13 @@ impl TerminalFloatPlacement {
 pub trait DisplayHost {
     fn realize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String>;
     fn resize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String>;
+    /// Whether this concrete graphical backend can represent ATTRIBUTE.
+    ///
+    /// The conservative default keeps test/dummy hosts from accidentally
+    /// claiming rendering support.  Real graphical hosts must opt in.
+    fn supports_graphical_face_attribute(&self, _attribute: GraphicalFaceAttribute) -> bool {
+        false
+    }
     fn set_clipboard_text(&mut self, _text: Option<&str>) -> Result<(), String> {
         Err("clipboard is unsupported by this display host".to_owned())
     }

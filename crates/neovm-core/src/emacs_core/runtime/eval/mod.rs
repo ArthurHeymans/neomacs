@@ -23,8 +23,9 @@ use super::command_observation::{
 use super::custom::CustomManager;
 use super::debug_on_call::DebugOnCallCode;
 pub use super::display_host::{
-    DisplayHost, FrameFontRequest, FrameFontSize, TerminalCreateRequest, TerminalDisplayTarget,
-    TerminalFloatPlacement, TerminalGridSize, TerminalId, XwidgetScriptRequestId,
+    DisplayHost, FrameFontRequest, FrameFontSize, GraphicalFaceAttribute, TerminalCreateRequest,
+    TerminalDisplayTarget, TerminalFloatPlacement, TerminalGridSize, TerminalId,
+    XwidgetScriptRequestId,
 };
 use super::error::*;
 use super::interactive::InteractiveRegistry;
@@ -2123,6 +2124,23 @@ pub struct ResolvedFrameFont {
     /// `LFACE_HEIGHT_INDEX`; keep the point-height value beside the pixel
     /// metrics so core code never has to guess a frame DPI from pixels.
     pub height_tenths: i32,
+}
+
+impl ResolvedFrameFont {
+    /// Compare the stable font characteristics that determine a realized
+    /// Lisp face, deliberately excluding transient host handles and metrics.
+    ///
+    /// Native materializers may return a fresh `ResolvedFontId` for the same
+    /// opened font. GNU's face-support predicate compares realized font
+    /// properties, so handle allocation must not turn fallback to the default
+    /// font into an apparent successful selection.
+    pub(crate) fn same_face_selection_as(&self, other: &Self) -> bool {
+        self.font.resolved.identity == other.font.resolved.identity
+            && self.font.weight() == other.font.weight()
+            && self.font.slant == other.font.slant
+            && self.font.width() == other.font.width()
+            && self.height_tenths == other.height_tenths
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

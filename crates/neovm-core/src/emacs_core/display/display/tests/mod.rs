@@ -76,6 +76,61 @@ impl DisplayHost for ItalicCapableDisplayHost {
     }
 }
 
+#[derive(Default)]
+struct FreshIdSameFontDisplayHost {
+    next_id: u32,
+}
+
+impl DisplayHost for FreshIdSameFontDisplayHost {
+    fn supports_graphical_face_attribute(
+        &self,
+        _attribute: crate::emacs_core::eval::GraphicalFaceAttribute,
+    ) -> bool {
+        true
+    }
+
+    fn realize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resolve_frame_font(
+        &mut self,
+        _frame_id: crate::window::FrameId,
+        _request: crate::emacs_core::display_host::FrameFontRequest,
+    ) -> Result<Option<crate::emacs_core::eval::ResolvedFrameFont>, String> {
+        let metrics = crate::emacs_core::eval::FontPxProbeResult {
+            pixel_size: 14,
+            height: 16,
+            ascent: 12,
+            descent: 4,
+            max_width: 8,
+            space_width: 8,
+            average_width: 8,
+        };
+        let mut font = crate::emacs_core::eval::test_resolved_opened_font(
+            "Noto Sans",
+            None,
+            None,
+            crate::face::FontWeight::NORMAL,
+            crate::face::FontSlant::Normal,
+            crate::face::FontWidth::Normal,
+            None,
+            metrics,
+            None,
+        );
+        self.next_id += 1;
+        font.resolved.id = neomacs_display_protocol::font::ResolvedFontId(self.next_id);
+        Ok(Some(crate::emacs_core::eval::ResolvedFrameFont {
+            font,
+            height_tenths: 100,
+        }))
+    }
+}
+
 struct FailingClipboardDisplayHost;
 
 impl DisplayHost for FailingClipboardDisplayHost {
@@ -3797,6 +3852,172 @@ fn display_supports_face_attributes_p_uses_live_gui_font_capabilities() {
         builtin_display_supports_face_attributes_p(&mut eval, vec![attrs]).unwrap(),
         Value::T,
         "a GUI host that realizes the requested italic font must report the face spec as supported",
+    );
+}
+
+#[test]
+fn display_supports_face_attributes_p_ignores_fresh_handles_for_the_same_font() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    let frame_id = eval
+        .frames
+        .create_frame("gui-face-support-same-font", 800, 600, scratch);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("GUI frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.frames.select_frame(frame_id);
+    eval.set_display_host(Box::new(FreshIdSameFontDisplayHost::default()));
+
+    let attrs = Value::list(vec![
+        Value::keyword("family"),
+        Value::string("Definitely Missing Font"),
+    ]);
+    assert_eq!(
+        builtin_display_supports_face_attributes_p(&mut eval, vec![attrs]).unwrap(),
+        Value::NIL,
+        "fresh native handles for the same opened font must not make an unavailable font look supported",
+    );
+}
+
+#[test]
+fn display_supports_face_attributes_p_reports_gui_wave_underline() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    let frame_id = eval
+        .frames
+        .create_frame("gui-face-support-wave-underline", 800, 600, scratch);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("GUI frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.frames.select_frame(frame_id);
+    eval.set_display_host(Box::new(FreshIdSameFontDisplayHost::default()));
+
+    let attrs = Value::list(vec![
+        Value::keyword("underline"),
+        Value::list(vec![Value::keyword("style"), Value::symbol("wave")]),
+    ]);
+    assert_eq!(
+        builtin_display_supports_face_attributes_p(&mut eval, vec![attrs]).unwrap(),
+        Value::T,
+        "the graphical renderer supports Flyspell's wave underline without changing fonts",
+    );
+}
+
+#[test]
+fn display_supports_face_attributes_p_requires_every_gui_attribute_to_be_supported() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    let frame_id = eval
+        .frames
+        .create_frame("gui-face-support-mixed-request", 800, 600, scratch);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("GUI frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.frames.select_frame(frame_id);
+    eval.set_display_host(Box::new(FreshIdSameFontDisplayHost::default()));
+
+    let attrs = Value::list(vec![
+        Value::keyword("underline"),
+        Value::list(vec![Value::keyword("style"), Value::symbol("wave")]),
+        Value::keyword("family"),
+        Value::string("Definitely Missing Font"),
+    ]);
+    assert_eq!(
+        builtin_display_supports_face_attributes_p(&mut eval, vec![attrs]).unwrap(),
+        Value::NIL,
+        "a supported decoration must not hide an unsupported font request",
+    );
+}
+
+#[test]
+fn display_supports_face_attributes_p_rejects_gui_attribute_equal_to_default() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let mut default_face = eval.face_table().resolve("default");
+    default_face.extend = Some(true);
+    eval.face_table_mut().define("default", default_face);
+
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    let frame_id = eval
+        .frames
+        .create_frame("gui-face-support-default-equality", 800, 600, scratch);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("GUI frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.frames.select_frame(frame_id);
+    eval.set_display_host(Box::new(FreshIdSameFontDisplayHost::default()));
+
+    let attrs = Value::list(vec![Value::keyword("extend"), Value::T]);
+    assert_eq!(
+        builtin_display_supports_face_attributes_p(&mut eval, vec![attrs]).unwrap(),
+        Value::NIL,
+        "an explicitly requested decoration equal to the default is not a visible difference",
+    );
+}
+
+#[test]
+fn display_supports_face_attributes_p_uses_graphical_host_capabilities() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    let frame_id = eval
+        .frames
+        .create_frame("gui-face-support-no-decorations", 800, 600, scratch);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("GUI frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.frames.select_frame(frame_id);
+    // This host opts into italic font materialization only; the default
+    // DisplayHost capability answer for graphical decorations is false.
+    eval.set_display_host(Box::new(ItalicCapableDisplayHost));
+
+    let attrs = Value::list(vec![
+        Value::keyword("underline"),
+        Value::list(vec![Value::keyword("style"), Value::symbol("wave")]),
+    ]);
+    assert_eq!(
+        builtin_display_supports_face_attributes_p(&mut eval, vec![attrs]).unwrap(),
+        Value::NIL,
+        "core must ask the concrete graphical host instead of assuming renderer capabilities",
+    );
+}
+
+#[test]
+fn display_supports_face_attributes_p_accepts_disabling_nondefault_gui_decoration() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let mut default_face = eval.face_table().resolve("default");
+    default_face.underline = crate::face::FaceDecoration::Enabled(crate::face::Underline {
+        style: crate::face::UnderlineStyle::Line,
+        color: None,
+        position: crate::face::UnderlinePosition::FontMetric,
+    });
+    eval.face_table_mut().define("default", default_face);
+
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    let frame_id =
+        eval.frames
+            .create_frame("gui-face-support-disable-decoration", 800, 600, scratch);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("GUI frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.frames.select_frame(frame_id);
+    eval.set_display_host(Box::new(FreshIdSameFontDisplayHost::default()));
+
+    let attrs = Value::list(vec![Value::keyword("underline"), Value::NIL]);
+    assert_eq!(
+        builtin_display_supports_face_attributes_p(&mut eval, vec![attrs]).unwrap(),
+        Value::T,
+        "explicitly removing a default decoration is a representable visible difference",
     );
 }
 

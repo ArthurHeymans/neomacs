@@ -196,7 +196,9 @@ use neovm_core::emacs_core::terminal::pure::{
     TerminalRuntimeConfig, configure_terminal_runtime, ensure_terminal_runtime_owner,
     reset_terminal_host, reset_terminal_runtime, set_terminal_host,
 };
-use neovm_core::emacs_core::{Context, DisplayHost, GuiFrameHostRequest, PopupMenuRequest};
+use neovm_core::emacs_core::{
+    Context, DisplayHost, GraphicalFaceAttribute, GuiFrameHostRequest, PopupMenuRequest,
+};
 use neovm_core::face::{FaceHeight, FontWeight, LFaceAttr};
 use neovm_core::heap_types::LispString;
 use neovm_core::window::{
@@ -1424,6 +1426,10 @@ fn render_fullscreen_mode(fullscreen: FrameFullscreen) -> WindowFullscreenMode {
 }
 
 impl DisplayHost for PrimaryWindowDisplayHost {
+    fn supports_graphical_face_attribute(&self, attribute: GraphicalFaceAttribute) -> bool {
+        neomacs_display_runtime::supports_graphical_face_attribute(attribute)
+    }
+
     fn realize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String> {
         let title_string = request.title.as_utf8_str().unwrap_or("Neomacs").to_owned();
         tracing::debug!(

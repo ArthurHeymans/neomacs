@@ -42,6 +42,7 @@ pub mod layout {
 }
 
 pub use crate::core::*;
+pub use neomacs_renderer_wgpu::supports_graphical_face_attribute;
 
 /// Shader-surface composition/validation (re-exported so the frontend can
 /// naga-validate user WGSL on the Lisp thread without a renderer dependency).

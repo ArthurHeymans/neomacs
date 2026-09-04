@@ -1069,6 +1069,147 @@ impl FrameFaceBackend {
     }
 }
 
+/// The non-font portion of one GUI face-support query.
+///
+/// GNU rejects the whole query when any explicitly requested graphical
+/// attribute equals the default face.  Otherwise every enabled feature must
+/// be representable by the concrete display host.  The enum makes those three
+/// states explicit instead of collapsing them into an early-return boolean.
+enum GraphicalFaceRequest {
+    None,
+    SameAsDefault,
+    Different {
+        required: smallvec::SmallVec<[super::display_host::GraphicalFaceAttribute; 4]>,
+    },
+}
+
+impl GraphicalFaceRequest {
+    fn from_faces(default: &crate::face::Face, requested: &crate::face::Face) -> Self {
+        use super::display_host::GraphicalFaceAttribute;
+        use crate::face::FaceDecoration;
+
+        let mut any = false;
+        let mut same_as_default = false;
+        let mut required = smallvec::SmallVec::new();
+
+        macro_rules! requested_value {
+            ($field:ident, $capability:expr) => {
+                if let Some(value) = requested.$field.as_ref() {
+                    any = true;
+                    same_as_default |= default.$field.as_ref() == Some(value);
+                    required.push($capability);
+                }
+            };
+        }
+
+        requested_value!(foreground, GraphicalFaceAttribute::Foreground);
+        requested_value!(background, GraphicalFaceAttribute::Background);
+        requested_value!(
+            distant_foreground,
+            GraphicalFaceAttribute::DistantForeground
+        );
+        requested_value!(stipple, GraphicalFaceAttribute::Stipple);
+
+        match &requested.underline {
+            FaceDecoration::Unspecified => {}
+            FaceDecoration::Disabled => {
+                any = true;
+                same_as_default |= default.underline.enabled().is_none();
+            }
+            FaceDecoration::Enabled(underline) => {
+                any = true;
+                same_as_default |= default.underline.enabled() == Some(underline);
+                let style = match underline.style {
+                    crate::face::UnderlineStyle::Line => {
+                        neomacs_display_protocol::UnderlineStyle::Line
+                    }
+                    crate::face::UnderlineStyle::DoubleLine => {
+                        neomacs_display_protocol::UnderlineStyle::Double
+                    }
+                    crate::face::UnderlineStyle::Wave => {
+                        neomacs_display_protocol::UnderlineStyle::Wave
+                    }
+                    crate::face::UnderlineStyle::Dots => {
+                        neomacs_display_protocol::UnderlineStyle::Dotted
+                    }
+                    crate::face::UnderlineStyle::Dashes => {
+                        neomacs_display_protocol::UnderlineStyle::Dashed
+                    }
+                };
+                required.push(GraphicalFaceAttribute::Underline(style));
+            }
+        }
+
+        if let Some(enabled) = requested.overline {
+            any = true;
+            same_as_default |= enabled == default.overline.unwrap_or(false)
+                && (!enabled || requested.overline_color == default.overline_color);
+            if enabled {
+                required.push(GraphicalFaceAttribute::Overline);
+            }
+        }
+        if let Some(enabled) = requested.strike_through {
+            any = true;
+            same_as_default |= enabled == default.strike_through.unwrap_or(false)
+                && (!enabled || requested.strike_through_color == default.strike_through_color);
+            if enabled {
+                required.push(GraphicalFaceAttribute::StrikeThrough);
+            }
+        }
+
+        match &requested.box_border {
+            FaceDecoration::Unspecified => {}
+            FaceDecoration::Disabled => {
+                any = true;
+                same_as_default |= default.box_border.enabled().is_none();
+            }
+            FaceDecoration::Enabled(border) => {
+                any = true;
+                same_as_default |= default.box_border.enabled() == Some(border);
+                required.push(GraphicalFaceAttribute::Box);
+            }
+        }
+
+        macro_rules! requested_boolean {
+            ($field:ident, $capability:expr) => {
+                if let Some(enabled) = requested.$field {
+                    any = true;
+                    same_as_default |= enabled == default.$field.unwrap_or(false);
+                    if enabled {
+                        required.push($capability);
+                    }
+                }
+            };
+        }
+
+        requested_boolean!(inverse_video, GraphicalFaceAttribute::InverseVideo);
+        requested_boolean!(extend, GraphicalFaceAttribute::Extend);
+
+        if same_as_default {
+            Self::SameAsDefault
+        } else if any {
+            Self::Different { required }
+        } else {
+            Self::None
+        }
+    }
+
+    fn supported_by(&self, host: &dyn super::display_host::DisplayHost) -> bool {
+        match self {
+            Self::None => true,
+            Self::SameAsDefault => false,
+            Self::Different { required } => required
+                .iter()
+                .copied()
+                .all(|attribute| host.supports_graphical_face_attribute(attribute)),
+        }
+    }
+
+    fn was_requested(&self) -> bool {
+        matches!(self, Self::Different { .. })
+    }
+}
+
 /// Context-aware variant of `display-supports-face-attributes-p`.
 ///
 /// Emacs accepts broad argument shapes here in batch mode and still returns
@@ -1102,6 +1243,7 @@ pub(crate) fn builtin_display_supports_face_attributes_p(
     let default_face = eval.face_table().resolve("default");
     let requested_attributes = crate::face::Face::from_plist("anonymous", &attributes);
     let requested_face = default_face.merge(&requested_attributes);
+    let graphical_request = GraphicalFaceRequest::from_faces(&default_face, &requested_attributes);
     let host = match backend {
         FrameFaceBackend::TextTerminal => {
             return Ok(Value::bool_val(tty_supports_face_attributes_p(
@@ -1110,19 +1252,27 @@ pub(crate) fn builtin_display_supports_face_attributes_p(
             )));
         }
         FrameFaceBackend::WindowSystem => {
-            // Stipple is a GUI-only background fill (GNU realizes it to a
-            // pixmap).  It is usable only when this window-system frame has a
-            // live host; the terminal arm above rejects it with every other
-            // unsupported TTY attribute.
-            if requested_attributes.stipple.is_some() {
-                return Ok(Value::bool_val(eval.display_host.is_some()));
-            }
             let Some(host) = eval.display_host.as_mut() else {
                 return Ok(Value::NIL);
             };
             host
         }
     };
+
+    if !graphical_request.supported_by(&**host) {
+        return Ok(Value::NIL);
+    }
+
+    let font_attribute = requested_attributes.family.is_some()
+        || requested_attributes.foundry.is_some()
+        || requested_attributes.height.is_some()
+        || requested_attributes.weight.is_some()
+        || requested_attributes.slant.is_some()
+        || requested_attributes.width.is_some();
+    if !font_attribute {
+        return Ok(Value::bool_val(graphical_request.was_requested()));
+    }
+
     let default_font = host
         .resolve_frame_font(
             frame_id,
@@ -1138,7 +1288,10 @@ pub(crate) fn builtin_display_supports_face_attributes_p(
         .ok()
         .flatten();
     let supported = match (default_font, requested_font) {
-        (Some(default), Some(requested)) if default != requested => {
+        // Native materialization may allocate a fresh `ResolvedFontId` for each
+        // request even when both requests opened the same exact font. GNU
+        // compares the realized selection, not transient host handles.
+        (Some(default), Some(requested)) if !default.same_face_selection_as(&requested) => {
             requested_attributes
                 .slant
                 .is_none_or(|slant| requested.font.slant.is_italic() == slant.is_italic())

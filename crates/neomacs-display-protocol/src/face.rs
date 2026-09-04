@@ -67,6 +67,25 @@ pub enum UnderlineStyle {
     Dashed = 5,
 }
 
+/// A non-font face feature whose availability is owned by a graphical
+/// renderer.
+///
+/// This crosses the evaluator/host/renderer boundary as a closed enum so each
+/// renderer must handle new feature variants explicitly at compile time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GraphicalFaceAttribute {
+    Foreground,
+    Background,
+    DistantForeground,
+    Stipple,
+    Underline(UnderlineStyle),
+    Overline,
+    StrikeThrough,
+    Box,
+    InverseVideo,
+    Extend,
+}
+
 impl UnderlineStyle {
     pub fn from_gnu_code(code: u8) -> Option<Self> {
         Self::try_from(code).ok()

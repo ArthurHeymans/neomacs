@@ -63,6 +63,37 @@ pub use video_cache::{CachedVideo, VideoCache, VideoRecoveryManifest, VideoState
 #[cfg(all(feature = "webview", target_os = "linux"))]
 pub use webview_cache::{CachedWebView, WgpuWebViewCache};
 
+/// Whether the WGPU backend has a concrete rendering path for a graphical
+/// face feature.
+///
+/// Keep this match exhaustive: extending the shared capability domain should
+/// fail this crate's build until the renderer makes an explicit decision.
+pub const fn supports_graphical_face_attribute(
+    attribute: neomacs_display_protocol::GraphicalFaceAttribute,
+) -> bool {
+    use neomacs_display_protocol::{GraphicalFaceAttribute, UnderlineStyle};
+
+    match attribute {
+        GraphicalFaceAttribute::Foreground
+        | GraphicalFaceAttribute::Background
+        | GraphicalFaceAttribute::DistantForeground
+        | GraphicalFaceAttribute::Stipple
+        | GraphicalFaceAttribute::Underline(
+            UnderlineStyle::None
+            | UnderlineStyle::Line
+            | UnderlineStyle::Double
+            | UnderlineStyle::Wave
+            | UnderlineStyle::Dotted
+            | UnderlineStyle::Dashed,
+        )
+        | GraphicalFaceAttribute::Overline
+        | GraphicalFaceAttribute::StrikeThrough
+        | GraphicalFaceAttribute::Box
+        | GraphicalFaceAttribute::InverseVideo
+        | GraphicalFaceAttribute::Extend => true,
+    }
+}
+
 /// Re-exported effect configuration module for renderer internals and callers.
 pub mod effect_config {
     pub use neomacs_display_protocol::effect_config::*;
